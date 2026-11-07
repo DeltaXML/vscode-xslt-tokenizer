@@ -239,6 +239,29 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.lengthOf(duplicates(await problems(declarations('', ''))), 4);
 	});
 
+	test('whitespace around the type in xsl:context-item as=" xs:integer " (context-item-007, context-item-911)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template name="t"><xsl:context-item use=" required " as=" xs:integer "/><xsl:sequence select=". + 1"/></xsl:template>',
+			'xsl:stylesheet', ' xmlns:xs="http://www.w3.org/2001/XMLSchema"')), []);
+	});
+
+	test('a dynamic call of the context item, .() (higher-order-functions-041, higher-order-functions-042)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><xsl:for-each select="(function() { 1 }, function() { 2 })"><xsl:sequence select=".()"/></xsl:for-each></xsl:template>')), []);
+	});
+
+	test('an attribute wildcard with whitespace, @ *, and minus after it, @*-5 (whitespace-028, select-2701)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="doc"><xsl:copy-of select=" @ * "/><xsl:value-of select="@*-5"/><xsl:value-of select="@ * - 5"/></xsl:template>')), []);
+	});
+
+	test('a comment or processing instruction within a text value template: removed before it\'s read (cvt-043, cvt-044, cvt-050)', async () => {
+		// between tokens - in the W3C tests, it's within a name, e.g. str<!--x-->ing($p), which is still reported
+		const body = `<xsl:param name="p" select="1"/>
+<xsl:template name="main"><out xsl:expand-text="yes">The {$p <!--old: * 2--> + 1} and {string(<?pi x?>$p)}</out><out xsl:expand-text="yes">{count(1 to 5)<!--
+  over two lines -->} {$p}</out></xsl:template>`;
+		assert.deepEqual(await problems(stylesheet(body)), []);
+		// still reported: a '<' that starts an element
+		assert.isNotEmpty(await problems(stylesheet('<xsl:template name="main"><out xsl:expand-text="yes">{1 <b/> 2}</out></xsl:template>')));
+	});
+
 	test('what\'s in an element whose use-when is always false, e.g. false(): not compiled (use-when-0122, use-when-0221, version-001, version-030)', async () => {
 		const excluded = (useWhen: string) => stylesheet(`<xsl:template match="para"${useWhen}><p><xsl:value-of my="word"/><xsl:next-matching-nonsense/></p></xsl:template>
 <xsl:template match="/"><out><xsl:new-8.5-feature${useWhen}><xsl:text>x</xsl:text></xsl:new-8.5-feature><e xsl:use-when="false()"><xsl:value-of select="$undeclared"/></e></out></xsl:template>`);

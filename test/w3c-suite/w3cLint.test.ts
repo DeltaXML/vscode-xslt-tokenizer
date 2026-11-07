@@ -148,7 +148,7 @@ suite('W3C XSLT test suites: lint', function () {
 						exception = exception ?? entry.exception;
 					}
 				}
-				const record = { ...testCase, stylesheets: testCase.stylesheets.map((s) => path.relative(suiteDir, s)), problems, exception };
+				const record = { ...testCase, stylesheets: testCase.stylesheets.map((s) => path.relative(suiteDir, s)), problems, exception, rootVersion: rootVersion(testCase.stylesheets[0]) };
 				all.push(record);
 				results.write(JSON.stringify(record) + '\n');
 			}
@@ -163,54 +163,98 @@ suite('W3C XSLT test suites: lint', function () {
 	});
 });
 
+type LintedCase = TestCase & { problems: Problem[], exception?: string, rootVersion?: string };
+
+// the version attribute of a stylesheet's root element, if it has one
+function rootVersion(file: string | undefined): string | undefined {
+	try {
+		const text = file ? fs.readFileSync(file, 'utf8') : '';
+		return /<(?:[\w.-]+:)?(?:stylesheet|transform|package)\b[^>]*?\sversion\s*=\s*["']\s*([^"']*?)\s*["']/.exec(text)?.[1];
+	} catch {
+		return undefined;
+	}
+}
+
+// why a test case expected to compile, with errors reported, isn't counted as having false errors - or undefined:
+// - it expects a dynamic error, and the linter has often found that error, before the stylesheet's run, e.g. key('k')
+//   with no key k (XTDE1260), or no context item for '.' (XPDY0002) - listed apart, to be checked
+// - in the XSLT 3.0 suite, with version="4.0": a forwards compatible stylesheet for an XSLT 3.0 processor, but XSLT 4.0
+//   for Saxon 13 with syntax extensions, which reports the same errors as the linter (e.g. forwards-101)
+function notCounted(c: LintedCase): 'dynamic-error' | 'xslt40' | undefined {
+	if (c.expectation === 'dynamic-error') {
+		return 'dynamic-error';
+	}
+	return c.suite === 'xslt30-test' && Number(c.rootVersion) === 4 ? 'xslt40' : undefined;
+}
+
+const hasErrors = (c: LintedCase) => !c.skipped && (c.expectation === 'compiles' || c.expectation === 'dynamic-error') &&
+	c.problems.some((p) => p.severity === 'error');
+
 // a suite's false errors: each test case expected to compile that has errors reported, by test set, with a link to the
-// file of each error - the stylesheet, or a module it imports or includes - to open in VS Code, and its line
-function falseErrors(cases: (TestCase & { problems: Problem[] })[], suiteDir: string, outDir: string): string {
+// file of each error - the stylesheet, or a module it imports or includes - to open in VS Code, and its line. Then those
+// not counted (see notCounted)
+function falseErrors(cases: LintedCase[], suiteDir: string, outDir: string): string {
 	const suite = path.basename(suiteDir);
-	const failing = cases.filter((c) => !c.skipped && (c.expectation === 'compiles' || c.expectation === 'dynamic-error') &&
-		c.problems.some((p) => p.severity === 'error'));
+	const withErrors = cases.filter(hasErrors);
+	const failing = withErrors.filter((c) => !notCounted(c));
 	// the line is in the link's text: a '#L' fragment stops VS Code's Markdown preview opening the file
 	// relative to this file: VS Code's Markdown takes a path starting with '/' as in the workspace folder, not the file system
 	const link = (p: Problem) => `[${p.file}:${p.line}](${encodeURI(path.relative(outDir, path.join(suiteDir, p.file)).split(path.sep).join('/'))})`;
 	const lines = [`# W3C false errors: ${suite}`, '',
 		`${failing.length} test cases expected to compile have errors reported, in ${new Set(failing.map((c) => c.set)).size} test sets. ` +
 		'Each error links to its file, with the line in the link text.', ''];
+	const caseLines = (c: LintedCase, label: string) => {
+		// each error once: a stylesheet may be shared by test cases, and an imported module's errors repeated
+		const errors = [...new Map(c.problems.filter((p) => p.severity === 'error').map((p) => [`${p.file}:${p.line}:${p.message}`, p])).values()];
+		return errors.length === 1 ? [`- **${label}** - ${link(errors[0])} - ${errors[0].message}`] :
+			[`- **${label}**`, ...errors.map((p) => `  - ${link(p)} - ${p.message}`)];
+	};
 	const sets = [...new Set(failing.map((c) => c.set))].sort();
 	for (const set of sets) {
 		const inSet = failing.filter((c) => c.set === set);
 		lines.push(`## ${set} (${inSet.length})`, '');
-		for (const c of inSet) {
-			// each error once: a stylesheet may be shared by test cases, and an imported module's errors repeated
-			const errors = [...new Map(c.problems.filter((p) => p.severity === 'error').map((p) => [`${p.file}:${p.line}:${p.message}`, p])).values()];
-			if (errors.length === 1) {
-				lines.push(`- **${c.name}** - ${link(errors[0])} - ${errors[0].message}`);
-			} else {
-				lines.push(`- **${c.name}**`, ...errors.map((p) => `  - ${link(p)} - ${p.message}`));
-			}
-		}
+		inSet.forEach((c) => lines.push(...caseLines(c, c.name)));
+		lines.push('');
+	}
+	const dynamic = withErrors.filter((c) => notCounted(c) === 'dynamic-error');
+	if (dynamic.length > 0) {
+		lines.push(`# Not counted: test cases expecting a dynamic error (${dynamic.length})`, '',
+			'The linter may have found the error the test case expects Saxon to report when the stylesheet runs - check that it has.', '');
+		dynamic.forEach((c) => lines.push(...caseLines(c, `${c.name} (${c.errorCodes.join(', ')})`)));
+		lines.push('');
+	}
+	const xslt40 = withErrors.filter((c) => notCounted(c) === 'xslt40');
+	if (xslt40.length > 0) {
+		lines.push(`# Not counted: version="4.0" in the XSLT 3.0 suite (${xslt40.length})`, '',
+			'Forwards compatible for an XSLT 3.0 processor - but XSLT 4.0 for Saxon 13 with syntax extensions, which reports these errors too.', '');
+		xslt40.forEach((c) => lines.push(...caseLines(c, c.name)));
 		lines.push('');
 	}
 	return lines.join('\n');
 }
 
-function summary(all: (TestCase & { problems: Problem[], exception?: string })[]): string {
+function summary(all: LintedCase[]): string {
 	const lines: string[] = ['# W3C XSLT test suites: lint results', ''];
 	const counted = (filter: (c: typeof all[number]) => boolean) => all.filter(filter).length;
 	for (const suite of [...new Set(all.map((c) => c.suite))]) {
 		const cases = all.filter((c) => c.suite === suite);
 		const linted = cases.filter((c) => !c.skipped);
 		const shouldCompile = linted.filter((c) => c.expectation === 'compiles' || c.expectation === 'dynamic-error');
-		const falseErrors = shouldCompile.filter((c) => c.problems.some((p) => p.severity === 'error'));
+		const withErrors = shouldCompile.filter(hasErrors);
+		const falseErrors = withErrors.filter((c) => !notCounted(c));
 		const staticExpected = linted.filter((c) => c.expectation === 'static-error');
 		const caught = staticExpected.filter((c) => c.problems.some((p) => p.severity === 'error'));
 		lines.push(`## ${suite}`, '',
 			`- test cases: ${cases.length}, skipped: ${cases.length - linted.length} (${[...new Set(cases.filter((c) => c.skipped).map((c) => c.skipped!.replace(/ .*/, '')))].join(', ')})`,
-			`- expected to compile: ${shouldCompile.length} - with errors reported: **${falseErrors.length}**, with only warnings: ${shouldCompile.filter((c) => !falseErrors.includes(c) && c.problems.length > 0).length}`,
+			`- expected to compile: ${shouldCompile.length} - with errors reported: **${falseErrors.length}**, with only warnings: ${shouldCompile.filter((c) => !withErrors.includes(c) && c.problems.length > 0).length}`,
+			`- not counted: ${withErrors.filter((c) => notCounted(c) === 'dynamic-error').length} expecting a dynamic error the linter may have found, ` +
+				`${withErrors.filter((c) => notCounted(c) === 'xslt40').length} with version="4.0" in the XSLT 3.0 suite - see false-errors-${suite}.md`,
 			`- expected to have a static error: ${staticExpected.length} - with an error reported: ${caught.length} (Saxon reports the rest)`,
 			`- may or may not compile: ${counted((c) => c.suite === suite && !c.skipped && c.expectation === 'maybe-static')}`,
 			`- linter exceptions: ${linted.filter((c) => c.exception).length}`, '');
 	}
-	const shouldCompile = all.filter((c) => !c.skipped && (c.expectation === 'compiles' || c.expectation === 'dynamic-error'));
+	// those counted as having false errors - and their warnings
+	const shouldCompile = all.filter((c) => !c.skipped && (c.expectation === 'compiles' || c.expectation === 'dynamic-error') && !notCounted(c));
 	for (const severity of ['error', 'warning']) {
 		const groups = new Map<string, { cases: Set<string>, examples: string[] }>();
 		shouldCompile.forEach((c) => c.problems.filter((p) => p.severity === severity).forEach((p) => {

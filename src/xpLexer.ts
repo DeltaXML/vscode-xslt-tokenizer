@@ -504,6 +504,11 @@ export class XPathLexer {
                 }
                 break;
             case CharLevelState.lAttr:
+                if (this.numberChars.length > 1 && this.numberChars[this.numberChars.length - 1] === '*' && char !== ':') {
+                    // a wildcard ends the name - e.g. @*-5 is @* minus 5 - but not @*:name
+                    ({ rv, nesting } = this.testChar(existing, isFirstChar, char, nextChar, nesting));
+                    break;
+                }
                 if (char === '*' && nextChar === ':') {
                     nesting = 0;
                     resolvedEarly = true;
@@ -706,8 +711,23 @@ export class XPathLexer {
             return [];
         }
 
+        // in a text value template, the end of a comment or processing instruction within it - an XML parser removes it
+        // from the text before the template is read, e.g. {str<!--x-->ing($p)} is {string($p)}
+        let skippedMarkupEnd = -1;
+        const isTextValueTemplate = exitCondition === ExitCondition.CurlyBrace && this.xmlLessThan === XmlLessThan.Exit;
+
         for (let i = position.documentOffset; i < xpath.length + 1; i++) {
             let nextChar: string = xpath.charAt(i);
+            if (isTextValueTemplate) {
+                if (i >= skippedMarkupEnd && nextChar === '<' && (xpath.startsWith('<!--', i) || xpath.startsWith('<?', i))) {
+                    const end = xpath.startsWith('<!--', i) ? xpath.indexOf('-->', i + 4) : xpath.indexOf('?>', i + 2);
+                    skippedMarkupEnd = end < 0 ? -1 : end + (xpath.startsWith('<!--', i) ? 3 : 2);
+                }
+                // read as whitespace, keeping its line breaks, so the tokens after it keep their positions
+                if (i < skippedMarkupEnd && nextChar !== '\n' && nextChar !== '\r') {
+                    nextChar = ' ';
+                }
+            }
 
             // deconstruct state:
             let [currentLabelState, nestingState] = currentState;
@@ -966,8 +986,9 @@ export class XPathLexer {
                         case CharLevelState.lUri:
                             if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq && currentLabelState !== CharLevelState.escBt) {
                                 // in a type declaration, a name ended by whitespace and then an occurrence indicator is a type, e.g.
-                                // xs:integer in 'xs:integer *'
-                                const isTypeWithIndicator = isTypeDeclaration && nextLabelState === CharLevelState.lWs && XPathLexer.isOccurrenceIndicatorAfter(xpath, i - 1);
+                                // xs:integer in 'xs:integer *' - or by whitespace to the end of the value, e.g. as=" xs:integer "
+                                const isTypeWithIndicator = isTypeDeclaration && nextLabelState === CharLevelState.lWs &&
+                                    (XPathLexer.isOccurrenceIndicatorAfter(xpath, i - 1) || XPathLexer.isValueEndAfter(xpath, i - 1));
                                 this.update(poppedContext, result, tokenChars, currentLabelState, isTypeWithIndicator);
                             }
                             tokenChars.push(currentChar);
@@ -1086,6 +1107,13 @@ export class XPathLexer {
         return following.test(xpath);
     }
 
+    // only whitespace before the quote that ends an attribute value, or the end of the expression
+    private static isValueEndAfter(xpath: string, offset: number) {
+        const following = /\s*(["']|$)/y;
+        following.lastIndex = offset;
+        return following.test(xpath);
+    }
+
     private update(poppedContext: Token | null | undefined, result: Token[], tokenChars: string[], charState: CharLevelState, isTypeDeclaration = false) {
         if (tokenChars.length > 0) {
             this.updateResult(poppedContext, result, new BasicToken(tokenChars.join(''), charState, isTypeDeclaration));
@@ -1182,6 +1210,16 @@ export class XPathLexer {
             }
             this.setLabelForLastTokenOnly(prevToken, newToken, isTypeDeclaration);
             this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration, result);
+            if (prevToken?.tokenType === TokenLevelState.attributeNameTest && prevToken.value === '@' &&
+                (newToken.charType === CharLevelState.lName || newToken.value === '*')) {
+                // '@' and its name test with whitespace between them, e.g. @ * or @ name: the name test is the attribute's -
+                // a wildcard as in a path, e.g. child::*
+                prevToken.tokenType = TokenLevelState.operator;
+                if (newToken.value !== '*') {
+                    newToken.tokenType = TokenLevelState.attributeNameTest;
+                    newToken.charType = CharLevelState.lAttr;
+                }
+            }
             if (prevToken && newToken.charType === CharLevelState.sep && newToken.value === '|' && XPathLexer.isChoiceSeparator(result, prevToken, poppedContext, isTypeDeclaration)) {
                 // XPath 4.0 choice item type, e.g. (xs:date | xs:time) - the item type before '|' may have been labelled as a name test
                 newToken.choiceSeparator = true;
@@ -1649,7 +1687,9 @@ export class XPathLexer {
                 if (currentToken.value === ':*' || currentToken.value === '..') {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
-                } else if (currentToken.value === '()' && prevToken.tokenType === TokenLevelState.nodeType && !Data.fnTypes.includes(prevToken.value)) {
+                } else if (currentToken.value === '()' && prevToken.tokenType === TokenLevelState.nodeType && !Data.fnTypes.includes(prevToken.value) &&
+                    // not after the context item: .() is a dynamic call of it, e.g. a function item
+                    prevToken.charType !== CharLevelState.dot) {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
                 }
