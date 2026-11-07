@@ -220,4 +220,35 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		}
 		assert.deepEqual([...reported].filter(([, messages]) => messages.length > 0), []);
 	});
+
+	test('declarations with the same name, one or both with use-when: only one may be compiled (accumulator-032, shadow-005, catalog-010)', async () => {
+		const declarations = (first: string, second: string) => stylesheet(`<xsl:param name="mode" static="yes" select="'a'"/>
+<xsl:variable name="count" select="1"${first}/>
+<xsl:variable name="count" select="2"${second}/>
+<xsl:template name="main"${first}><r>{$count}</r></xsl:template>
+<xsl:template name="main"${second}/>
+<xsl:function name="f:f" xmlns:f="urn:f"${first}/>
+<xsl:function name="f:f" xmlns:f="urn:f"${second}/>
+<xsl:accumulator name="acc" initial-value="0"${first}><xsl:accumulator-rule match="*" select="1"/></xsl:accumulator>
+<xsl:accumulator name="acc" initial-value="0"${second}><xsl:accumulator-rule match="*" select="1"/></xsl:accumulator>`);
+		const duplicates = (messages: string[]) => messages.filter((m) => /Duplicate/.test(m));
+		assert.deepEqual(duplicates(await problems(declarations(` use-when="$mode = 'a'"`, ` use-when="$mode = 'b'"`))), []);
+		assert.deepEqual(duplicates(await problems(declarations(` _use-when="{$mode = 'a'}"`, ` _use-when="{$mode = 'b'}"`))), []);
+		assert.deepEqual(duplicates(await problems(declarations('', ` use-when="$mode = 'b'"`))), []);
+		// still reported: neither has use-when
+		assert.lengthOf(duplicates(await problems(declarations('', ''))), 4);
+	});
+
+	test('what\'s in an element whose use-when is always false, e.g. false(): not compiled (use-when-0122, use-when-0221, version-001, version-030)', async () => {
+		const excluded = (useWhen: string) => stylesheet(`<xsl:template match="para"${useWhen}><p><xsl:value-of my="word"/><xsl:next-matching-nonsense/></p></xsl:template>
+<xsl:template match="/"><out><xsl:new-8.5-feature${useWhen}><xsl:text>x</xsl:text></xsl:new-8.5-feature><e xsl:use-when="false()"><xsl:value-of select="$undeclared"/></e></out></xsl:template>`);
+		for (const useWhen of [' use-when="false()"', ' use-when="number(system-property(\'xsl:version\')) &gt;= 8.5"', ' use-when="system-property(\'xsl:version\') gt 4.0"',
+			' use-when="element-available(\'xsl:new-8.5-feature\')"']) {
+			assert.deepEqual(await problems(excluded(useWhen)), [], useWhen);
+		}
+		// still reported: a condition that may be true - or an element-available() test for an XSLT instruction
+		for (const useWhen of [' use-when="true()"', ' use-when="system-property(\'xsl:version\') &gt;= 3.0"', ' use-when="element-available(\'xsl:text\')"']) {
+			assert.isNotEmpty(await problems(excluded(useWhen)), useWhen);
+		}
+	});
 });

@@ -117,6 +117,9 @@ export interface XPathData extends OperandContext {
 	keywordNames?: string[];
 	// XPath 4.0 map constructor without the 'map' keyword
 	isBareMap?: boolean;
+	// a map constructor whose '{', or the token before it, has an error - e.g. a bare map before XPath 4.0, or after an
+	// 'else' with no 'then' - so what's in it isn't reported as well
+	followsError?: boolean;
 	anonFnSyntaxErrorReported?: boolean;
 }
 
@@ -642,13 +645,30 @@ export class XsltTokenDiagnostics {
 				globalVariableTypes.set(instruction.name, instruction.declaredType);
 			}
 		});
+		// a declaration with use-when may be excluded when the stylesheet is compiled, e.g. one of two with the same name,
+		// with use-when="$mode = 'a'" and use-when="$mode = 'b'" - so a duplicate name is reported only where neither the
+		// declaration nor the first with the name has use-when (W3C tests accumulator-032, shadow-005, catalog-010)
+		const firstDeclarations = new Map<string, GlobalInstructionData>();
+		const isConditional = (instruction: GlobalInstructionData) => {
+			const offset = document.offsetAt(new vscode.Position(instruction.token.line, instruction.token.startCharacter));
+			return ['use-when', '_use-when'].some((name) => RecordTypes.attributeOfElementAt(documentText, offset, name) !== undefined);
+		};
+		const conditionalDuplicate = (kind: string, name: string, instruction: GlobalInstructionData) => {
+			const first = firstDeclarations.get(`${kind} ${name}`);
+			if (!first) {
+				firstDeclarations.set(`${kind} ${name}`, instruction);
+				return false;
+			}
+			return isConditional(first) || isConditional(instruction);
+		};
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
 				case GlobalInstructionType.Variable:
 				case GlobalInstructionType.Parameter:
 					if (checkedGlobalVarNames.indexOf(instruction.name) < 0) {
 						checkedGlobalVarNames.push(instruction.name);
-					} else {
+						conditionalDuplicate('variable', instruction.name, instruction);
+					} else if (!conditionalDuplicate('variable', instruction.name, instruction)) {
 						instruction.token['error'] = ErrorType.DuplicateVarName;
 						instruction.token.value = instruction.name;
 						problemTokens.push(instruction.token);
@@ -665,7 +685,8 @@ export class XsltTokenDiagnostics {
 					for (const functionNameWithArity of XsltTokenDiagnostics.functionNamesWithArity(instruction)) {
 						if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
 							checkedGlobalFnNames.push(functionNameWithArity);
-						} else {
+							conditionalDuplicate('function', functionNameWithArity, instruction);
+						} else if (!conditionalDuplicate('function', functionNameWithArity, instruction)) {
 							instruction.token['error'] = ErrorType.DuplicateFnName;
 							instruction.token.value = functionNameWithArity;
 							problemTokens.push(instruction.token);
@@ -685,13 +706,14 @@ export class XsltTokenDiagnostics {
 					}
 					break;
 				case GlobalInstructionType.Template:
-					if (namedTemplates.get(instruction.name)) {
+					if (namedTemplates.get(instruction.name) && !conditionalDuplicate('template', instruction.name, instruction)) {
 						instruction.token['error'] = ErrorType.DuplicateTemplateName;
 						instruction.token.value = instruction.name;
 						problemTokens.push(instruction.token);
-					} else {
+					} else if (!namedTemplates.get(instruction.name)) {
 						let members = instruction.memberNames ? instruction.memberNames : [];
 						namedTemplates.set(instruction.name, members);
+						conditionalDuplicate('template', instruction.name, instruction);
 					}
 					break;
 				case GlobalInstructionType.ModeInstruction:
@@ -715,7 +737,8 @@ export class XsltTokenDiagnostics {
 				case GlobalInstructionType.Accumulator:
 					if (globalAccumulatorNames.indexOf(instruction.name) < 0) {
 						globalAccumulatorNames.push(instruction.name);
-					} else {
+						conditionalDuplicate('accumulator', instruction.name, instruction);
+					} else if (!conditionalDuplicate('accumulator', instruction.name, instruction)) {
 						instruction.token['error'] = ErrorType.DuplicateAccumulatorName;
 						instruction.token.value = instruction.name;
 						problemTokens.push(instruction.token);
@@ -725,7 +748,8 @@ export class XsltTokenDiagnostics {
 					// in the same module, two with a name have the same import precedence (XTSE1580)
 					if (globalCharacterMapNames.indexOf(instruction.name) < 0) {
 						globalCharacterMapNames.push(instruction.name);
-					} else {
+						conditionalDuplicate('character-map', instruction.name, instruction);
+					} else if (!conditionalDuplicate('character-map', instruction.name, instruction)) {
 						problemTokens.push({ ...instruction.token, error: ErrorType.DuplicateCharacterMapName, value: instruction.name });
 					}
 					break;
@@ -2479,7 +2503,7 @@ export class XsltTokenDiagnostics {
 							// type error (XPTY0004 in Saxon), e.g. a ',' typed for ':' in map { 'a', 'one' }. Not in a pattern,
 							// where it's an XSLT 4.0 type pattern's record test, e.g. match="{'id', 'name'}"
 							const inPattern = !!XsltTokenDiagnostics.patternAttributes.get(tagElementName)?.includes(currentAttName);
-							if (entryEnded && !isXPathError && !inPattern && prevToken && !prevToken.error &&
+							if (entryEnded && !isXPathError && !inPattern && !latestStackItem.followsError && prevToken && !prevToken.error &&
 								(prevToken.tokenType === TokenLevelState.string || prevToken.tokenType === TokenLevelState.number)) {
 								let prevIndex = index - 1;
 								while (prevIndex > 0 && allTokens[prevIndex].tokenType === TokenLevelState.comment) {
@@ -2770,6 +2794,9 @@ export class XsltTokenDiagnostics {
 								}
 								if (setContextItemProp) {
 									stackItem.hasContextItem = true;
+								}
+								if (curlyBraceType === CurlyBraceType.Map && (token.error || prevToken?.error)) {
+									stackItem.followsError = true;
 								}
 								if (isBareMap) {
 									stackItem.isBareMap = true;
@@ -3388,6 +3415,9 @@ export class XsltTokenDiagnostics {
 		});
 		XsltTokenDiagnostics.checkAccumulatorsApplicable(globalInstructionData, importedInstructionData, problemTokens);
 		problemTokens = XsltTokenDiagnostics.withoutGuardedFunctions(problemTokens, document, documentText);
+		problemTokens = XsltTokenDiagnostics.withoutStaticallyExcluded(problemTokens, document, documentText);
+		// and the variable references that aren't resolved, e.g. one in xsl:value-of select="$v" use-when="false()"
+		unresolvedXsltVariableReferences = XsltTokenDiagnostics.withoutStaticallyExcluded(unresolvedXsltVariableReferences, document, documentText);
 		if (hasItemTypes) {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}
@@ -4081,6 +4111,67 @@ export class XsltTokenDiagnostics {
 			});
 		}));
 		return problemTokens.filter((p) => !guarded.has(p));
+	}
+
+	// the problems without those on or within an element whose use-when is false whatever the processor and the static
+	// parameters, e.g. use-when="false()": Saxon excludes the element when the stylesheet is compiled, so what's in it
+	// isn't checked - it may be for a later version, or deliberately invalid (W3C tests use-when-0122, version-001)
+	private static withoutStaticallyExcluded(problemTokens: BaseToken[], document: vscode.TextDocument, text: string): BaseToken[] {
+		if (problemTokens.length === 0 || !/use-when/.test(text)) {
+			return problemTokens;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const prefix = RecordTypes.xsltPrefix(text);
+		const offsets = problemTokens.map((p) => document.offsetAt(new vscode.Position(p.line, p.startCharacter)));
+		const sorted = [...new Set(offsets)].sort((a, b) => a - b);
+		const openElements = RecordTypes.openElementsAt(markup, sorted);
+		const openAt = new Map(sorted.map((offset, i) => [offset, openElements[i]]));
+		const excluded = new Map<number, boolean>();
+		const isExcluded = (elementOffset: number) => {
+			let result = excluded.get(elementOffset);
+			if (result === undefined) {
+				const useWhen = RecordTypes.attributeOfElementAt(text, elementOffset + 1, 'use-when') ?? RecordTypes.attributeOfElementAt(text, elementOffset + 1, prefix + ':use-when');
+				result = useWhen !== undefined && XsltTokenDiagnostics.isStaticallyFalse(useWhen, prefix);
+				excluded.set(elementOffset, result);
+			}
+			return result;
+		};
+		return problemTokens.filter((p, i) => {
+			// the element whose start tag has the problem - a tag starting after its ancestors - and its ancestors
+			const tagStart = markup.lastIndexOf('<', offsets[i]);
+			const elements = (openAt.get(offsets[i]) ?? []).map((e) => e.offset).concat(tagStart > -1 ? [tagStart] : []);
+			return !elements.some(isExcluded);
+		});
+	}
+
+	// whether a use-when expression is false for any processor and any static parameters: false(), a test for an XSLT
+	// version later than 4.0, e.g. number(system-property('xsl:version')) >= 8.5, or element-available() for a name in the
+	// XSLT namespace that isn't an XSLT instruction, e.g. element-available('xsl:new-8.5-feature')
+	private static isStaticallyFalse(useWhen: string, xsltPrefix: string) {
+		const value = useWhen.replace(/\s+/g, ' ').trim();
+		if (/^(fn:)?false\(\)$/.test(value)) {
+			return true;
+		}
+		const version = /^(?:number\( ?)?system-property\( ?(["'])[\w.-]+:version\1 ?\)(?: ?\))? ?(>=|>|ge|gt) ?(\d+(?:\.\d+)?)$/.exec(value);
+		if (version) {
+			const required = Number(version[3]);
+			return version[2] === '>=' || version[2] === 'ge' ? required > 4.0 : required >= 4.0;
+		}
+		const available = /^element-available\( ?(["'])([\w.-]+):([\w.-]+)\1 ?\)$/.exec(value);
+		return !!available && available[2] === xsltPrefix && !XsltTokenDiagnostics.xsltElementNames().has(`xsl:${available[3]}`);
+	}
+
+	private static xsltElementNamesCache: Set<string> | undefined;
+
+	// the names of the XSLT 4.0 elements: declarations, instructions and the others, e.g. xsl:when
+	private static xsltElementNames() {
+		if (!XsltTokenDiagnostics.xsltElementNamesCache) {
+			const schema = XSLTConfiguration.schemaData4;
+			const names = new Set(Object.keys(schema.elements));
+			Object.values(schema.substitutionGroups).forEach((group) => Object.keys(group.elements).forEach((name) => names.add(name)));
+			XsltTokenDiagnostics.xsltElementNamesCache = names;
+		}
+		return XsltTokenDiagnostics.xsltElementNamesCache;
 	}
 
 	// within the parentheses of a kind test, e.g. the name or '*' in element(*), element(io:x) or attribute(*, xs:string) -

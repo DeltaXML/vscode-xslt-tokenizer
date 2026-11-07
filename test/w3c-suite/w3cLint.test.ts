@@ -157,22 +157,24 @@ suite('W3C XSLT test suites: lint', function () {
 		fs.writeFileSync(path.join(outDir, 'summary.md'), summary(all));
 		for (const suiteDir of suites) {
 			const suite = path.basename(suiteDir);
-			fs.writeFileSync(path.join(outDir, `false-errors-${suite}.md`), falseErrors(all.filter((c) => c.suite === suite), suiteDir));
+			fs.writeFileSync(path.join(outDir, `false-errors-${suite}.md`), falseErrors(all.filter((c) => c.suite === suite), suiteDir, outDir));
 		}
 		console.log(`results: ${outDir}`);
 	});
 });
 
 // a suite's false errors: each test case expected to compile that has errors reported, by test set, with a link to the
-// line of each error - in the stylesheet, or a module it imports or includes - to open in VS Code
-function falseErrors(cases: (TestCase & { problems: Problem[] })[], suiteDir: string): string {
+// file of each error - the stylesheet, or a module it imports or includes - to open in VS Code, and its line
+function falseErrors(cases: (TestCase & { problems: Problem[] })[], suiteDir: string, outDir: string): string {
 	const suite = path.basename(suiteDir);
 	const failing = cases.filter((c) => !c.skipped && (c.expectation === 'compiles' || c.expectation === 'dynamic-error') &&
 		c.problems.some((p) => p.severity === 'error'));
-	const link = (p: Problem) => `[${p.file}:${p.line}](${encodeURI(path.join(suiteDir, p.file))}#L${p.line})`;
+	// the line is in the link's text: a '#L' fragment stops VS Code's Markdown preview opening the file
+	// relative to this file: VS Code's Markdown takes a path starting with '/' as in the workspace folder, not the file system
+	const link = (p: Problem) => `[${p.file}:${p.line}](${encodeURI(path.relative(outDir, path.join(suiteDir, p.file)).split(path.sep).join('/'))})`;
 	const lines = [`# W3C false errors: ${suite}`, '',
 		`${failing.length} test cases expected to compile have errors reported, in ${new Set(failing.map((c) => c.set)).size} test sets. ` +
-		'Each error links to its line.', ''];
+		'Each error links to its file, with the line in the link text.', ''];
 	const sets = [...new Set(failing.map((c) => c.set))].sort();
 	for (const set of sets) {
 		const inSet = failing.filter((c) => c.set === set);
