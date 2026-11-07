@@ -42,20 +42,82 @@ async function pause(ms) {
 	}
 }
 
+// The captions: a view of their own - Demo › Captions - with large text, which can be moved to the secondary side bar,
+// on the right, where it stays while the Explorer and Run and Debug views change on the left. Not notifications, which
+// would be mixed up with the extension's own
+class CaptionView {
+	constructor() {
+		this.view = undefined;
+		this.state = { text: '', step: '' };
+	}
+
+	resolveWebviewView(webviewView) {
+		this.view = webviewView;
+		webviewView.webview.options = { enableScripts: true };
+		webviewView.webview.html = CaptionView.html();
+		webviewView.onDidDispose(() => this.view = undefined);
+		// as it's shown again, e.g. after being moved
+		webviewView.onDidChangeVisibility(() => this.post());
+		this.post();
+	}
+
+	show(text, step = '') {
+		this.state = { text, step };
+		this.post();
+	}
+
+	post() {
+		this.view?.webview.postMessage(this.state);
+	}
+
+	static html() {
+		const nonce = Math.random().toString(36).slice(2);
+		return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<style>
+	body { padding: 18px 14px; color: var(--vscode-foreground); font-family: var(--vscode-font-family); }
+	#step { font-size: 13px; opacity: 0.6; letter-spacing: 0.04em; text-transform: uppercase; min-height: 1.2em; }
+	#text { font-size: 22px; line-height: 1.35; margin-top: 8px; font-weight: 500; transition: opacity 0.35s ease; }
+	#text.fresh { opacity: 0; }
+</style></head>
+<body><div id="step"></div><div id="text"></div>
+<script nonce="${nonce}">
+	const step = document.getElementById('step');
+	const text = document.getElementById('text');
+	window.addEventListener('message', (event) => {
+		const changed = text.textContent !== event.data.text;
+		step.textContent = event.data.step;
+		text.textContent = event.data.text;
+		if (changed) {
+			text.classList.add('fresh');
+			requestAnimationFrame(() => requestAnimationFrame(() => text.classList.remove('fresh')));
+		}
+	});
+</script></body></html>`;
+	}
+}
+
+const captions = new CaptionView();
+let captionCount = 0;
+
+async function showCaptionView() {
+	await vscode.commands.executeCommand('xsltDemo.captions.focus').then(undefined, () => undefined);
+}
+
 async function caption(text) {
 	if (stopRequested) {
 		throw new DemoStopped();
 	}
 	console.log(`[demo] ${text}`);
 	if (SHOW_CAPTIONS) {
-		await vscode.commands.executeCommand('notifications.clearAll');
-		vscode.window.showInformationMessage(text);
+		captions.show(text, `Step ${++captionCount}`);
 	}
 	await pause(PACE.afterCaption);
 }
 
 async function clearCaptions() {
-	await vscode.commands.executeCommand('notifications.clearAll');
+	captions.show('');
 }
 
 function folder() {
@@ -151,15 +213,17 @@ async function reset(quiet = false) {
 	VIDEO1_FILES.forEach((file) => fs.copyFileSync(file, path.join(folder(), path.basename(file))));
 	VIDEO1_FILES.forEach((file) => removeBreakpoints(path.join(folder(), path.basename(file))));
 	await vscode.commands.executeCommand('workbench.view.explorer');
+	captionCount = 0;
 	if (!quiet) {
-		vscode.window.showInformationMessage('Demo reset: ready for a retake.');
+		await showCaptionView();
+		captions.show('Ready for a take: start recording, then play the video');
 	}
 }
 
 async function countdown() {
+	await showCaptionView();
 	for (let n = PACE.countdown; n > 0; n--) {
-		await clearCaptions();
-		vscode.window.showInformationMessage(`Starting in ${n}…`);
+		captions.show(`Starting in ${n}…`);
 		await pause(1000);
 	}
 	await clearCaptions();
@@ -246,7 +310,7 @@ async function play(video, rethrow = false) {
 	try {
 		await video();
 	} catch (e) {
-		await clearCaptions();
+		captions.show(e instanceof DemoStopped ? 'Stopped' : `Stopped: ${e instanceof Error ? e.message : e}`);
 		if (!(e instanceof DemoStopped)) {
 			vscode.window.showErrorMessage(`Demo: ${e instanceof Error ? e.message : e}`);
 			if (rethrow) {
@@ -269,6 +333,7 @@ function activate(context) {
 			}
 		})
 	}));
+	context.subscriptions.push(vscode.window.registerWebviewViewProvider('xsltDemo.captions', captions, { webviewOptions: { retainContextWhenHidden: true } }));
 	context.subscriptions.push(vscode.commands.registerCommand('xsltDemo.playVideo1', () => play(video1)));
 	context.subscriptions.push(vscode.commands.registerCommand('xsltDemo.stop', () => { stopRequested = true; }));
 	context.subscriptions.push(vscode.commands.registerCommand('xsltDemo.reset', () => reset()));

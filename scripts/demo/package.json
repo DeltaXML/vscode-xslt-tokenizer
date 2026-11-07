@@ -27,6 +27,24 @@
 				"title": "Reset for a Retake",
 				"category": "Demo"
 			}
-		]
+		],
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "xsltDemo",
+					"title": "Demo",
+					"icon": "captions.svg"
+				}
+			]
+		},
+		"views": {
+			"xsltDemo": [
+				{
+					"type": "webview",
+					"id": "xsltDemo.captions",
+					"name": "Captions"
+				}
+			]
+		}
 	}
 }
