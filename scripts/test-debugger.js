@@ -530,13 +530,15 @@ function testXPathQuery(saxonJar) {
     // a map, array or function: as the adaptive output method writes it
     assert.deepStrictEqual(query("[89], map{'a':[1,'two',true()]}, count#1, [(//item)[1]]").items.map((item) => item.value),
         ['[89]', 'map{"a":[1,"two",true()]}', 'fn:count#1', '[<item xmlns="urn:orders" xmlns:x="urn:extra">pen</item>]']);
-    // and the whole result as xdm:debug() writes it, without color, for the Output panel: a map over several lines
+    // and the whole result as xdm:debug() writes it, without color, for the Output panel - with each map entry, array
+    // member and sequence item on a line of its own, even where all are atomic values (xdm:VIEW-ONE-PER-LINE)
     // (its entries in any order: Saxon 12's maps don't keep it)
     const map = query("map{'name':'Ada','orders':array{map{'id':1},map{'id':2}}}").text;
     assert.match(map, /^\{\n[^]*\n\}$/, map);
     assert.ok(map.includes("  'name': 'Ada'"), map);
-    assert.ok(map.includes("  'orders': [\n    {'id': 1},\n    {'id': 2}\n  ]"), map);
+    assert.ok(map.includes("  'orders': [\n    {\n      'id': 1\n    },\n    {\n      'id': 2\n    }\n  ]"), map);
     assert.doesNotMatch(map, /\u001b/);
+    assert.strictEqual(query('[1, 2], []').text, '(\n  [\n    1,\n    2\n  ],\n  []\n)');
     // a sequence in parentheses: nodes as their paths above a copy, atomic values with their types where needed
     const sequence = query("//order/@id, 'x y', 42, xs:date('2026-11-07'), //order[1]/item").text;
     assert.match(sequence, /^\(\n[^]*\n\)$/, sequence);
@@ -572,7 +574,7 @@ async function testXPathQueryServer(saxonJar) {
         const started = Date.now();
         const second = await server.request('java', args, undefined, { xpath: "map{'a':[1,2]}, 'x\ny'", xml });
         assert.deepStrictEqual(second.items.map((item) => item.value), ['map{"a":[1,2]}', 'x\ny']);
-        assert.ok(second.text.includes("  {\n    'a': [1, 2]\n  },"), second.text);
+        assert.ok(second.text.includes("  {\n    'a': [\n      1,\n      2\n    ]\n  },"), second.text);
         const third = await server.request('java', args, undefined, { xpath: '//order[', xml });
         assert.strictEqual(third.error.code, 'XPST0003');
         // warm: well under a new JVM's start

@@ -115,8 +115,8 @@ final class XPathQuery {
             }
             xpath40 = is40;
             processor = new Processor(config);
-            // compiled only if a map or array is found
-            view = new XdmView(config);
+            // one result at a time: each entry, member and item on a line of its own
+            view = new XdmView(config, true);
         }
     }
 

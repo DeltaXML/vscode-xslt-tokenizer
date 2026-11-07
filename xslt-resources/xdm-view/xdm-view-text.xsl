@@ -63,13 +63,22 @@
     <xsl:sequence select="string-join(for $n in 1 to $level return '  ', '')"/>
   </xsl:function>
 
+  <!-- When true, every map entry, array member and sequence item goes on a
+       line of its own, even where all are atomic values - for a view of one
+       value at a time, e.g. a query result, rather than a log of many, where
+       the default keeps e.g. [1, 2, 3] or {'id': 1} on one line. An empty
+       value, and a single item, are unchanged: (), {}, [], 'key': 1. -->
+  <xsl:param name="xdm:VIEW-ONE-PER-LINE" as="xs:boolean" select="false()"/>
+
   <!-- A map entry's or array member's value stays on the same line as its
        key/preceding siblings only if it's a single atomic value (or empty) -
        anything else (a nested map/array/node, or a multi-item sequence)
-       forces its whole container onto multiple lines, one child per line. -->
+       forces its whole container onto multiple lines, one child per line.
+       With xdm:VIEW-ONE-PER-LINE, no value does. -->
   <xsl:function name="zxd:is-simple-item-seq" as="xs:boolean">
     <xsl:param name="items" as="element(xdm:item)*"/>
     <xsl:sequence select="
+      not($xdm:VIEW-ONE-PER-LINE) and
       count($items) le 1 and (empty($items) or $items[1]/*[1]/self::xdm:atomic)"/>
   </xsl:function>
 
@@ -656,7 +665,7 @@
       <xsl:when test="count($items) = 1">
         <xsl:sequence select="zxd:render-payload-text($items[1]/*[1], $useColor, $level)"/>
       </xsl:when>
-      <xsl:when test="some $i in $items satisfies not($i/*[1]/self::xdm:atomic)">
+      <xsl:when test="$xdm:VIEW-ONE-PER-LINE or (some $i in $items satisfies not($i/*[1]/self::xdm:atomic))">
         <xsl:variable name="childIndent" as="xs:string" select="zxd:indent($level + 1)"/>
         <xsl:variable name="closeIndent" as="xs:string" select="zxd:indent($level)"/>
         <xsl:variable name="rendered" as="xs:string*" select="
