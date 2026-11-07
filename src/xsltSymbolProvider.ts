@@ -18,6 +18,7 @@ import { XSLTConfiguration } from './languageConfigurations';
 import * as fs from 'fs';
 import { HrefPaths, ImportProblem } from './hrefPaths';
 import { SaxonTaskProvider } from './saxonTaskProvider';
+import { XsltDebugOutputs } from './xsltDebug';
 
 interface ImportedGlobals {
 	href: string;
@@ -283,7 +284,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			} else {
 				// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully
 				if (this.collection && this.docType !== DocumentTypes.SCH) {
-					if (allDiagnostics.length > 0 && this.showDiagnostics()) {
+					// not the debugger's view of the output written so far, e.g. [xslt out] result.xml: it's incomplete
+					// while the stylesheet runs, so not well-formed, and it isn't a file to fix
+					const isDebugOutput = document.uri.scheme === XsltDebugOutputs.scheme;
+					if (allDiagnostics.length > 0 && this.showDiagnostics() && !isDebugOutput) {
 						this.collection.set(document.uri, allDiagnostics);
 					} else {
 						// only this document's problems - not those of other documents
