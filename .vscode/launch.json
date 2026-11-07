@@ -23,6 +23,25 @@
 			"preLaunchTask": "npm: watch"
 		},
 		{
+			// scripted demos for recording videos (scripts/demo): the extension, the demo runner and the XSLT Dark Themes,
+			// in the demo's own folder - then run 'Demo: Play Video 1...' from the Command Palette
+			"name": "Demo: Record Videos",
+			"type": "extensionHost",
+			"request": "launch",
+			"runtimeExecutable": "${execPath}",
+			"args": [
+				"--disable-extensions",
+				"--extensionDevelopmentPath=${workspaceFolder:vscode-xslt-tokenizer}",
+				"--extensionDevelopmentPath=${workspaceFolder:vscode-xslt-tokenizer}/scripts/demo",
+				"--extensionDevelopmentPath=${userHome}/.vscode/extensions/deltaxml.xslt-dark-themes-1.4.1",
+				"${workspaceFolder:vscode-xslt-tokenizer}/scripts/demo/workspace"
+			],
+			"outFiles": [
+				"${workspaceFolder:vscode-xslt-tokenizer}/out/**/*.js"
+			],
+			"preLaunchTask": "npm: watch"
+		},
+		{
 			"name": "Run Extension Tests",
 			"type": "extensionHost",
 			"request": "launch",

@@ -1,0 +1,32 @@
+{
+	"name": "xslt-xpath-demo-runner",
+	"displayName": "XSLT/XPath demo runner (development only)",
+	"description": "Plays scripted demos of the XSLT/XPath extension, for recording videos. Not published: load it with the 'Demo: Record Videos' launch configuration.",
+	"publisher": "deltaxml",
+	"version": "0.0.1",
+	"private": true,
+	"engines": {
+		"vscode": "^1.90.0"
+	},
+	"activationEvents": [],
+	"main": "./demo.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "xsltDemo.playVideo1",
+				"title": "Play Video 1: Run and Debug a Stylesheet",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.stop",
+				"title": "Stop",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.reset",
+				"title": "Reset for a Retake",
+				"category": "Demo"
+			}
+		]
+	}
+}
