@@ -14,6 +14,7 @@ import { Snippet} from './xsltSnippets';
 import { HrefPaths } from './hrefPaths';
 import { RecordTypes } from './recordTypes';
 import { ModulePrefixes } from './modulePrefixes';
+import { StaticHrefs } from './staticHrefs';
 
 export enum DocumentTypes {
     XSLT,
@@ -1595,7 +1596,7 @@ export class XslLexer {
         if (this.timerOn) {
             console.timeEnd('xslLexer.analyse');
         }
-        this.globalInstructionData = this.globalInstructionData.concat(this.globalModeData);
+        this.globalInstructionData = StaticHrefs.withDeclarations(this.globalInstructionData, xsl).concat(this.globalModeData);
         this.prefixBindings = ModulePrefixes.fromRootAttributes(rootAttributes);
         ModulePrefixes.resolve(this.globalInstructionData, this.prefixBindings);
         return result;

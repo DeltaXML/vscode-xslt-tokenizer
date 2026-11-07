@@ -35,6 +35,7 @@ import { XmlElement, parseXml } from './xspecXml';
 import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
 import { XSpecSourceMap } from './xspecSourceMap';
+import { StaticHrefs } from './staticHrefs';
 import { XPathVersion } from './xpathVersion';
 
 enum HasCharacteristic {
@@ -249,6 +250,23 @@ export class XsltTokenDiagnostics {
 	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:line-number', 'err:column-number',
 		'err:stack-trace', 'err:additional', 'err:map'];
 	public static readonly xslInclude = 'xsl:include';
+
+	// with an xsl:import or xsl:include whose _href isn't resolved (see StaticHrefs), a name that isn't found may be declared
+	// in the module it imports: a warning, as for a variable - e.g. a named template or a function with a prefix, not a
+	// built-in function
+	private static allowForUnresolvedImports(diagnostics: vscode.Diagnostic[]) {
+		const builtInPrefixes = /^(fn|math|map|array|xs|err|saxon):/;
+		const notFound = [/^XSLT: xsl:template with name '.*' not found$/, /^XSLT: xsl:attribute-set with name '.*' not found$/,
+			/^XSLT: xsl:character-map with name '.*' not found$/, /^XSLT: xsl:key declaration with name '.*' not found$/,
+			/^XSLT: xsl:accumulator with name '.*' not found$/];
+		diagnostics.filter((d) => d.severity === vscode.DiagnosticSeverity.Error).forEach((d) => {
+			const fn = /^XPath: Function: '(.*)' with \d+ arguments not found$/.exec(d.message);
+			if (notFound.some((pattern) => pattern.test(d.message)) || (fn && fn[1].includes(':') && !builtInPrefixes.test(fn[1]))) {
+				d.severity = vscode.DiagnosticSeverity.Warning;
+				d.message += ' - it may be declared in a module imported or included with _href, which isn\'t resolved';
+			}
+		});
+	}
 
 	// one of xsl:catch's error variables, e.g. $err:code - with the err prefix, or another bound to the namespace of errors
 	private static isCatchVariable(reference: string, expandedName: (name: string) => string) {
@@ -3582,6 +3600,9 @@ export class XsltTokenDiagnostics {
 		});
 		problemTokens = XsltTokenDiagnostics.withoutQuoteCascades(allTokens, problemTokens);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
+		if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && StaticHrefs.hasUnresolved(documentText)) {
+			XsltTokenDiagnostics.allowForUnresolvedImports(allDiagnostics);
+		}
 		if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && !testingAsAttribute) {
 			// template rules whose union patterns' branches have different default priorities: XSLT 4.0 changes the rule chosen
 			allDiagnostics.push(...UnionPatternPriority.problems(document, docType === DocumentTypes.XSLT40 || !!languageConfig.isVersion4));

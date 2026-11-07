@@ -12,6 +12,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { HrefPaths } from './hrefPaths';
 import { RecordTypes } from './recordTypes';
+import { StaticHrefs } from './staticHrefs';
+import { GlobalInstructionType } from './xslLexer';
 
 // an xsl:import or xsl:include of a module: its resolved path
 // an xsl:use-package: the name of the package it uses, and its package-version, if any
@@ -32,8 +34,8 @@ const maxFiles = 20000;
 // each file - without the lexer - so that for a module opened on its own, the top-level stylesheet that imports or
 // includes it, directly or indirectly, can be found without that stylesheet being opened first. The index is built in
 // the background the first time it's needed, and is updated by a file watcher.
-// Only literal hrefs are found, not those from shadow attributes, e.g. _href="{$dir}/a.xsl" - an href the XML catalog
-// maps to a file is found as that file.
+// Literal hrefs are found, and those of shadow attributes whose values are static parameters with string literal values,
+// e.g. _href="{$dir}/a.xsl" (see StaticHrefs) - an href the XML catalog maps to a file is found as that file.
 export class ImportIndex {
 	public static readonly instance = new ImportIndex();
 
@@ -71,6 +73,13 @@ export class ImportIndex {
 			}
 			references.push({ path: referencePath, isInclude: match[1] === 'include' });
 		}
+		// and those of _href shadow attributes, with the values of static parameters (see StaticHrefs)
+		StaticHrefs.resolve(text).forEach((href) => {
+			const referencePath = HrefPaths.toPath(href.href, modulePath);
+			if (referencePath !== undefined) {
+				references.push({ path: referencePath, isInclude: href.type === GlobalInstructionType.Include });
+			}
+		});
 		return references;
 	}
 
