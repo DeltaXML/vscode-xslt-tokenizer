@@ -1327,6 +1327,9 @@ export function activate(context: vscode.ExtensionContext) {
 	// the 'Find Nodes with XPath' query file: checked again when it's to run on another XML file
 	context.subscriptions.push(XPathQuery.onDidChangeTarget(() => vscode.workspace.textDocuments.filter((doc) => XPathQuery.isQueryFile(doc))
 		.forEach((doc) => xpathSemanticTokensProvider.recheck(doc))));
+	// - and as XPath 3.1 or 4.0, when the version is changed in the status bar
+	context.subscriptions.push(XPathQuery.onDidChangeVersion(() => vscode.workspace.textDocuments.filter((doc) => XPathQuery.isQueryFile(doc))
+		.forEach((doc) => xpathSemanticTokensProvider.recheck(doc))));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
 	let xpathFormatter = new XMLDocumentFormattingProvider(XPathConfiguration.configuration);

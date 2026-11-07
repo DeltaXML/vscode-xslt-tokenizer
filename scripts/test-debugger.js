@@ -517,9 +517,9 @@ async function testLazyLet(saxonJar) {
 function testXPathQuery(saxonJar) {
     const xml = '<orders xmlns="urn:orders" xmlns:x="urn:extra">\n  <order id="A1" status="late"><item>pen</item><x:note>urgent</x:note></order>\n' +
         '  <order id="B2" status="ok"><item>ink</item></order>\n</orders>';
-    const query = (xpath, namespaces) => {
+    const query = (xpath, namespaces, xpathVersion) => {
         const result = require('child_process').spawnSync('java', ['-cp', [adapterJar, saxonJar].join(path.delimiter), 'com.deltaxml.xslt.debug.XPathQuery'],
-            { input: JSON.stringify({ xpath, xml, systemId: 'file:///tmp/orders.xml', namespaces }), encoding: 'utf8' });
+            { input: JSON.stringify({ xpath, xml, systemId: 'file:///tmp/orders.xml', namespaces, xpathVersion }), encoding: 'utf8' });
         return JSON.parse(result.stdout);
     };
     assert.deepStrictEqual(query("//order[@status = 'late']/item").items, [{ kind: 'node', nodeKind: 'element', path: '/orders/order[1]/item', positions: [1, 1, 1] }]);
@@ -552,6 +552,15 @@ function testXPathQuery(saxonJar) {
     const withFunction = query('count#1, 1');
     assert.strictEqual(withFunction.text, undefined);
     assert.deepStrictEqual(withFunction.items.map((item) => item.value), ['fn:count#1', '1']);
+    // the XPath version asked for: 3.1 strictly, without syntax extensions, so a 4.0 bare map constructor is a syntax
+    // error - and 4.0 with Saxon-PE or EE, but 3.1 with Saxon-HE, which the result says
+    const isHE = /saxon-he/i.test(path.basename(saxonJar.split(path.delimiter)[0]));
+    const strict = query("{ 'a': 1 }?a", undefined, '3.1');
+    assert.deepStrictEqual([strict.error?.code, strict.xpathVersion], ['XPST0003', '3.1']);
+    assert.deepStrictEqual(query("map { 'a': 1 }?a", undefined, '3.1').items.map((item) => item.value), ['1']);
+    const as40 = query("{ 'a': 1 }?a", undefined, '4.0');
+    assert.strictEqual(as40.xpathVersion, isHE ? '3.1' : '4.0');
+    assert.deepStrictEqual(isHE ? as40.error.code : as40.items.map((item) => item.value), isHE ? 'XPST0003' : ['1']);
     const error = query('//order[').error;
     assert.strictEqual(error.code, 'XPST0003');
     assert.deepStrictEqual([error.line, error.column], [1, 8]);

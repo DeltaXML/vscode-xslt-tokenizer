@@ -64,48 +64,60 @@ final class XPathQuery {
      */
     public static void main(String[] args) throws Exception {
         java.io.Writer out = new java.io.OutputStreamWriter(System.out, StandardCharsets.UTF_8);
-        Session session = null;
+        // a session for each XPath version requested, made when first needed
+        Map<String, Session> sessions = new java.util.HashMap<String, Session>();
         if (args.length > 0 && "--server".equals(args[0])) {
             java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(System.in, StandardCharsets.UTF_8));
             for (String line = in.readLine(); line != null; line = in.readLine()) {
                 if (line.trim().isEmpty()) {
                     continue;
                 }
-                if (session == null) {
-                    session = new Session();
-                }
-                out.write(Json.stringify(respond(session, line)) + "\n");
+                out.write(Json.stringify(respond(sessions, line)) + "\n");
                 out.flush();
             }
             return;
         }
-        out.write(Json.stringify(respond(null, new String(readAll(System.in), StandardCharsets.UTF_8))));
+        out.write(Json.stringify(respond(sessions, new String(readAll(System.in), StandardCharsets.UTF_8))));
         out.flush();
     }
 
-    // the result for a request, or the error - a new session if there's none
-    private static Object respond(Session session, String json) {
+    // the result for a request, or the error - in the session for the XPath version it asks for, 4.0 if none
+    private static Object respond(Map<String, Session> sessions, String json) {
+        Session session = null;
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> request = (Map<String, Object>) Json.parse(json);
-            return evaluate(session == null ? new Session() : session, request);
+            String version = "3.1".equals(Json.string(request, "xpathVersion")) ? "3.1" : "4.0";
+            session = sessions.get(version);
+            if (session == null) {
+                session = new Session("4.0".equals(version));
+                sessions.put(version, session);
+            }
+            return evaluate(session, request);
         } catch (SaxonApiException e) {
-            return Json.obj().with("error", error(e));
+            return withVersion(Json.obj().with("error", error(e)), session);
         } catch (Exception | LinkageError | StackOverflowError e) {
-            return Json.obj().with("error", Json.obj().with("message", Debugger.message(e)));
+            return withVersion(Json.obj().with("error", Json.obj().with("message", Debugger.message(e))), session);
         }
     }
 
-    // what's kept between a server's requests: Saxon's configuration - XPath 4.0 with Saxon-PE or EE - and xdm-view,
-    // once compiled
+    // an error, with the XPath version it was evaluated as, if that's known - e.g. 3.1, with Saxon-HE, for a 4.0
+    // expression's syntax error
+    private static Json.Obj withVersion(Json.Obj result, Session session) {
+        return session == null ? result : result.with("xpathVersion", session.xpath40 ? "4.0" : "3.1");
+    }
+
+    // what's kept between a server's requests: Saxon's configuration and xdm-view, once compiled. XPath 4.0, if it's
+    // asked for, with Saxon-PE or EE (with syntax extensions) - else XPath 3.1, strictly: no syntax extensions, as when
+    // an XSLT 3.0 stylesheet is run
     static final class Session {
         final Configuration config = Configuration.newLicensedConfiguration();
         final Processor processor;
         final boolean xpath40;
         final XdmView view;
 
-        Session() {
-            boolean is40 = !"HE".equals(config.getEditionCode());
+        Session(boolean want40) {
+            boolean is40 = want40 && !"HE".equals(config.getEditionCode());
             if (is40) {
                 try {
                     config.setConfigurationProperty("http://saxon.sf.net/feature/allowSyntaxExtensions", Boolean.TRUE);
@@ -168,7 +180,8 @@ final class XPathQuery {
                             .with("value", item.getStringValue()) :
                     Json.obj().with("kind", "other").with("value", adaptive(processor, item)));
         }
-        Json.Obj result = Json.obj().with("count", value.size()).with("items", items);
+        // the version used: 3.1 when 4.0 was asked for with Saxon-HE
+        Json.Obj result = Json.obj().with("count", value.size()).with("items", items).with("xpathVersion", xpath40 ? "4.0" : "3.1");
         String text = text(session.view, value);
         if (text != null) {
             result.with("text", text);

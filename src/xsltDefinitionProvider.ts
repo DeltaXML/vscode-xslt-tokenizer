@@ -26,6 +26,7 @@ import { XdocReferences, XdocTarget } from './xdocReferences';
 import { RecordTypes } from './recordTypes';
 import { XPathQuery } from './xpathQuery';
 import { XSpecGlobalParams } from './xspecGlobalParams';
+import { XPathVersion } from './xpathVersion';
 
 interface ImportedGlobals {
 	href: string;
@@ -53,6 +54,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	private docType: DocumentTypes;
 	private schemaData: SchemaData|undefined;
 	private languageConfig: LanguageConfiguration;
+
+	// an XPath document that's XPath 4.0 - not the query file set to XPath 3.1 (see XPathVersion)
+	private isXPath40Document(document: vscode.TextDocument) {
+		return this.docType === DocumentTypes.XPath && XPathVersion.isXPath40(document);
+	}
 
 	public constructor(xsltConfiguration: LanguageConfiguration) {
 		this.languageConfig = xsltConfiguration;
@@ -533,7 +539,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			// within element(...) or attribute(...): only the names, from the XML context file and the stylesheet
 			const kindTestNames = this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XPath ?
-				XsltTokenCompletions.getKindTestNameCompletions(document, position, symbolsForXPath, nodeNames, attNames, !!localLanguageConfig.isVersion4 || this.docType === DocumentTypes.XPath) : undefined;
+				XsltTokenCompletions.getKindTestNameCompletions(document, position, symbolsForXPath, nodeNames, attNames, !!localLanguageConfig.isVersion4 || this.isXPath40Document(document)) : undefined;
 			if (kindTestNames) {
 				resolve(new vscode.CompletionList(kindTestNames, false));
 				return;
@@ -547,7 +553,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			// an argument of a user-defined function, or the value of a typed let binding, for an enumeration type or xs:boolean
 			const argumentValues = !recordEntries && !selectValues && hasItemTypes ? XsltTokenCompletions.getArgumentValueCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
 			// XPath 4.0 keyword arguments, e.g. ex:area(2, scale := 2) - the names of the called function's parameters
-			const keywordArguments = (isXSLT40 || this.docType === DocumentTypes.XPath) && !recordEntries && !argumentValues?.inString ?
+			const keywordArguments = (isXSLT40 || this.isXPath40Document(document)) && !recordEntries && !argumentValues?.inString ?
 				XsltTokenCompletions.getKeywordArgumentCompletions(document, allTokens, position, this.docType === DocumentTypes.XPath, globalInstructionData, allImportedGlobals) : undefined;
 			// a '{' that starts an attribute or text value template - not an XPath token, as one in an expression is,
 			// e.g. of a map constructor - is followed by any XPath expression, so it has all the completions
@@ -571,7 +577,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			completions= XsltTokenCompletions.getCompletions(localLanguageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
 			if (completions && (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XPath)) {
 				// after an operand, only keyword operators - or at the start of an expression, snippets for 'for', 'let' etc. too
-				completions = XsltTokenCompletions.adjustExpressionCompletions(document, allTokens, position, !!localLanguageConfig.isVersion4 || this.docType === DocumentTypes.XPath, completions);
+				completions = XsltTokenCompletions.adjustExpressionCompletions(document, allTokens, position, !!localLanguageConfig.isVersion4 || this.isXPath40Document(document), completions);
 			}
 			// xsl:map-entry elements for a record type, before the other element completions
 			const mapEntryElements = hasItemTypes ? XsltTokenCompletions.getMapEntryElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;

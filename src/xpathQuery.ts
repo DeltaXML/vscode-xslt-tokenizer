@@ -14,6 +14,8 @@ import { XsltDebug } from './xsltDebug';
 import { unquotedPath } from './settingPaths';
 import { XPathQueryResults, XPathQueryFound } from './xpathQueryResults';
 import { XPathQueryServer } from './xpathQueryServer';
+import { XPathVersion, XPathVersionNumber } from './xpathVersion';
+import { SaxonTaskProvider } from './saxonTaskProvider';
 
 // an item of a query's result, from XPathQuery (in the debug adapter's jar): a node - where it is among the document's
 // elements, and for an attribute its name - or an atomic value, or another item (a map, array or function)
@@ -45,6 +47,8 @@ export interface XPathQueryResult {
 	// the result (its first 100 items) as xdm:debug() writes it, without color - for the Output panel. Not given if
 	// xdm-view can't be used, e.g. for a function item
 	text?: string;
+	// the XPath version Saxon used: 3.1 when 4.0 was asked for with Saxon-HE
+	xpathVersion?: XPathVersionNumber;
 	error?: { message: string; code?: string; line?: number; column?: number };
 }
 
@@ -55,7 +59,7 @@ export interface XPathQueryResult {
 // of them are listed in VS Code's References view, to go from one to the next, and atomic values are written to an
 // output channel
 export class XPathQuery {
-	public static readonly fileName = 'queries.xpath';
+	public static readonly fileName = XPathVersion.queryFileName;
 	public static readonly mainClass = 'com.deltaxml.xslt.debug.XPathQuery';
 	// the most items of a result shown in the Output panel (XPathQuery.MAX_TEXT_ITEMS)
 	public static readonly maxTextItems = 100;
@@ -119,7 +123,7 @@ export class XPathQuery {
 	}
 
 	public static isQueryFile(document: vscode.TextDocument) {
-		return document.languageId === 'xpath' && path.basename(document.uri.fsPath) === XPathQuery.fileName;
+		return XPathVersion.isQueryFile(document);
 	}
 
 	// the query file's blocks of lines - expressions, or only comments - each checked, and completed, on its own:
@@ -343,6 +347,46 @@ export class XPathQuery {
 	private static targetChanged = new vscode.EventEmitter<void>();
 	public static readonly onDidChangeTarget = XPathQuery.targetChanged.event;
 	private static readonly targetKey = 'xpathQuery.target';
+	// the XPath version of the query file's expressions, as Saxon evaluates them and the linter, completion etc. check
+	// them (see XPathVersion): chosen with the status bar item - kept for the workspace
+	private static readonly versionKey = 'xpathQuery.xpathVersion';
+	private static versionChanged = new vscode.EventEmitter<void>();
+	public static readonly onDidChangeVersion = XPathQuery.versionChanged.event;
+	private versionItem = vscode.window.createStatusBarItem('xslt-xpath.xpathQueryVersion', vscode.StatusBarAlignment.Right, 100.09);
+	// the version Saxon used last, if not the one chosen: 3.1, with Saxon-HE, for 4.0
+	private versionUsed: XPathVersionNumber | undefined;
+
+	private static saxonJarIsHE() {
+		return SaxonTaskProvider.isSaxonHE(vscode.workspace.getConfiguration('XSLT.tasks').get<string>('saxonJar'));
+	}
+
+	private setVersion(version: XPathVersionNumber) {
+		XPathVersion.setQueryFileVersion(version);
+		this.context.workspaceState.update(XPathQuery.versionKey, version);
+		this.versionUsed = undefined;
+		this.updateVersionItem();
+		XPathQuery.versionChanged.fire();
+	}
+
+	// 'XPath 4.0' or 'XPath 3.1' beside the language, while the query file is in the editor - with a warning for 4.0
+	// that Saxon-HE can't evaluate
+	private updateVersionItem() {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor || !XPathQuery.isQueryFile(editor.document)) {
+			this.versionItem.hide();
+			return;
+		}
+		const version = XPathVersion.getQueryFileVersion();
+		const notSupported = version === '4.0' && (this.versionUsed === '3.1' || XPathQuery.saxonJarIsHE());
+		const other = version === '4.0' ? '3.1' : '4.0';
+		this.versionItem.text = `${notSupported ? '$(warning) ' : ''}XPath ${version}`;
+		this.versionItem.tooltip = new vscode.MarkdownString((notSupported ?
+			'**XPath 4.0 needs Saxon-PE or Saxon-EE** - Saxon-HE evaluates XPath 3.1, so 4.0 syntax is a syntax error.\n\n' : '') +
+			`Find Nodes with XPath: expressions are XPath ${version}${version === '3.1' ? ' (as in XSLT 3.0)' : ''} - checked, completed and evaluated as that.\n\n` +
+			`Click to change to XPath ${other}${other === '3.1' ? ' (as in XSLT 3.0)' : ''}.`);
+		this.versionItem.command = { title: `Change to XPath ${other}`, command: 'xslt-xpath.toggleXPathQueryVersion' };
+		this.versionItem.show();
+	}
 
 	private static isXMLFile(document: vscode.TextDocument) {
 		return /^(xml|bpmn|dcp|sch)$/.test(document.languageId) && document.uri.scheme !== 'output';
@@ -359,6 +403,20 @@ export class XPathQuery {
 
 	constructor(private context: vscode.ExtensionContext) {
 		context.subscriptions.push(this.diagnostics, this.output, this.server);
+		const savedVersion = context.workspaceState.get<XPathVersionNumber>(XPathQuery.versionKey);
+		// without a choice: 4.0 - or 3.1, for Saxon-HE, which can't evaluate 4.0
+		XPathVersion.setQueryFileVersion(savedVersion ?? (XPathQuery.saxonJarIsHE() ? '3.1' : '4.0'));
+		context.subscriptions.push(this.versionItem, XPathQuery.versionChanged);
+		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.toggleXPathQueryVersion', () =>
+			this.setVersion(XPathVersion.getQueryFileVersion() === '4.0' ? '3.1' : '4.0')));
+		context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => this.updateVersionItem()));
+		context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+			if (e.affectsConfiguration('XSLT.tasks.saxonJar')) {
+				this.versionUsed = undefined;
+				this.updateVersionItem();
+			}
+		}));
+		this.updateVersionItem();
 		const saved = context.workspaceState.get<string>(XPathQuery.targetKey);
 		XPathQuery.target = saved ? vscode.Uri.parse(saved) : undefined;
 		const xmlEditor = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors].find((e) => e && XPathQuery.isXMLFile(e.document));
@@ -644,6 +702,10 @@ export class XPathQuery {
 			}
 			return;
 		}
+		if (result.xpathVersion && result.xpathVersion !== XPathVersion.getQueryFileVersion()) {
+			this.output.appendLine(`Evaluated as XPath ${result.xpathVersion}: XPath ${XPathVersion.getQueryFileVersion()} needs Saxon-PE or Saxon-EE - ` +
+				`change the version in the status bar, or the XSLT.tasks.saxonJar setting`);
+		}
 		if (result.error) {
 			this.setResult(queryDocument, expression.text);
 			this.output.appendLine(`Error${result.error.code ? ' ' + result.error.code : ''} for ${expression.text.replace(/\s+/g, ' ').trim()}`);
@@ -689,9 +751,20 @@ export class XPathQuery {
 		// a relative path is relative to the workspace folder, as for tasks
 		const jar = folder && !path.isAbsolute(saxonJar) ? path.join(folder, saxonJar) : saxonJar;
 		const args = ['-cp', [adapterJar, jar].join(path.delimiter), XPathQuery.mainClass];
+		const version = XPathVersion.getQueryFileVersion();
+		const versioned = { ...request, xpathVersion: version };
 		// in the Java process kept running - or, if that fails (other than for a newer query), in one of its own
-		return this.server.request(XsltDebug.javaCommand, args, folder, request).catch((e: Error) =>
-			e.message === XPathQueryServer.superseded ? Promise.reject(e) : this.evaluateOnce(args, folder, request));
+		return this.server.request(XsltDebug.javaCommand, args, folder, versioned).catch((e: Error) =>
+			e.message === XPathQueryServer.superseded ? Promise.reject(e) : this.evaluateOnce(args, folder, versioned))
+			.then((result: XPathQueryResult) => {
+				// e.g. 3.1 for 4.0, with Saxon-HE: shown in the status bar
+				const used = result.xpathVersion && result.xpathVersion !== version ? result.xpathVersion : undefined;
+				if (used !== this.versionUsed) {
+					this.versionUsed = used;
+					this.updateVersionItem();
+				}
+				return result;
+			});
 	}
 
 	// in a Java process of its own: the request on stdin, the result on stdout

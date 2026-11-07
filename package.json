@@ -232,6 +232,11 @@
 				"category": "XML"
 			},
 			{
+				"command": "xslt-xpath.toggleXPathQueryVersion",
+				"title": "Switch XPath Version of Queries (3.1 / 4.0)",
+				"category": "XML"
+			},
+			{
 				"command": "xslt-xpath.selectCurrentElement",
 				"title": "Select current element",
 				"category": "XML"
@@ -636,6 +641,10 @@
 				},
 				{
 					"command": "xslt-xpath.runXPathQuery",
+					"when": "editorLangId == xpath && resourceFilename == queries.xpath"
+				},
+				{
+					"command": "xslt-xpath.toggleXPathQueryVersion",
 					"when": "editorLangId == xpath && resourceFilename == queries.xpath"
 				},
 				{

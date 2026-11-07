@@ -35,6 +35,7 @@ import { XmlElement, parseXml } from './xspecXml';
 import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
 import { XSpecSourceMap } from './xspecSourceMap';
+import { XPathVersion } from './xpathVersion';
 
 enum HasCharacteristic {
 	unknown,
@@ -268,6 +269,8 @@ export class XsltTokenDiagnostics {
 	private static isHtmlParserJarSet = false;
 	// an XSpec file whose test runner is XSLT 4.0, so its XPath expressions are XPath 4.0 (see xspecXPath40)
 	private static xspecXPath40 = false;
+	// an XPath document that isn't XPath 4.0: the 'Find Nodes with XPath' query file, set to XPath 3.1 (see XPathVersion)
+	private static xpath31 = false;
 	// the prefixes of functions that the stylesheet's processing system provides, e.g. Java extension functions: calls
 	// of functions with these prefixes aren't checked (the XSLT.validation.externalFunctionPrefixes setting)
 	private static externalFunctionPrefixes: string[] = [];
@@ -608,6 +611,7 @@ export class XsltTokenDiagnostics {
 		XsltTokenDiagnostics.isHtmlParserJarSet = !!htmlParserString && htmlParserString.trim().length > 0;
 		XsltTokenDiagnostics.externalFunctionPrefixes = XsltTokenDiagnostics.externalFunctionPrefixesFor(document.uri);
 		XsltTokenDiagnostics.xspecXPath40 = docType === DocumentTypes.XSPEC && XsltTokenDiagnostics.isXSpecXPath40(document.getText());
+		XsltTokenDiagnostics.xpath31 = docType === DocumentTypes.XPath && !XPathVersion.isXPath40(document);
 
 		if (languageConfig.isVersion4) {
 			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
@@ -2409,7 +2413,10 @@ export class XsltTokenDiagnostics {
 						let tv = token.value;
 						// the XPath 4.0 operators: the node comparisons, e.g. is-not, precedes and follows-or-is, '×', '÷' and the
 						// method call '=?>'
-						if (!XsltTokenDiagnostics.isXPath40(docType) && XsltTokenDiagnostics.operators40.has(tv) && !token.error) {
+						// and the mapping arrow '=!>', where the query file is set to XPath 3.1, which Saxon evaluates without syntax
+						// extensions - in an XSLT 3.0 stylesheet, Saxon allows it with them, so it isn't reported there
+						if (!XsltTokenDiagnostics.isXPath40(docType) && !token.error &&
+							(XsltTokenDiagnostics.operators40.has(tv) || (XsltTokenDiagnostics.xpath31 && tv === '=!>'))) {
 							token.error = ErrorType.OperatorRequiresXPath40;
 							problemTokens.push(token);
 						}
@@ -3856,7 +3863,7 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static isXPath40(docType: DocumentTypes) {
-		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath || (docType === DocumentTypes.XSPEC && XsltTokenDiagnostics.xspecXPath40);
+		return docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XPath && !XsltTokenDiagnostics.xpath31) || (docType === DocumentTypes.XSPEC && XsltTokenDiagnostics.xspecXPath40);
 	}
 
 	// whether an XSpec file's test runner is XSLT 4.0, as XSpec compiles it (x:xslt-version() in

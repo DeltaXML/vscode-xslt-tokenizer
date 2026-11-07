@@ -27,6 +27,7 @@ import { XdocNotes } from './xdocNote';
 import { PackageScope } from './packageScope';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { FixedNamespaces } from './fixedNamespaces';
+import { XPathVersion } from './xpathVersion';
 
 enum TagType {
 	XSLTstart,
@@ -120,7 +121,7 @@ export class XsltTokenCompletions {
 	private static atomicItemTypeNames: string[] = [];
 
 	private static sequenceTypesFor(docType: DocumentTypes) {
-		if (docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath) {
+		if (docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XPath && !XsltTokenCompletions.xpath31)) {
 			return XsltTokenCompletions.itemTypeNames.concat(XsltTokenCompletions.sequenceTypes, ['record()', 'enum()']);
 		}
 		// before XSLT 4.0, with the setting: the named item types, and record and enumeration types
@@ -168,6 +169,7 @@ export class XsltTokenCompletions {
 		let docType = languageConfig.isVersion4 ? DocumentTypes.XSLT40 : languageConfig.docType;
 		let isXSLT = docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40;
 		XsltTokenCompletions.xspecXPath40 = docType === DocumentTypes.XSPEC && XsltTokenDiagnostics.isXSpecXPath40(document.getText());
+		XsltTokenCompletions.xpath31 = docType === DocumentTypes.XPath && !XPathVersion.isXPath40(document);
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined = false;
@@ -1193,7 +1195,7 @@ export class XsltTokenCompletions {
 	}
 
 	private static axisCompletionNames(docType: DocumentTypes) {
-		const axes = docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? Data.cAxes40 : Data.cAxes;
+		const axes = docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XPath && !XsltTokenCompletions.xpath31) ? Data.cAxes40 : Data.cAxes;
 		return axes.map(axis => axis + '::');
 	}
 
@@ -1203,8 +1205,8 @@ export class XsltTokenCompletions {
 		} else if (docType === DocumentTypes.XSLT40) {
 			return XsltTokenCompletions.useIxslFunctions ? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlus40;
 		} else if (docType === DocumentTypes.XPath) {
-			// XPath documents use XPath 4.0
-			return XPathFunctionDetails.xpathDataPlus40;
+			// XPath documents use XPath 4.0 - but the query file may be set to XPath 3.1 (see XPathVersion)
+			return XsltTokenCompletions.xpath31 ? XPathFunctionDetails.xpathData : XPathFunctionDetails.xpathDataPlus40;
 		} else {
 			return XPathFunctionDetails.xpathData;
 		}
@@ -1316,7 +1318,7 @@ export class XsltTokenCompletions {
 							xpathCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 						}
 						if (!xpathCompletions) {
-							const atomicTypes40 = docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? XsltTokenCompletions.atomicItemTypeNames.concat(['enum()']) : [];
+							const atomicTypes40 = docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XPath && !XsltTokenCompletions.xpath31) ? XsltTokenCompletions.atomicItemTypeNames.concat(['enum()']) : [];
 							let completionStrings = isSimpleType ? atomicTypes40.concat(FunctionData.simpleTypes) : XsltTokenCompletions.sequenceTypesFor(docType);
 							xpathCompletions = XsltTokenCompletions.getNormalCompletions(position, completionStrings, vscode.CompletionItemKind.TypeParameter);
 						}
@@ -2691,9 +2693,11 @@ export class XsltTokenCompletions {
 
 	// an XSpec file whose test runner is XSLT 4.0 (see XsltTokenDiagnostics.isXSpecXPath40)
 	private static xspecXPath40 = false;
+	// an XPath document that isn't XPath 4.0: the 'Find Nodes with XPath' query file, set to XPath 3.1 (see XPathVersion)
+	private static xpath31 = false;
 
 	private static isXPath40(docType: DocumentTypes) {
-		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath || (docType === DocumentTypes.XSPEC && XsltTokenCompletions.xspecXPath40);
+		return docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XPath && !XsltTokenCompletions.xpath31) || (docType === DocumentTypes.XSPEC && XsltTokenCompletions.xspecXPath40);
 	}
 
 	// XSLT 4.0: the documentation of each field of a record type, for its completion - with the text of its @field tag in

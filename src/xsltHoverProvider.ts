@@ -19,6 +19,7 @@ import { ModulePrefixes } from './modulePrefixes';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecScenario } from './xspecScenario';
 import { XSpecGlobalParams } from './xspecGlobalParams';
+import { XPathVersion } from './xpathVersion';
 
 enum CharType {
 	none,
@@ -35,9 +36,10 @@ export class XSLTHoverProvider implements HoverProvider {
 	}
 
 	// isVersion4 is set on the shared language configuration each time the document symbols are updated
-	private getFunctionData() {
+	private getFunctionData(document: TextDocument) {
 		if (this.languageConfiguration?.docType === DocumentTypes.XPath) {
-			return XPathFunctionDetails.xpathDataPlus40;
+			// 4.0 - but the query file may be set to XPath 3.1 (see XPathVersion)
+			return XPathVersion.isXPath40(document) ? XPathFunctionDetails.xpathDataPlus40 : XPathFunctionDetails.xpathData;
 		}
 		return this.languageConfiguration?.isVersion4 ? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlusIxsl;
 	}
@@ -90,7 +92,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const trimmedFnName = rawFnName.trimRight();
 		// the built-in function list stores names without their standard 'fn:' prefix
 		const builtinLookupName = trimmedFnName.startsWith('fn:') ? trimmedFnName.substring(3) : trimmedFnName;
-		const matchingData = this.getFunctionData().find((item) => {
+		const matchingData = this.getFunctionData(document).find((item) => {
 			return item.name === builtinLookupName;
 		});
 
@@ -311,7 +313,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		} else if (!target) {
 			// a built-in function, e.g. fn:sum#1
 			const builtinName = reference.name.startsWith('fn:') ? reference.name.substring(3) : reference.name;
-			const builtin = reference.kind === 'function' || reference.kind === 'name' ? this.getFunctionData().find((item) => item.name === builtinName) : undefined;
+			const builtin = reference.kind === 'function' || reference.kind === 'name' ? this.getFunctionData(document).find((item) => item.name === builtinName) : undefined;
 			return builtin ? this.createHover(builtin.signature, builtin.description) : null;
 		}
 		const global = target.global;
