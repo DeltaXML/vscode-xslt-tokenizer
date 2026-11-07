@@ -825,6 +825,58 @@ export class XsltTokenDiagnostics {
 			}
 		});
 
+		// a name is matched by its namespace and local name, as Saxon matches it - not its prefix: a reference not declared
+		// as it's written, e.g. woo:a, is looked for by its expanded name, with the bindings in scope where it's written,
+		// e.g. xmlns:woo on the root or on the element - and the declarations by theirs, e.g. hoo:a with xmlns:hoo for the
+		// same namespace, on the root or on the declaration itself (W3C tests call-template-1701, output-0205). Found only
+		// when a reference isn't, so a module's names are expanded once, at most
+		let declaredByNamespace: Map<GlobalInstructionType, Set<string>> | undefined;
+		const templateParamsByNamespace = new Map<string, Set<string>>();
+		let namesMarkup: string | undefined;
+		const tokenOffset = (token: BaseToken) => document.offsetAt(new vscode.Position(token.line, token.startCharacter));
+		const bindingsAt = (offsets: number[]) => {
+			namesMarkup = namesMarkup ?? RecordTypes.blankMarkup(documentText);
+			return RecordTypes.namespaceBindingsAt(documentText, namesMarkup, offsets);
+		};
+		const declarationsByNamespace = () => {
+			if (!declaredByNamespace) {
+				const declared = new Map<GlobalInstructionType, Set<string>>();
+				const add = (instruction: GlobalInstructionData, bindings: Map<string, string> | undefined) => {
+					const names = declared.get(instruction.type) ?? new Set<string>();
+					// a template's modes may be a list
+					instruction.name.split(/\s+/).filter((name) => name.length > 0).forEach((name) => names.add(ModulePrefixes.expandedName(name, bindings)));
+					declared.set(instruction.type, names);
+					if (instruction.type === GlobalInstructionType.Template) {
+						templateParamsByNamespace.set(ModulePrefixes.expandedName(instruction.name, bindings),
+							new Set((instruction.memberNames ?? []).map((name) => ModulePrefixes.expandedName(name, bindings))));
+					}
+				};
+				const local = globalInstructionData.filter((instruction) => instruction.token).map((instruction) => ({ instruction, offset: tokenOffset(instruction.token) }))
+					.sort((a, b) => a.offset - b.offset);
+				const localBindings = bindingsAt(local.map((entry) => entry.offset));
+				local.forEach((entry, i) => add(entry.instruction, localBindings[i]));
+				// named with this module's prefixes (see ModulePrefixes.toModule)
+				importedInstructionData.forEach((instruction) => add(instruction, instruction.prefixBindings));
+				declaredByNamespace = declared;
+			}
+			return declaredByNamespace;
+		};
+		const expandedNameAt = (name: string, token: BaseToken) => ModulePrefixes.expandedName(name, bindingsAt([tokenOffset(token)])[0]);
+		const isDeclaredByNamespace = (types: GlobalInstructionType[], name: string, token: BaseToken) => {
+			if (!name.includes(':')) {
+				return false;
+			}
+			const expanded = expandedNameAt(name, token);
+			const declared = declarationsByNamespace();
+			return types.some((type) => declared.get(type)?.has(expanded));
+		};
+		// a parameter of a named template, both written where the xsl:with-param is - e.g. P:pvar1 for Q:pvar1, declared
+		// with xmlns:Q on the template (call-template-0702)
+		const isTemplateParamByNamespace = (templateName: string, paramName: string, token: BaseToken) => {
+			declarationsByNamespace();
+			return templateParamsByNamespace.get(expandedNameAt(templateName, token))?.has(expandedNameAt(paramName, token)) ?? false;
+		};
+
 		if (docType === DocumentTypes.XPath) {
 			xsltPrefixesToURIs.set('array', XSLTnamespaces.Array);
 			xsltPrefixesToURIs.set('map', XSLTnamespaces.Map);
@@ -1674,7 +1726,8 @@ export class XsltTokenDiagnostics {
 						if (!hasProblem && attType === AttributeType.UseAttributeSets) {
 							// each name must be a declared attribute set
 							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
-								if (!globalAttributeSetNames.includes(nameToken.value) && XsltTokenDiagnostics.xsltAttributeName(nameToken.value, document) !== 'xsl:original') {
+								if (!globalAttributeSetNames.includes(nameToken.value) && XsltTokenDiagnostics.xsltAttributeName(nameToken.value, document) !== 'xsl:original' &&
+									!isDeclaredByNamespace([GlobalInstructionType.AttributeSet], nameToken.value, nameToken)) {
 									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.AttributeSetUnresolved });
 								}
 							});
@@ -1682,7 +1735,7 @@ export class XsltTokenDiagnostics {
 						if (!hasProblem && attType === AttributeType.UseAccumulators) {
 							// each name must be a declared accumulator (XTSE3300)
 							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
-								if (nameToken.value !== '#all' && !globalAccumulatorNames.includes(nameToken.value)) {
+								if (nameToken.value !== '#all' && !globalAccumulatorNames.includes(nameToken.value) && !isDeclaredByNamespace([GlobalInstructionType.Accumulator], nameToken.value, nameToken)) {
 									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.AccumulatorNameUnresolved });
 								}
 							});
@@ -1690,13 +1743,14 @@ export class XsltTokenDiagnostics {
 						if (!hasProblem && attType === AttributeType.UseCharacterMaps) {
 							// each name must be a declared character map (XTSE1590)
 							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
-								if (!globalCharacterMapNames.includes(nameToken.value)) {
+								if (!globalCharacterMapNames.includes(nameToken.value) && !isDeclaredByNamespace([GlobalInstructionType.CharacterMap], nameToken.value, nameToken)) {
 									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.CharacterMapNameUnresolved });
 								}
 							});
 						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
-							if (!namedTemplates.get(variableName) && !(XsltTokenDiagnostics.xsltAttributeName(variableName, document) === 'xsl:original' && XsltTokenDiagnostics.isInOverride(elementStack))) {
+							if (!namedTemplates.get(variableName) && !(XsltTokenDiagnostics.xsltAttributeName(variableName, document) === 'xsl:original' && XsltTokenDiagnostics.isInOverride(elementStack)) &&
+								!isDeclaredByNamespace([GlobalInstructionType.Template], variableName, valueToken)) {
 								valueToken['error'] = ErrorType.TemplateNameUnresolved;
 								valueToken.value = variableName;
 								problemTokens.push(valueToken);
@@ -1721,7 +1775,7 @@ export class XsltTokenDiagnostics {
 						const isXSpecContextMode = tagElementName === 'x:context' && !!xspecScope?.testsStylesheet && !variableName.trim().startsWith('Q{') &&
 							!RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(valueToken.line, valueToken.startCharacter)), currentWrittenAttName)?.includes('&');
 						if (!hasProblem && attType === AttributeType.InstructionMode && (tagElementName === 'xsl:apply-templates' || isXSpecContextMode)) {
-							if (globalModes.indexOf(variableName) < 0) {
+							if (globalModes.indexOf(variableName) < 0 && !isDeclaredByNamespace([GlobalInstructionType.ModeInstruction, GlobalInstructionType.ModeTemplate], variableName, valueToken)) {
 								valueToken['error'] = ErrorType.TemplateModeUnresolved;
 								valueToken.value = variableName;
 								problemTokens.push(valueToken);
@@ -1734,7 +1788,7 @@ export class XsltTokenDiagnostics {
 							let callTemplateName = elementStack[elementStack.length - 1].symbolID;
 							let templateParams = namedTemplates.get(callTemplateName);
 							if (templateParams) {
-								if (templateParams?.indexOf(variableName) < 0) {
+								if (templateParams?.indexOf(variableName) < 0 && !isTemplateParamByNamespace(callTemplateName, variableName, valueToken)) {
 									valueToken['error'] = ErrorType.MissingTemplateParam;
 									valueToken.value = `${callTemplateName}#${variableName}`;
 									pendingTemplateParamErrors.push(valueToken);
@@ -3418,6 +3472,21 @@ export class XsltTokenDiagnostics {
 		problemTokens = XsltTokenDiagnostics.withoutStaticallyExcluded(problemTokens, document, documentText);
 		// and the variable references that aren't resolved, e.g. one in xsl:value-of select="$v" use-when="false()"
 		unresolvedXsltVariableReferences = XsltTokenDiagnostics.withoutStaticallyExcluded(unresolvedXsltVariableReferences, document, documentText);
+		// and a variable reference whose expanded name is that of a variable or parameter declared in the module, or imported,
+		// with another prefix for the namespace, e.g. $new:me for txt:me (variable-1012) - or as an EQName, e.g. $pvar2 for
+		// Q{}pvar2 (call-template-0703) - its scope isn't checked
+		if (unresolvedXsltVariableReferences.length > 0) {
+			namesMarkup = namesMarkup ?? RecordTypes.blankMarkup(documentText);
+			const declarations = [...namesMarkup.matchAll(RecordTypes.xsltPattern(/<xsl:(?:variable|param)\s[^>]*?\bname\s*=\s*("[^"]*"|'[^']*')/g, namesMarkup))]
+				.filter((match) => match[1].includes(':') || match[1].includes('{'));
+			// inside each start tag, for its own namespace declarations
+			const declarationBindings = bindingsAt(declarations.map((match) => match.index! + 1));
+			const declared = new Set(declarations.map((match, i) => ModulePrefixes.expandedName(match[1].slice(1, -1).trim(), declarationBindings[i])));
+			importedInstructionData.filter((instruction) => instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter)
+				.forEach((instruction) => declared.add(ModulePrefixes.expandedName(instruction.name, instruction.prefixBindings)));
+			unresolvedXsltVariableReferences = unresolvedXsltVariableReferences.filter((token) => declared.size === 0 ||
+				!declared.has(expandedNameAt(token.value.replace(/^\$/, ''), token)));
+		}
 		if (hasItemTypes) {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}

@@ -912,6 +912,45 @@ export class RecordTypes {
 		return ancestors;
 	}
 
+	// the namespace bindings in scope at each of the offsets, which must be in ascending order, in one pass: those of the
+	// xmlns:p declarations of the elements open there, outermost first - and of the start tag the offset is in, e.g. in
+	// the value of its name attribute - with the xml prefix. A declaration on an inner element replaces an outer one
+	public static namespaceBindingsAt(text: string, markup: string, offsets: number[]): Map<string, string>[] {
+		const result: Map<string, string>[] = [];
+		const ancestors: Map<string, string>[] = [new Map([['xml', 'http://www.w3.org/XML/1998/namespace']])];
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		const declarations = (tag: string, inherited: Map<string, string>) => {
+			const bindings = new Map(inherited);
+			for (const declaration of tag.matchAll(/\sxmlns:([\w.-]+)\s*=\s*("[^"]*"|'[^']*')/g)) {
+				bindings.set(declaration[1], RecordTypes.decodeReferences(declaration[2].slice(1, -1)).text);
+			}
+			return bindings;
+		};
+		let match: RegExpExecArray | null = tagRgx.exec(markup);
+		for (const offset of offsets) {
+			let containing: RegExpExecArray | undefined;
+			while (match !== null && match.index < offset) {
+				const inherited = ancestors[ancestors.length - 1];
+				if (match.index + match[0].length > offset && !match[1]) {
+					// the start tag the offset is in: an element still to be opened, or closed by it
+					containing = match;
+					break;
+				}
+				if (match[1]) {
+					if (ancestors.length > 1) {
+						ancestors.pop();
+					}
+				} else if (!match[3]) {
+					ancestors.push(declarations(text.substring(match.index, match.index + match[0].length), inherited));
+				}
+				match = tagRgx.exec(markup);
+			}
+			const inScope = ancestors[ancestors.length - 1];
+			result.push(containing ? declarations(text.substring(containing.index, containing.index + containing[0].length), inScope) : inScope);
+		}
+		return result;
+	}
+
 	// the open elements at each of the offsets, which must be in ascending order - as openElements, in one pass
 	public static openElementsAt(markup: string, offsets: number[]): { name: string, offset: number }[][] {
 		const result: { name: string, offset: number }[][] = [];

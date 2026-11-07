@@ -262,6 +262,32 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.isNotEmpty(await problems(stylesheet('<xsl:template name="main"><out xsl:expand-text="yes">{1 <b/> 2}</out></xsl:template>')));
 	});
 
+	test('names matched by namespace, not prefix: two prefixes for one namespace on the root (call-template-1701, variable-1012, attribute-set-1806)', async () => {
+		const body = (uri: string) => `<xsl:variable name="txt:me" select="1"/>
+<xsl:attribute-set name="hoo:set"/>
+<xsl:character-map name="hoo:map"/>
+<xsl:template name="hoo:a"/>
+<xsl:template match="/" mode="hoo:m"/>
+<xsl:template match="/"><xsl:call-template name="woo:a"/><xsl:value-of select="$new:me"/><e xsl:use-attribute-sets="woo:set"/><xsl:apply-templates mode="woo:m"/></xsl:template>
+<xsl:output use-character-maps="woo:map"/>`;
+		const sheet = (uri: string) => stylesheet(body(uri), 'xsl:stylesheet', ` xmlns:hoo="urn:a" xmlns:woo="${uri}" xmlns:txt="urn:a" xmlns:new="${uri}"`);
+		assert.deepEqual(await problems(sheet('urn:a')), []);
+		// still reported: another namespace
+		assert.lengthOf((await problems(sheet('urn:b'))).filter((m) => /not found|not used|cannot be resolved/.test(m)), 5);
+	});
+
+	test('names matched by namespace, not prefix: namespaces declared on an inner element (output-0205, character-map-008, call-template-0702, call-template-0703)', async () => {
+		const body = `<xsl:output use-character-maps="z:map02" xmlns:z="urn:c"/>
+<xsl:character-map name="y:map02" xmlns:y="urn:c" use-character-maps="y:map03"/>
+<xsl:character-map name="x:map03" xmlns:x="urn:c"/>
+<xsl:template match="/doc" xmlns:P="urn:p"><xsl:call-template name="ntmp1"><xsl:with-param name="P:pvar1" select="1"/></xsl:call-template></xsl:template>
+<xsl:template name="ntmp1" xmlns:Q="urn:p"><xsl:param name="Q:pvar1"/><xsl:param name="Q{}pvar2"/><xsl:value-of select="$R:pvar1" xmlns:R="urn:p"/><xsl:value-of select="$pvar2"/></xsl:template>`;
+		assert.deepEqual(await problems(stylesheet(body)), []);
+		// still reported: another namespace
+		const other = body.replace('xmlns:z="urn:c"', 'xmlns:z="urn:d"').replace('xmlns:P="urn:p"', 'xmlns:P="urn:q"').replace('xmlns:R="urn:p"', 'xmlns:R="urn:q"');
+		assert.lengthOf(await problems(stylesheet(other)), 3);
+	});
+
 	test('what\'s in an element whose use-when is always false, e.g. false(): not compiled (use-when-0122, use-when-0221, version-001, version-030)', async () => {
 		const excluded = (useWhen: string) => stylesheet(`<xsl:template match="para"${useWhen}><p><xsl:value-of my="word"/><xsl:next-matching-nonsense/></p></xsl:template>
 <xsl:template match="/"><out><xsl:new-8.5-feature${useWhen}><xsl:text>x</xsl:text></xsl:new-8.5-feature><e xsl:use-when="false()"><xsl:value-of select="$undeclared"/></e></out></xsl:template>`);
