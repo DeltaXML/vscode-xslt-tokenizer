@@ -1024,11 +1024,15 @@ final class Values {
     private static final String OUTPUT_MENU_CONTEXT = "__vscodeVariableMenuContext";
 
     // a lazily evaluated value (a Closure) whose expression runs stylesheet code, and that Saxon hasn't read in full: a
-    // MemoClosure not started, or partly read - its MemoSequence's state is private (the same in Saxon 12 and 13); any
-    // other Closure evaluates its expression again each time it's read
+    // MemoClosure not started, or partly read - its MemoSequence's state is private (the same in Saxon 12 and 13) - or a
+    // SingletonClosure not read yet; any other Closure evaluates its expression again each time it's read
     static boolean isUnevaluated(Sequence value) {
         if (!(value instanceof net.sf.saxon.value.Closure) || !runsStylesheetCode(((net.sf.saxon.value.Closure) value).getExpression())) {
             return false;
+        }
+        if (value instanceof net.sf.saxon.value.SingletonClosure) {
+            // e.g. a local variable with as="xs:decimal": its item is kept once read
+            return !((net.sf.saxon.value.SingletonClosure) value).isBuilt();
         }
         if (!(value instanceof net.sf.saxon.value.MemoClosure)) {
             return true;

@@ -511,6 +511,27 @@ async function testLazyLet(saxonJar) {
     assert.ok(steppedInto.some((line, i) => line === '7' && ['9', '7'].includes(steppedInto[i - 1])), steppedInto.join(' '));
 }
 
+// a variable with a single item (as="xs:integer") is a SingletonClosure: not evaluated yet until the stylesheet reads it,
+// then its value - kept by Saxon - in the Variables view (and so in the inline values)
+async function testSingletonVariable(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    const outDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'singleton-variable.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'result.xml')}`] },
+        { 'singleton-variable.xsl': [{ line: 6 }, { line: 7 }] });
+    const values = [];
+    for (let i = 0; i < 2; i++) {
+        const stop = await stopped;
+        values.push(`${stop.frames[0].line}:${byName(await dap.variables(0, 'Locals')).$total.value}`);
+        stopped = dap.stopped();
+        stopped.catch(() => undefined);
+        await dap.request('continue', { threadId: 1 });
+    }
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    assert.deepStrictEqual(values, ['6:(not evaluated yet)', '7:12']);
+}
+
 // 'Find Nodes with XPath' (XPathQuery, a main class of the adapter's jar): the nodes an expression finds, by where they
 // are among the document's elements - unprefixed names in the document's default namespace, the document element's
 // prefixes and any given - atomic values as they are, and Saxon's error, with where it is in the expression
@@ -2766,7 +2787,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
+        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;
