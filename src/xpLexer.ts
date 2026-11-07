@@ -1976,6 +1976,7 @@ export enum ErrorType {
     // an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
     ApplyTemplatesDefaultMode,
 	MissingXsltAttribute,
+    MapEntryNotMap
 }
 
 export interface BaseToken {

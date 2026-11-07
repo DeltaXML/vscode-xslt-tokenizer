@@ -2458,6 +2458,7 @@ export class XsltTokenDiagnostics {
 						}
 						if (latestStackItem && latestStackItem.curlyBraceType === CurlyBraceType.Map) {
 							// in XPath 4.0 a map constructor entry without ':' is a sequence of maps to be merged, e.g. { $map1, $map2 }
+							const entryEnded = (tokenIsComma || tv === '}') && latestStackItem.awaitingMapKey && prevToken?.value !== '{';
 							if (tokenIsComma) {
 								if (latestStackItem.awaitingMapKey) {
 									isXPathError = !XsltTokenDiagnostics.isXPath40(docType) && !latestStackItem.isBareMap;
@@ -2466,6 +2467,22 @@ export class XsltTokenDiagnostics {
 								}
 							} else if (tv === '}' && latestStackItem.awaitingMapKey) {
 								isXPathError = prevToken?.value !== '{' && !XsltTokenDiagnostics.isXPath40(docType) && !latestStackItem.isBareMap;
+							}
+							// an entry without ':' must be a map, to merge - so one that's only a string or number literal is a
+							// type error (XPTY0004 in Saxon), e.g. a ',' typed for ':' in map { 'a', 'one' }. Not in a pattern,
+							// where it's an XSLT 4.0 type pattern's record test, e.g. match="{'id', 'name'}"
+							const inPattern = !!XsltTokenDiagnostics.patternAttributes.get(tagElementName)?.includes(currentAttName);
+							if (entryEnded && !isXPathError && !inPattern && prevToken && !prevToken.error &&
+								(prevToken.tokenType === TokenLevelState.string || prevToken.tokenType === TokenLevelState.number)) {
+								let prevIndex = index - 1;
+								while (prevIndex > 0 && allTokens[prevIndex].tokenType === TokenLevelState.comment) {
+									prevIndex--;
+								}
+								const beforeEntry = XsltTokenDiagnostics.prevNonCommentToken(allTokens, prevIndex);
+								if (beforeEntry && (beforeEntry.value === '{' || (beforeEntry.value === ',' && beforeEntry.charType === CharLevelState.sep))) {
+									prevToken.error = ErrorType.MapEntryNotMap;
+									problemTokens.push(prevToken);
+								}
 							}
 						}
 						if (XsltTokenDiagnostics.isAnonymousFunctionParams(latestStackItem)) {
@@ -5384,6 +5401,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.MapKeyDuplicate:
 					msg = `XPath: Duplicate key in the map constructor: ${tokenValue}`;
+					break;
+				case ErrorType.MapEntryNotMap:
+					msg = `XPath: Expected ':' after the map key ${tokenValue} - a map constructor entry without ':' must be a map, to merge`;
 					break;
 				case ErrorType.MapEntryKeyDuplicate:
 					msg = `XSLT: Duplicate key in the xsl:map - an xsl:map-entry has the same key: ${tokenValue}`;
