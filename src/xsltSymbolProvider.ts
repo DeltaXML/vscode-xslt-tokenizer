@@ -137,6 +137,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return result ?? [];
 	}
 
+	// the cached symbols of a closed document: an untitled document's URI, e.g. untitled:Untitled-1, is used again for the
+	// next one, which mustn't have these symbols before its own are computed
+	public static forgetDocument(uri: vscode.Uri) {
+		const uriString = uri.toString();
+		[...XsltSymbolProvider.documentSymbols.keys()].filter((cachedUri) => cachedUri.toString() === uriString)
+			.forEach((cachedUri) => XsltSymbolProvider.documentSymbols.delete(cachedUri));
+	}
+
 	// whether the document is open in an editor tab, shown or not - not one only loaded, e.g. an XML context file read
 	// for completions - so its problems are reported, also after it's changed by an AI agent while another file is active
 	public static isOpenInEditor(document: vscode.TextDocument) {

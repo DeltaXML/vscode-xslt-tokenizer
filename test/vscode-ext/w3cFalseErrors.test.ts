@@ -288,6 +288,36 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.lengthOf(await problems(stylesheet(other)), 3);
 	});
 
+	test('xsl:catch\'s error variables in its own select attribute, e.g. select="$err:description" (try-019)', async () => {
+		const sheet = (catchSelect: string) => stylesheet(`<xsl:template name="main"><xsl:try select="error()"><xsl:catch errors="*"
+  select="${catchSelect}"/></xsl:try><xsl:try select="1"><xsl:catch><xsl:value-of select="$err:code"/></xsl:catch></xsl:try></xsl:template>`,
+		'xsl:stylesheet', ' xmlns:err="http://www.w3.org/2005/xqt-errors" xmlns:e="http://www.w3.org/2005/xqt-errors"');
+		assert.deepEqual(await problems(sheet("'Error:', $err:code, $err:description, $err:value, $err:line-number, $e:column-number")), []);
+		// still reported: not an error variable - and one after the xsl:catch
+		assert.lengthOf(await problems(sheet('$err:nothing')), 1);
+		assert.lengthOf(await problems(stylesheet(`<xsl:template name="main"><xsl:try select="1"><xsl:catch select="1"/></xsl:try><xsl:value-of select="$err:code"/></xsl:template>`,
+			'xsl:stylesheet', ' xmlns:err="http://www.w3.org/2005/xqt-errors"')), 1);
+	});
+
+	test('an xsl:with-param the template doesn\'t declare, in backwards compatible mode: ignored (variable-2201, backwards-013)', async () => {
+		const sheet = (version: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="${version}">
+<xsl:template match="/"><xsl:call-template name="t"><xsl:with-param name="unwanted" select="2"/></xsl:call-template></xsl:template>
+<xsl:template name="t"/>
+</xsl:stylesheet>`;
+		assert.deepEqual(await problems(sheet('1.0')), []);
+		// still reported: XTSE0680 from XSLT 2.0
+		assert.lengthOf(await problems(sheet('3.0')), 1);
+	});
+
+	test('a key or accumulator name in a string, matched by namespace: key(\'bar:mykey\') for foo:mykey (key-013)', async () => {
+		const sheet = (uri: string) => stylesheet(`<xsl:key name="foo:mykey" match="div" use="title"/>
+<xsl:accumulator name="foo:acc" initial-value="0"><xsl:accumulator-rule match="*" select="1"/></xsl:accumulator>
+<xsl:template match="/"><xsl:value-of select="key('bar:mykey', 'x'), accumulator-before('bar:acc')"/></xsl:template>`, 'xsl:stylesheet', ` xmlns:foo="urn:k" xmlns:bar="${uri}"`);
+		assert.deepEqual((await problems(sheet('urn:k'))).filter((m) => /not found/.test(m)), []);
+		// still reported: another namespace
+		assert.lengthOf((await problems(sheet('urn:other'))).filter((m) => /not found/.test(m)), 2);
+	});
+
 	test('what\'s in an element whose use-when is always false, e.g. false(): not compiled (use-when-0122, use-when-0221, version-001, version-030)', async () => {
 		const excluded = (useWhen: string) => stylesheet(`<xsl:template match="para"${useWhen}><p><xsl:value-of my="word"/><xsl:next-matching-nonsense/></p></xsl:template>
 <xsl:template match="/"><out><xsl:new-8.5-feature${useWhen}><xsl:text>x</xsl:text></xsl:new-8.5-feature><e xsl:use-when="false()"><xsl:value-of select="$undeclared"/></e></out></xsl:template>`);

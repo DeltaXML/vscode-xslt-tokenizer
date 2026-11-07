@@ -249,6 +249,14 @@ export class XsltTokenDiagnostics {
 	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:line-number', 'err:column-number',
 		'err:stack-trace', 'err:additional', 'err:map'];
 	public static readonly xslInclude = 'xsl:include';
+
+	// one of xsl:catch's error variables, e.g. $err:code - with the err prefix, or another bound to the namespace of errors
+	private static isCatchVariable(reference: string, expandedName: (name: string) => string) {
+		const name = reference.replace(/^\$/, '');
+		const local = name.substring(name.indexOf(':') + 1);
+		return XsltTokenDiagnostics.xsltCatchVariables.includes(name) ||
+			(XsltTokenDiagnostics.xsltCatchVariables.includes('err:' + local) && expandedName(name) === `Q{http://www.w3.org/2005/xqt-errors}${local}`);
+	}
 	public static readonly xslImport = 'xsl:import';
 	public static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];
 	public static readonly typesWithMaxArity2 = ['map', 'attribute', 'element'];
@@ -1192,13 +1200,15 @@ export class XsltTokenDiagnostics {
 										xsltAttsWithNameErrors.push(attName);
 									}
 								});
-								if (checkPendingErrors && !tunnelAttributeFound) {
+								const effectiveVersion = tagVersion ?? (elementStack.length > 0 ? elementStack[elementStack.length - 1].version : undefined);
+								// in backwards compatible mode, e.g. version="1.0", a parameter the template doesn't declare is ignored, not
+								// an error (XTSE0680) - as many XSLT 1.0 stylesheets rely on (variable-2201, backwards-013)
+								const backwardsCompatible = effectiveVersion !== undefined && Number(effectiveVersion) < 2;
+								if (checkPendingErrors && !tunnelAttributeFound && !backwardsCompatible) {
 									pendingTemplateParamErrors.forEach((item) => problemTokens.push(item));
 								}
 								pendingTemplateParamErrors = [];
 
-
-								const effectiveVersion = tagVersion ?? (elementStack.length > 0 ? elementStack[elementStack.length - 1].version : undefined);
 								const xpathDefaultNamespace = tagXPathDefaultNamespace ?? (elementStack.length > 0 ? elementStack[elementStack.length - 1].xpathDefaultNamespace : undefined);
 								const forwardsCompatible = isForwardsCompatible(effectiveVersion);
 								// within an element that forwards compatible mode accepts and ignores, nothing is checked
@@ -2194,11 +2204,12 @@ export class XsltTokenDiagnostics {
 							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {
 								let keyVal = token.value.substring(1, token.value.length - 1);
 								if (xp.function.value === 'key') {
-									if (globalKeys.indexOf(keyVal) < 0) {
+									// by its namespace, if not as it's written, e.g. key('bar:mykey') for foo:mykey (key-013)
+									if (globalKeys.indexOf(keyVal) < 0 && !isDeclaredByNamespace([GlobalInstructionType.Key], keyVal.trim(), token)) {
 										token['error'] = ErrorType.XSLTKeyUnresolved;
 										problemTokens.push(token);
 									}
-								} else if (globalAccumulatorNames.indexOf(keyVal) < 0) {
+								} else if (globalAccumulatorNames.indexOf(keyVal) < 0 && !isDeclaredByNamespace([GlobalInstructionType.Accumulator], keyVal.trim(), token)) {
 									token['error'] = ErrorType.AccumulatorNameUnresolved;
 									problemTokens.push(token);
 								}
@@ -2254,7 +2265,11 @@ export class XsltTokenDiagnostics {
 							}
 							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(globalVarName, document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 								xpathStack, inScopeVariablesList, elementStack);
-							if (unResolvedToken !== null && !(xspecScope && XsltTokenDiagnostics.isXSpecVariable(token.value, xspecPrefixes, xspecScope, document.offsetAt(new vscode.Position(token.line, token.startCharacter))))) {
+							// in an attribute of xsl:catch, e.g. select="$err:description": its error variables, which are in scope in its
+							// content from the end of its start tag (try-019)
+							const isCatchVariable = unResolvedToken !== null && tagElementName === 'xsl:catch' && XsltTokenDiagnostics.isCatchVariable(unResolvedToken.value,
+								(name) => expandedNameAt(name, unResolvedToken!));
+							if (unResolvedToken !== null && !isCatchVariable && !(xspecScope && XsltTokenDiagnostics.isXSpecVariable(token.value, xspecPrefixes, xspecScope, document.offsetAt(new vscode.Position(token.line, token.startCharacter))))) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
 							}
 							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
