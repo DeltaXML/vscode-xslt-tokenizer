@@ -342,6 +342,10 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 	}
 
 	public async resolveDebugConfiguration(folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): Promise<vscode.DebugConfiguration | undefined> {
+		// the last session's output view and problems are cleared as soon as debugging is asked for - not only when the
+		// adapter starts, after the result file is chosen and Java has started, while they'd still show the last session's
+		XsltDebugOutputs.get().startSession();
+		XsltDebugProblems.clear();
 		if ((!config.type && !config.request && !config.name) || config.quickRun) {
 			const forActiveEditor = await this.configurationForActiveEditor();
 			if (!forActiveEditor) {
