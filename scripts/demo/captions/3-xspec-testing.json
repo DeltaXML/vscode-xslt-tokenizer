@@ -1,0 +1,17 @@
+{
+	"title": "Video 3: Test with XSpec",
+	"steps": [
+		{ "caption": "XSpec tests in VS Code's Test Explorer", "note": "XSpec 4.1.2 is included: nothing to install" },
+		"Run the tests",
+		"A failure: click it to see the expected and actual results side by side",
+		"Fix the stylesheet, and run again",
+		"Click a scenario to go to the template it tests - and back",
+		{ "caption": "Run Tests with Coverage", "note": "Covered and uncovered code, in the editor's margin and the Test Coverage view" },
+		"A new stylesheet, with no tests yet",
+		{ "caption": "XSpec: Create Test File", "note": "A pending scenario for each function and template" },
+		"Fill in a scenario's parameters and expected result, and remove pending",
+		"Run the new test",
+		{ "caption": "Debug a test: breakpoints in the stylesheet or the XSpec file", "note": "Debug Test, beside the scenario" },
+		"Test XSLT with XSpec, without leaving the editor"
+	]
+}

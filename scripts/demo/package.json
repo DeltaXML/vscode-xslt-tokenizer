@@ -13,8 +13,28 @@
 	"contributes": {
 		"commands": [
 			{
+				"command": "xsltDemo.startCaptions",
+				"title": "Start Captions...",
+				"category": "Demo"
+			},
+			{
 				"command": "xsltDemo.playVideo1",
 				"title": "Play Video 1: Run and Debug a Stylesheet",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.stepVideo1",
+				"title": "Start Video 1 in Step Mode: Run and Debug a Stylesheet",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.nextStep",
+				"title": "Next Step",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.previousStep",
+				"title": "Previous Step",
 				"category": "Demo"
 			},
 			{
@@ -45,6 +65,18 @@
 					"name": "Captions"
 				}
 			]
-		}
+		},
+		"keybindings": [
+			{
+				"command": "xsltDemo.nextStep",
+				"key": "ctrl+alt+n",
+				"mac": "ctrl+alt+n"
+			},
+			{
+				"command": "xsltDemo.previousStep",
+				"key": "ctrl+alt+b",
+				"mac": "ctrl+alt+b"
+			}
+		]
 	}
 }

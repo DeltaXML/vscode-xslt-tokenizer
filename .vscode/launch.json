@@ -24,7 +24,8 @@
 		},
 		{
 			// scripted demos for recording videos (scripts/demo): the extension, the demo runner and the XSLT Dark Themes,
-			// in the demo's own folder - then run 'Demo: Play Video 1...' from the Command Palette
+			// in the demo's own folder, /Users/Shared/xslt-demo (no user name in its path) - reset it for each take with
+			// scripts/demo/reset-workspace.sh
 			"name": "Demo: Record Videos",
 			"type": "extensionHost",
 			"request": "launch",
@@ -34,7 +35,7 @@
 				"--extensionDevelopmentPath=${workspaceFolder:vscode-xslt-tokenizer}",
 				"--extensionDevelopmentPath=${workspaceFolder:vscode-xslt-tokenizer}/scripts/demo",
 				"--extensionDevelopmentPath=${userHome}/.vscode/extensions/deltaxml.xslt-dark-themes-1.4.1",
-				"${workspaceFolder:vscode-xslt-tokenizer}/scripts/demo/workspace"
+				"/Users/Shared/xslt-demo"
 			],
 			"outFiles": [
 				"${workspaceFolder:vscode-xslt-tokenizer}/out/**/*.js"
