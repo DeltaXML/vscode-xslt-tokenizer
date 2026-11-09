@@ -35,13 +35,30 @@ describe('XsltProfile', () => {
         expect(profile.entries[4].match).to.equal('element()[@n < 3]');
     });
 
-    it('reads the last run of several, as -repeat writes', () => {
-        const second = '<trace t-total="1.5">\n   <fn name="f:x" construct="xsl:function" file="file:/work/globals.xsl" count="1" t-sum-net="0.01" t-avg-net="0.01" t-sum="0.01" t-avg="0.01" line="8"></fn>\n</trace>';
-        const profile = XsltProfile.parse(profileXml + '\n' + second)!;
-        expect(profile.total).to.equal(1.5);
-        expect(profile.entries.map((e) => e.name)).to.deep.equal(['f:x']);
-        expect(profile.runs).to.equal(2);
+    it('averages the runs after the first, as -repeat writes them', () => {
+        const run = (total: number, count: number, net: number, gross: number) => `<trace t-total="${total}">\n` +
+            `   <fn name="f:x" construct="xsl:function" file="file:/work/globals.xsl" count="${count}" t-sum-net="${net}" t-avg-net="0" t-sum="${gross}" t-avg="0" line="8"></fn>\n</trace>`;
+        // the first - a warm-up run, left out
+        const profile = XsltProfile.parse(profileXml + '\n' + run(2, 2, 0.4, 0.6) + '\n' + run(1, 2, 0.2, 0.2) + '\n' + run(1.5, 2, 0.3, 0.4))!;
+        expect(profile.runs).to.equal(4);
+        expect(profile.total).to.be.closeTo(1.5, 1e-9);
+        expect(profile.entries).to.have.length(1);
+        const [e] = profile.entries;
+        expect(e.name).to.equal('f:x');
+        expect(e.count).to.equal(2);
+        expect(e.net).to.be.closeTo(0.3, 1e-9);
+        expect(e.gross).to.be.closeTo(0.4, 1e-9);
+        expect(e.avgNet).to.be.closeTo(0.15, 1e-9);
+        expect(e.avgGross).to.be.closeTo(0.2, 1e-9);
         expect(XsltProfile.parse(profileXml)!.runs).to.equal(1);
+        expect(XsltProfile.parse(profileXml)!.entries).to.have.length(5);
+    });
+
+    it('describes the runs a profile is from', () => {
+        expect(XsltProfile.runsText(1, 1)).to.equal('1 run');
+        expect(XsltProfile.runsText(2, 2)).to.equal('run 2, after a warm-up run');
+        expect(XsltProfile.runsText(5, 5)).to.equal('average of runs 2–5');
+        expect(XsltProfile.runsText(3, 5)).to.equal('average of runs 2–3 (3 of 5 ran)');
     });
 
     it('shows parameters with the values entered for tasks.json inputs', () => {

@@ -37,7 +37,8 @@ export interface Profile {
     // the whole run, in milliseconds - also the time outside templates, functions and globals, e.g. parsing the source
     total: number;
     entries: ProfileEntry[];
-    // how many runs the file has a trace for - the entries are the last's
+    // how many runs the file has a trace for - with more than one, the entries and total are the average of all but the
+    // first (see parse)
     runs: number;
 }
 
@@ -54,41 +55,73 @@ export interface ProfileDeclaration {
 export class XsltProfile {
 
     // the profile in Saxon's XML, or undefined if it isn't one. With -repeat:N, Saxon writes a trace for each run, one
-    // after another: the last, as the warmest - the first run's times are mostly the JVM's start-up and warm-up
+    // after another: the first run's times are mostly the JVM's start-up and warm-up, so it's left out, and the times
+    // are the average of the other runs - each entry's calls, net and gross times their mean, and its times a call
+    // those totals over its calls
     public static parse(xml: string): Profile | undefined {
-        const traceRgx = /<trace\b([^>]*)>/g;
-        let trace: RegExpExecArray | undefined;
-        let runs = 0;
-        let t: RegExpExecArray | null;
-        while ((t = traceRgx.exec(xml))) {
-            trace = t;
-            runs++;
-        }
-        if (!trace) {
+        const traces = XsltProfile.traces(xml);
+        if (traces.length === 0) {
             return undefined;
         }
-        const total = Number(XsltProfile.attributes(trace[1]).get('t-total') ?? NaN);
-        const entries: ProfileEntry[] = [];
-        const fnRgx = /<fn\b((?:[^>"']|"[^"]*"|'[^']*')*?)\/?>/g;
-        fnRgx.lastIndex = trace.index + trace[0].length;
-        let fn: RegExpExecArray | null;
-        while ((fn = fnRgx.exec(xml))) {
-            const a = XsltProfile.attributes(fn[1]);
-            const number = (name: string) => Number(a.get(name) ?? NaN);
-            entries.push({
-                construct: a.get('construct') ?? '',
-                name: a.get('name'),
-                match: a.get('match'),
-                file: a.get('file') ?? '',
-                line: number('line'),
-                count: number('count'),
-                net: number('t-sum-net'),
-                avgNet: number('t-avg-net'),
-                gross: number('t-sum'),
-                avgGross: number('t-avg'),
-            });
+        if (traces.length === 1) {
+            return { ...traces[0], runs: 1 };
         }
-        return { total, entries, runs };
+        const warm = traces.slice(1);
+        const sums = new Map<string, ProfileEntry>();
+        for (const trace of warm) {
+            for (const e of trace.entries) {
+                const key = [e.construct, e.name, e.match, e.file, e.line].join('\u0000');
+                const sum = sums.get(key);
+                if (sum) {
+                    sum.count += e.count;
+                    sum.net += e.net;
+                    sum.gross += e.gross;
+                } else {
+                    sums.set(key, { ...e });
+                }
+            }
+        }
+        const n = warm.length;
+        const entries = [...sums.values()].map((sum) => ({
+            ...sum, count: sum.count / n, net: sum.net / n, gross: sum.gross / n,
+            avgNet: sum.count > 0 ? sum.net / sum.count : 0, avgGross: sum.count > 0 ? sum.gross / sum.count : 0
+        }));
+        const total = warm.reduce((s, trace) => s + trace.total, 0) / n;
+        return { total, entries, runs: traces.length };
+    }
+
+    // each run's trace in the file
+    private static traces(xml: string): { total: number; entries: ProfileEntry[] }[] {
+        const traces: { total: number; entries: ProfileEntry[] }[] = [];
+        const tagRgx = /<(trace|fn)\b((?:[^>"']|"[^"]*"|'[^']*')*?)\/?>/g;
+        let tag: RegExpExecArray | null;
+        while ((tag = tagRgx.exec(xml))) {
+            const a = XsltProfile.attributes(tag[2]);
+            const number = (name: string) => Number(a.get(name) ?? NaN);
+            if (tag[1] === 'trace') {
+                traces.push({ total: number('t-total'), entries: [] });
+            } else if (traces.length > 0) {
+                traces[traces.length - 1].entries.push({
+                    construct: a.get('construct') ?? '',
+                    name: a.get('name'),
+                    match: a.get('match'),
+                    file: a.get('file') ?? '',
+                    line: number('line'),
+                    count: number('count'),
+                    net: number('t-sum-net'),
+                    avgNet: number('t-avg-net'),
+                    gross: number('t-sum'),
+                    avgGross: number('t-avg'),
+                });
+            }
+        }
+        return traces;
+    }
+
+    // how the runs a profile is from are described, e.g. 'average of runs 2-5' - with the runs asked for, if fewer ran
+    public static runsText(runs: number, requestedRuns: number): string {
+        const text = runs <= 1 ? '1 run' : runs === 2 ? 'run 2, after a warm-up run' : `average of runs 2–${runs}`;
+        return runs < requestedRuns ? `${text} (${runs} of ${requestedRuns} ran)` : text;
     }
 
     // a task's stylesheet parameters as the Profile view shows them: '$name' and the value - for a value from a tasks.json

@@ -887,7 +887,7 @@
 					"minimum": 1,
 					"maximum": 100,
 					"scope": "resource",
-					"markdownDescription": "How many times **Profile Stylesheet** runs the transform (Saxon's `-repeat` option). The Profile view shows the times of the last run. The first run's times include the Java VM's start-up and warm-up, which on a quick transform can be most of its time - with more runs, the last is warm. Each run takes as long as a Quick Run."
+					"markdownDescription": "How many times **Profile Stylesheet** runs the transform (Saxon's `-repeat` option). The first run's times include the Java VM's start-up and warm-up, which on a quick transform can be most of its time - with more than one run, the first is a warm-up run, left out, and the Profile view shows the average of the others. Each run takes as long as a Quick Run."
 				},
 				"XSLT.validation.xslt30ItemTypesAndNotes": {
 					"type": "boolean",

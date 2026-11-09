@@ -142,7 +142,7 @@ export class XsltProfileView {
         // the data for the script - '<' escaped so nothing in it can end the script element
         const data = JSON.stringify({
             title: run.title, processor: run.processor, settings: run.settings, sourceSummary: run.sourceSummary,
-            requestedRuns: run.requestedRuns, runs: run.runs, time: run.time.toLocaleString(),
+            requestedRuns: run.requestedRuns, runs: run.runs, runsText: XsltProfile.runsText(run.runs, run.requestedRuns), time: run.time.toLocaleString(),
             total: run.total, netTotal: run.netTotal, rows: run.rows.map(({ selection: _s, file: _f, ...shown }) => shown)
         }).replace(/</g, '\\u003c');
         return `<!DOCTYPE html>
@@ -235,12 +235,13 @@ export class XsltProfileView {
 
 	// what the times depend on: the source, parameters and runs
 	const parameterCount = data.settings.filter((s) => s.label.startsWith('$')).length;
-	const runsText = data.requestedRuns > 1 || data.runs > 1 ? 'run ' + data.runs + ' of ' + data.requestedRuns : '1 run';
 	document.getElementById('settings-summary').textContent = 'Run settings: ' + [data.sourceSummary,
-		parameterCount === 0 ? 'no parameters' : parameterCount === 1 ? '1 parameter' : parameterCount + ' parameters', runsText].join(' \\u00b7 ');
+		parameterCount === 0 ? 'no parameters' : parameterCount === 1 ? '1 parameter' : parameterCount + ' parameters', data.runsText].join(' \\u00b7 ');
 	const settingsList = document.getElementById('settings-list');
 	const runsNote = data.runs < data.requestedRuns ? 'only ' + data.runs + ' of ' + data.requestedRuns + ' ran - the run failed' :
-		data.runs > 1 ? 'the times are the last run\\u2019s' : 'the first run\\u2019s times include the Java VM\\u2019s warm-up - see the XSLT.tasks.profileRuns setting';
+		data.runs > 2 ? 'the times are the average of every run but the first, a warm-up run' :
+		data.runs === 2 ? 'the times are the second run\\u2019s - the first was a warm-up run' :
+		'the first run\\u2019s times include the Java VM\\u2019s warm-up - see the XSLT.tasks.profileRuns setting';
 	for (const setting of data.settings.concat([{ label: 'Runs', value: String(data.requestedRuns), note: runsNote }])) {
 		const dd = el('dd');
 		dd.append(el('span', 'value', setting.value));
@@ -316,7 +317,9 @@ export class XsltProfileView {
 			track.append(bar);
 			cell.append(track, el('span', 'pct', (100 * row.share).toFixed(1) + '%'));
 			share.append(cell);
-			tr.append(component, module, el('td', 'num', String(row.count)), el('td', 'num', ms(row.net)), share, el('td', 'num', ms(row.gross)), el('td', 'num', ms(row.avgNet)));
+			// an average over runs - fractional only if a run made a different number of calls
+			const calls = Number.isInteger(row.count) ? String(row.count) : row.count.toFixed(1);
+			tr.append(component, module, el('td', 'num', calls), el('td', 'num', ms(row.net)), share, el('td', 'num', ms(row.gross)), el('td', 'num', ms(row.avgNet)));
 			tr.addEventListener('click', () => vscode.postMessage({ command: 'reveal', index: row.index }));
 			tr.addEventListener('keydown', (e) => {
 				if (e.key === 'Enter') {
@@ -406,7 +409,7 @@ export class XsltProfileCodeLensProvider implements vscode.CodeLensProvider {
         if ((row.kind === 'variable' || row.kind === 'param') && row.count === 1) {
             return `${ms(row.net)} ms${share}`;
         }
-        const calls = `${row.count} ${row.count === 1 ? 'call' : 'calls'}`;
+        const calls = `${Number.isInteger(row.count) ? row.count : row.count.toFixed(1)} ${row.count === 1 ? 'call' : 'calls'}`;
         return row.gross > row.net ? `${calls} · ${ms(row.net)} ms net${share} · ${ms(row.gross)} ms gross` : `${calls} · ${ms(row.net)} ms${share}`;
     }
 }

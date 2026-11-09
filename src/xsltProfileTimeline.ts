@@ -152,13 +152,13 @@ export class XsltProfileTimeline {
 		return n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
 	}
 
-	// e.g. 'Profile: 9.26 ms' - 'orders.xml (2.1 KB) · run 5 of 5 · SaxonJ'
+	// e.g. 'Profile: 9.26 ms' - 'orders.xml (2.1 KB) · average of runs 2–5 · SaxonJ'
 	private item(record: ProfileRecord): TimelineItem {
 		const ms = XsltProfileTimeline.ms;
 		const item = new this.itemClass(`Profile: ${ms(record.netTotal)} ms`, record.id);
 		item.id = String(record.id);
 		item.iconPath = new vscode.ThemeIcon('pulse');
-		const runs = record.requestedRuns > 1 || record.runs > 1 ? `run ${record.runs} of ${record.requestedRuns}` : '1 run';
+		const runs = XsltProfile.runsText(record.runs, record.requestedRuns);
 		item.description = [record.sourceSummary, runs, record.processor].join(' · ');
 		const tooltip = new vscode.MarkdownString();
 		tooltip.appendMarkdown(`**Profile** - ${new Date(record.id).toLocaleString()} - `).appendText(`${record.processor}, ${record.sourceSummary}, ${runs}`).appendMarkdown('\n\n');
