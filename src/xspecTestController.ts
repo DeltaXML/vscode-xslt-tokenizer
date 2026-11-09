@@ -31,6 +31,8 @@ interface XSpecFileOutcome {
 	// why it stopped - Saxon's error, or XSpec's - and for an I/O error, the file
 	stopped?: string;
 	stoppedDetail?: string;
+	// the milliseconds the tests took to run, with XSpec's measure-time (see XSpecTests.testsElapsed)
+	testTime?: number;
 }
 
 // the debugger's coverage of each module, by path: the hits of each line, and the lines that can be run
@@ -217,7 +219,8 @@ export class XSpecTestController {
 		run.end();
 		// the run's history, in the Timeline view
 		XSpecTimeline.record({ start, end: Date.now(), kind: coverage ? 'Coverage' : debug ? 'Debug' : 'Run', cancelled: token.isCancellationRequested,
-			files: outcomes.map(({ file, passed, failed, pending, stopped, failedLabels }) => ({ file, passed, failed, pending, ...(stopped !== undefined ? { stopped } : {}),
+			files: outcomes.map(({ file, passed, failed, pending, stopped, failedLabels, testTime }) => ({ file, passed, failed, pending, ...(stopped !== undefined ? { stopped } : {}),
+				...(testTime !== undefined ? { testTime } : {}),
 				...(failedLabels?.length ? { failedLabels: failedLabels.slice(0, XSpecTimeline.maxFailedLabels) } : {}) })) });
 	}
 
@@ -337,7 +340,10 @@ export class XSpecTestController {
 			channel.show(true);
 			return errored(`XSpec: the Schematron couldn't be prepared for testing - see the XSpec output.\n${prepared.output.trim()}`);
 		}
-		let compiled = await XSpecRunner.compile(xspecPath, files, token, undefined, prepared.source);
+		// each scenario's time, for the durations shown - not when debugging, or for coverage, as the debugger runs the
+		// tests, and not with Saxon-HE
+		const measureTime = !debug && !coverage && XSpecRunner.canMeasureTime(vscode.Uri.file(xspecPath));
+		let compiled = await XSpecRunner.compile(xspecPath, files, token, undefined, prepared.source, measureTime);
 		// the scenario run on its own, with XSpec's force-focus
 		let focusedId: string | undefined;
 		if (compiled.ok && scenario) {
@@ -346,13 +352,13 @@ export class XSpecTestController {
 			const key = this.keyOf(scenario);
 			const occurrence = /\u001f#(\d+)$/.exec(key);
 			const id = ids.get(occurrence ? key.substring(0, occurrence.index) : key)?.[occurrence ? Number(occurrence[1]) - 1 : 0];
-			const focused = id ? await XSpecRunner.compile(xspecPath, files, token, id, prepared.source) : undefined;
+			const focused = id ? await XSpecRunner.compile(xspecPath, files, token, id, prepared.source, measureTime) : undefined;
 			// XSpec can't always make a test runner for one scenario on its own - e.g. the variable of a scenario made
 			// pending by the focus, using its $x:context, gives XPST0008 - so the whole file is run instead. When debugging,
 			// the runner is checked first, as the debugger would report its errors
 			const usable = focused?.ok && (!debug || (await XSpecRunner.check(xspecPath, files, token, taskSettings)).ok);
 			if (focused && !usable) {
-				compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token);
+				compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token, measureTime);
 			} else if (focused) {
 				focusedId = id;
 			}
@@ -361,7 +367,7 @@ export class XSpecTestController {
 		// above): when debugging, the runner is checked first, and its tests run without the focus if it fails
 		const isFocusedFile = !scenario && XSpecTestController.hasFocus(xspecPath);
 		if (compiled.ok && isFocusedFile && debug && !(await XSpecRunner.check(xspecPath, files, token, taskSettings)).ok) {
-			compiled = await this.withoutFocus(run, xspecPath, files, prepared.source, token);
+			compiled = await this.withoutFocus(run, xspecPath, files, prepared.source, token, measureTime);
 		}
 		if (!compiled.ok) {
 			channel.show(true);
@@ -377,19 +383,21 @@ export class XSpecTestController {
 		// not when debugging: the run may have ended at an error being debugged, or been stopped - and the runner has
 		// been checked
 		if ((!ran.ok || !hasResult) && focusedId && scenario && !debug && !token.isCancellationRequested) {
-			compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token);
+			compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token, measureTime);
 			// all the file's tests run, so all their outcomes are shown
 			focusedId = undefined;
 			({ ran, hasResult } = compiled.ok ? await runOnce() : { ran: compiled, hasResult: false });
 		} else if ((!ran.ok || !hasResult) && isFocusedFile && !debug && !token.isCancellationRequested) {
-			compiled = await this.withoutFocus(run, xspecPath, files, prepared.source, token);
+			compiled = await this.withoutFocus(run, xspecPath, files, prepared.source, token, measureTime);
 			({ ran, hasResult } = compiled.ok ? await runOnce() : { ran: compiled, hasResult: false });
 		}
 		if (!ran.ok || !hasResult) {
 			channel.show(true);
 			return errored(`XSpec: the tests didn't run to the end - see the XSpec output.\n${ran.output.trim()}`);
 		}
-		const results = XSpecTests.parseResults(fs.readFileSync(files.result, 'utf8'));
+		const resultText = fs.readFileSync(files.result, 'utf8');
+		const results = XSpecTests.parseResults(resultText);
+		outcome.testTime = XSpecTests.testsElapsed(resultText);
 		const report = await XSpecRunner.report(xspecPath, files, token);
 		XSpecTests.useDiffs(results, files.diffs);
 		// for one scenario: only its outcomes - the others are pending, as XSpec's force-focus makes them, but keep theirs
@@ -466,23 +474,23 @@ export class XSpecTestController {
 
 	// the test runner for the whole file, when the scenario's on its own couldn't be compiled or run - without the
 	// focus of any scenario in the file (see withoutFocus), which may be what XSpec couldn't run
-	private wholeFileInstead(run: vscode.TestRun, scenario: vscode.TestItem, xspecPath: string, files: XSpecFiles, source: string, token: vscode.CancellationToken) {
+	private wholeFileInstead(run: vscode.TestRun, scenario: vscode.TestItem, xspecPath: string, files: XSpecFiles, source: string, token: vscode.CancellationToken, measureTime = false) {
 		const note = `XSpec: the scenario '${scenario.label}' couldn't be run on its own, with XSpec's force-focus - all the file's tests are run instead`;
 		XSpecRunner.output().appendLine(note);
 		run.appendOutput(note + '\r\n');
-		return XSpecRunner.compile(xspecPath, files, token, XSpecTestController.noFocus, source);
+		return XSpecRunner.compile(xspecPath, files, token, XSpecTestController.noFocus, source, measureTime);
 	}
 
 	// XSpec's force-focus with no scenario's id: the focus attributes of the file's scenarios are removed, so all its tests run
 	private static readonly noFocus = '#none';
 
 	// the test runner for the whole file without its scenarios' focus attributes, when it couldn't be compiled or run with them
-	private withoutFocus(run: vscode.TestRun, xspecPath: string, files: XSpecFiles, source: string, token: vscode.CancellationToken) {
+	private withoutFocus(run: vscode.TestRun, xspecPath: string, files: XSpecFiles, source: string, token: vscode.CancellationToken, measureTime = false) {
 		const note = 'XSpec: the file\'s focused scenarios couldn\'t be run - e.g. XSpec gives XPST0008 for an outer scenario\'s x:variable that ' +
 			'uses $x:context - so all its tests are run instead, without the focus';
 		XSpecRunner.output().appendLine(note);
 		run.appendOutput(note + '\r\n');
-		return XSpecRunner.compile(xspecPath, files, token, XSpecTestController.noFocus, source);
+		return XSpecRunner.compile(xspecPath, files, token, XSpecTestController.noFocus, source, measureTime);
 	}
 
 	// true if a scenario in the XSpec file has a focus attribute
@@ -554,8 +562,9 @@ export class XSpecTestController {
 			if (!item || (within && !this.isWithin(item, within)) || result.kind === 'scenario') {
 				continue;
 			}
+			// the time of its scenario, with measure-time (see XSpecResult.duration)
 			if (result.status === 'passed') {
-				run.passed(item);
+				run.passed(item, result.duration);
 			} else if (result.status === 'pending') {
 				run.skipped(item);
 			} else {
@@ -565,7 +574,7 @@ export class XSpecTestController {
 				if (item.uri && item.range) {
 					message.location = new vscode.Location(item.uri, item.range);
 				}
-				run.failed(item, message);
+				run.failed(item, message, result.duration);
 			}
 		}
 	}

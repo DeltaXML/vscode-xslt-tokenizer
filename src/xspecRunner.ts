@@ -136,9 +136,15 @@ export class XSpecRunner {
 		return { ...toXSpec, source: files.schematronXspec };
 	}
 
+	// whether a test run can time its scenarios, with XSpec's measure-time: it uses saxon:timestamp(), a Saxon extension
+	// function, which Saxon-HE doesn't have
+	public static canMeasureTime(uri: vscode.Uri): boolean {
+		return !SaxonTaskProvider.isSaxonHE(XSpecRunner.saxonJar(uri));
+	}
+
 	// the test runner, compiled from the XSpec file - or the one prepare gives - with force-focus, only the scenario with
-	// that ID runs
-	public static compile(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken, forceFocus?: string, source = xspecPath): Promise<XSpecStepOutcome> {
+	// that ID runs. With measureTime, it times each scenario (see canMeasureTime), for the Test Explorer's durations
+	public static compile(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken, forceFocus?: string, source = xspecPath, measureTime = false): Promise<XSpecStepOutcome> {
 		fs.mkdirSync(path.dirname(files.compiled), { recursive: true });
 		const uri = vscode.Uri.file(xspecPath);
 		const compiler = path.join(XSpecRunner.home(uri)!, 'src', 'compiler', 'compile-xslt-tests.xsl');
@@ -148,7 +154,8 @@ export class XSpecRunner {
 		const args = legacy ?
 			['-s:' + source, '-xsl:' + path.join(XSpecRunner.extensionUri!.fsPath, 'xslt-resources', 'xspec-compat', 'xspec-compat.xsl'), '-o:' + files.compiled, 'compiler=' + vscode.Uri.file(compiler).toString()] :
 			['-s:' + source, '-xsl:' + compiler, '-o:' + files.compiled];
-		return XSpecRunner.saxon('Compiling the tests', uri, forceFocus ? args.concat('force-focus=' + forceFocus) : args, token);
+		const options = [...(forceFocus ? ['force-focus=' + forceFocus] : []), ...(measureTime ? ['?measure-time=true()'] : [])];
+		return XSpecRunner.saxon('Compiling the tests', uri, args.concat(options), token);
 	}
 
 	// whether the test runner compiles, without running it - with the Saxon settings of the stylesheet's task, as it's run

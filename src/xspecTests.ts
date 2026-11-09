@@ -57,6 +57,9 @@ export interface XSpecResult {
 	// for an expectation that failed: the expected and actual results, as XML or an XPath expression
 	expected?: string;
 	actual?: string;
+	// in milliseconds, with XSpec's measure-time: a scenario's time, from its start and end timestamps - for an
+	// expectation, the time of the scenario it's in, as XSpec times scenarios, not expectations
+	duration?: number;
 }
 
 export class XSpecTests {
@@ -139,6 +142,8 @@ export class XSpecTests {
 			const path = [...labelPath, label];
 			const tests = scenario.children.filter((child) => localName(child.name) === 'test');
 			const actual = raw(scenario.children.find((child) => localName(child.name) === 'result'));
+			const timestamp = (event: string) => scenario.children.find((child) => localName(child.name) === 'timestamp' && child.attributes.get('event') === event)?.attributes.get('at');
+			const duration = XSpecTests.elapsed(timestamp('start'), timestamp('end'));
 			const statuses: XSpecStatus[] = [];
 			tests.forEach((test) => {
 				const testLabel = XSpecTests.normalizeSpace(test.children.find((child) => localName(child.name) === 'label')?.text ?? '');
@@ -148,18 +153,44 @@ export class XSpecTests {
 				results.push({
 					kind: 'expect', id: test.attributes.get('id') ?? '', file, labelPath: [...path, testLabel], status, pendingReason,
 					expected: status === 'failed' ? raw(test.children.find((child) => localName(child.name) === 'expect')) : undefined,
-					actual: status === 'failed' ? actual : undefined
+					actual: status === 'failed' ? actual : undefined,
+					duration: status === 'pending' ? undefined : duration
 				});
 			});
 			scenario.children.filter((child) => localName(child.name) === 'scenario').forEach((child) => statuses.push(visit(child, path)));
 			const pendingReason = scenario.attributes.get('pending');
 			const status: XSpecStatus = statuses.includes('failed') ? 'failed' :
 				(statuses.length === 0 ? pendingReason !== undefined : statuses.every((s) => s === 'pending')) ? 'pending' : 'passed';
-			results.push({ kind: 'scenario', id: scenario.attributes.get('id') ?? '', file, labelPath: path, status, pendingReason });
+			results.push({ kind: 'scenario', id: scenario.attributes.get('id') ?? '', file, labelPath: path, status, pendingReason, duration });
 			return status;
 		};
 		report.children.filter((child) => localName(child.name) === 'scenario').forEach((scenario) => visit(scenario, []));
 		return results;
+	}
+
+	// the time the tests took to run, in milliseconds, with XSpec's measure-time: from the report's own start and end
+	// timestamps, around all its scenarios - not starting Java, compiling or reporting. Undefined without them
+	public static testsElapsed(text: string): number | undefined {
+		const report = parseXml(text);
+		const timestamp = (event: string) => report?.children.find((child) => localName(child.name) === 'timestamp' && child.attributes.get('event') === event)?.attributes.get('at');
+		return XSpecTests.elapsed(timestamp('start'), timestamp('end'));
+	}
+
+	// the milliseconds between two of XSpec's timestamps - xs:dateTimeStamp values from saxon:timestamp(), e.g.
+	// 2026-11-09T17:23:19.550447Z, to the microsecond, which Date.parse would round to the millisecond - undefined
+	// without both
+	public static elapsed(start: string | undefined, end: string | undefined): number | undefined {
+		// the whole seconds, in milliseconds, and the fraction of a second, in milliseconds - kept apart, as a double holds
+		// milliseconds since 1970 only to about a quarter of a microsecond
+		const parts = (stamp: string | undefined) => {
+			const m = stamp ? /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?(Z|[+-]\d\d:\d\d)?$/.exec(stamp.trim()) : null;
+			const seconds = m ? Date.parse(m[1] + (m[3] ?? 'Z')) : NaN;
+			return m && !Number.isNaN(seconds) ? { seconds, fraction: Number('0' + (m[2] ?? '')) * 1000 } : undefined;
+		};
+		const from = parts(start);
+		const to = parts(end);
+		const elapsed = from && to ? (to.seconds - from.seconds) + (to.fraction - from.fraction) : undefined;
+		return elapsed !== undefined && elapsed >= 0 ? elapsed : undefined;
 	}
 
 	// the templates of the scenarios and expectations in a compiled test runner (see XSpecRunner), with their files and

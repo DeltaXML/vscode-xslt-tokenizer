@@ -8,6 +8,7 @@ import * as path from 'path';
 import { assert } from 'chai';
 import * as vscode from 'vscode';
 import { XSpecTestController } from '../../src/xspecTestController';
+import { XSpecRunner } from '../../src/xspecRunner';
 import { XSpecTests } from '../../src/xspecTests';
 import { XSpecTimeline } from '../../src/xspecTimeline';
 import { XsltPackages } from '../../src/xsltPackages';
@@ -15,9 +16,15 @@ import { XsltPackages } from '../../src/xsltPackages';
 const saxonJar = process.env.XSPEC_SAXON_JAR;
 
 // a test run that records the outcome of each item, by its label
-function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscode.TestMessage[]>, coverages: vscode.FileCoverage[] = [], output: string[] = []): vscode.TestRun {
-	const record = (status: string) => (item: vscode.TestItem, message?: vscode.TestMessage | readonly vscode.TestMessage[]) => {
+function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscode.TestMessage[]>, coverages: vscode.FileCoverage[] = [], output: string[] = [], durations = new Map<string, number>()): vscode.TestRun {
+	const record = (status: string) => (item: vscode.TestItem, messageOrDuration?: vscode.TestMessage | readonly vscode.TestMessage[] | number, duration?: number) => {
 		outcomes.set(item.label, status);
+		// passed(item, duration) and failed(item, message, duration)
+		const time = typeof messageOrDuration === 'number' ? messageOrDuration : duration;
+		if (time !== undefined) {
+			durations.set(item.label, time);
+		}
+		const message = typeof messageOrDuration === 'number' ? undefined : messageOrDuration;
 		if (message) {
 			messages.set(item.label, Array.isArray(message) ? [...message] : [message as vscode.TestMessage]);
 		}
@@ -63,11 +70,12 @@ suite('XSpec: running tests', function () {
 		const fileItem = xspec.testController.items.get(document.uri.toString())!;
 		const outcomes = new Map<string, string>();
 		const messages = new Map<string, vscode.TestMessage[]>();
-		xspec.createRun = () => recordingRun(outcomes, messages);
+		const durations = new Map<string, number>();
+		xspec.createRun = () => recordingRun(outcomes, messages, [], [], durations);
 		const profile = debug ? xspec.debugProfile : xspec.runProfile;
 		await profile.runHandler(new vscode.TestRunRequest(include(fileItem)), new vscode.CancellationTokenSource().token);
 		xspec.createRun = undefined;
-		return { outcomes, messages, fileItem };
+		return { outcomes, messages, fileItem, durations };
 	};
 	const child = (item: vscode.TestItem, label: string) => {
 		let found: vscode.TestItem | undefined;
@@ -97,6 +105,20 @@ suite('XSpec: running tests', function () {
 		assert.isTrue(fs.existsSync(html), 'the HTML report');
 	});
 
+	test('durations: each expectation has its scenario\'s time, with XSpec\'s measure-time - not with Saxon-HE, or when debugging', async () => {
+		const { durations } = await runItems((file) => [file]);
+		if (XSpecRunner.canMeasureTime(vscode.Uri.file(xspecPath))) {
+			assert.isAbove(durations.get('is four') ?? -1, 0, JSON.stringify([...durations]));
+			assert.isAbove(durations.get('is five') ?? -1, 0, 'a failed expectation too');
+			// pending: not run, so no time
+			assert.isUndefined(durations.get('is two'));
+		} else {
+			assert.strictEqual(durations.size, 0, 'Saxon-HE has no saxon:timestamp()');
+		}
+		const debugged = await runItems((file) => [child(file, 'a paragraph')], true);
+		assert.strictEqual(debugged.durations.size, 0, 'paused at breakpoints, a time would mean nothing');
+	});
+
 	test('the run\'s history in the Timeline view: recorded with VS Code 1.145\'s Timeline API - and without it, e.g. in 1.138, not registered and the run unaffected', async () => {
 		const hasApi = typeof (vscode.workspace as unknown as { registerWorkspaceTimelineProvider?: unknown }).registerWorkspaceTimelineProvider === 'function';
 		const before = Date.now();
@@ -110,7 +132,16 @@ suite('XSpec: running tests', function () {
 		const run = history![0];
 		assert.isAtLeast(run.start, before);
 		assert.strictEqual(run.kind, 'Run');
-		assert.deepEqual(run.files, [{ file: xspecPath, passed: 2, failed: 1, pending: 1, failedLabels: ['doubling › three › is five'] }]);
+		const [{ testTime, ...file }] = run.files;
+		assert.deepEqual(file, { file: xspecPath, passed: 2, failed: 1, pending: 1, failedLabels: ['doubling › three › is five'] });
+		// the time the tests took, from the report's measure-time timestamps - not with Saxon-HE
+		if (XSpecRunner.canMeasureTime(vscode.Uri.file(xspecPath))) {
+			assert.isAbove(testTime ?? -1, 0);
+			assert.isBelow(testTime!, run.end - run.start, 'only running the tests, not Java starting, compiling or reporting');
+			assert.match(XSpecTimeline.testTimeText(run.files[0]) ?? '', /^tests \d+(\.\d+)?( ms|s)$/);
+		} else {
+			assert.isUndefined(testTime);
+		}
 	});
 
 	test('run one scenario, with XSpec\'s force-focus: the others aren\'t run', async () => {

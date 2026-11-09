@@ -45,6 +45,9 @@ export interface XSpecRunFile {
 	stopped?: string;
 	// the label paths of the expectations that failed - the first maxFailedLabels
 	failedLabels?: string[];
+	// the milliseconds the tests took to run - not starting Java, compiling or reporting - with XSpec's measure-time
+	// (Saxon-PE/EE, and not when debugging)
+	testTime?: number;
 }
 
 // a run, as kept in the workspace state
@@ -141,6 +144,15 @@ export class XSpecTimeline {
 		return `${((run.end - run.start) / 1000).toFixed(1)}s`;
 	}
 
+	// e.g. 'tests 36.7 ms', or 'tests 2.41s' - the time the file's tests took to run, if it's known
+	public static testTimeText(file: XSpecRunFile): string | undefined {
+		const t = file.testTime;
+		if (t === undefined) {
+			return undefined;
+		}
+		return 'tests ' + (t >= 1000 ? `${(t / 1000).toFixed(2)}s` : t >= 10 ? `${t.toFixed(1)} ms` : `${t.toFixed(2)} ms`);
+	}
+
 	private runItem(run: XSpecRunRecord): TimelineItem {
 		const total = (key: 'passed' | 'failed' | 'pending') => run.files.reduce((sum, f) => sum + f[key], 0);
 		const totals = { passed: total('passed'), failed: total('failed'), pending: total('pending') };
@@ -153,7 +165,8 @@ export class XSpecTimeline {
 		const tooltip = new vscode.MarkdownString();
 		tooltip.appendMarkdown(`**XSpec ${run.kind}** - ${new Date(run.start).toLocaleString()} - ${XSpecTimeline.seconds(run)}${run.cancelled ? ' - cancelled' : ''}\n\n`);
 		for (const f of run.files) {
-			tooltip.appendMarkdown(`- `).appendText(`${vscode.workspace.asRelativePath(f.file)}: ${f.stopped !== undefined ? `stopped - ${XSpecTimeline.short(f.stopped)}` : XSpecTimeline.counts(f)}`).appendMarkdown('\n');
+			const testTime = XSpecTimeline.testTimeText(f);
+			tooltip.appendMarkdown(`- `).appendText(`${vscode.workspace.asRelativePath(f.file)}: ${f.stopped !== undefined ? `stopped - ${XSpecTimeline.short(f.stopped)}` : XSpecTimeline.counts(f)}${testTime ? ` - ${testTime}` : ''}`).appendMarkdown('\n');
 			XSpecTimeline.failedLines(f).forEach((line) => tooltip.appendMarkdown('    - ').appendText(line).appendMarkdown('\n'));
 		}
 		item.tooltip = tooltip;
@@ -164,9 +177,11 @@ export class XSpecTimeline {
 		const item = new this.itemClass(`XSpec ${run.kind.toLowerCase()}: ` + (file.stopped !== undefined ? 'stopped' : XSpecTimeline.counts(file)), run.start);
 		item.id = String(run.start);
 		item.iconPath = XSpecTimeline.icon(file.failed > 0, file.stopped !== undefined);
-		item.description = run.files.length > 1 ? `in a run of ${run.files.length} files` : '';
+		const testTime = XSpecTimeline.testTimeText(file);
+		item.description = [...(testTime ? [testTime] : []), ...(run.files.length > 1 ? [`in a run of ${run.files.length} files`] : [])].join(' · ');
 		const failed = XSpecTimeline.failedLines(file);
 		item.tooltip = `XSpec ${run.kind} - ${new Date(run.start).toLocaleString()}${file.stopped !== undefined ? `\nstopped - ${XSpecTimeline.short(file.stopped)}` : ''}` +
+			(testTime ? `\n${testTime.replace(/^tests/, 'The tests took')} - not starting Java, compiling or reporting` : '') +
 			(failed.length > 0 ? `\n\nFailed:\n${failed.map((line) => `  ${line}`).join('\n')}` : '');
 		return item;
 	}
