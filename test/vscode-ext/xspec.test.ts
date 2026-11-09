@@ -292,6 +292,18 @@ suite('XSpec', () => {
 		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 	});
 
+	test('completion in XPath: the stylesheet\'s global variables and functions when it\'s imported - not with run-as="external", where only x:call can call them', async () => {
+		const body = `<x:scenario label="s"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" test="|"/></x:scenario>`;
+		const imported = await completions(xspec(body));
+		assert.include(imported, '$f:greeting');
+		assert.include(imported, 'f:double');
+		const external = await completions(xspec(body, ' stylesheet="sut.xsl" run-as="external"'));
+		assert.notInclude(external, '$f:greeting');
+		assert.notInclude(external, 'f:double');
+		// x:call's function: those of the stylesheet, still
+		assert.include(await completions(xspec(`<x:scenario label="s"><x:call function="|"/></x:scenario>`, ' stylesheet="sut.xsl" run-as="external"')), 'f:double');
+	});
+
 	test('hover: an XSpec element\'s description, and the signature of a function of the stylesheet under test', async () => {
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:exp|ect label="e" select="1"/></x:scenario>`), 'vscode.executeHoverProvider')), 'x:expect');
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:context select="1"/><x:expect label="e" test="f:dou|ble(1) = 2"/></x:scenario>`), 'vscode.executeHoverProvider')), 'f:double');

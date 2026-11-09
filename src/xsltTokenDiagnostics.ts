@@ -4707,9 +4707,21 @@ export class XsltTokenDiagnostics {
 		const inScope = scopes?.inScope;
 		const missingFrom = scopes?.missingFrom;
 		const testsStylesheet = !!stylesheetPath && fs.existsSync(stylesheetPath);
-		const helperPaths = [...documentText.matchAll(/<(?:[\w.-]+:)?helper\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)].map((match) => HrefPaths.toPath(match[2], documentPath)).filter((p): p is string => !!p);
-		const externalModules = testsStylesheet && XsltTokenDiagnostics.isRunAsExternal(root) ? XsltTokenDiagnostics.xspecExternalModules(stylesheetPath!, helperPaths) : undefined;
+		const externalModules = XsltTokenDiagnostics.xspecExternalModulesOf(documentText, documentPath);
 		return { testsStylesheet, declared, inScope, missingFrom, externalModules, ...XsltTokenDiagnostics.xspecPackage(root, testsStylesheet ? stylesheetPath : undefined) };
+	}
+
+	// XSpec, run-as="external": the modules of the stylesheet tested, whose functions and global variables can't be used
+	// in XPath expressions, as it isn't imported into the test runner - undefined if it's imported, or isn't found
+	public static xspecExternalModulesOf(documentText: string, documentPath: string | undefined): Set<string> | undefined {
+		const root = /<([\w.-]+:)?description\b[^>]*>/.exec(documentText)?.[0] ?? '';
+		const stylesheet = /\sstylesheet\s*=\s*(["'])(.*?)\1/.exec(root)?.[2];
+		const stylesheetPath = stylesheet !== undefined && !/\sxml:base\s*=/.test(root) ? HrefPaths.toPath(stylesheet, documentPath) : undefined;
+		if (!stylesheetPath || !fs.existsSync(stylesheetPath) || !XsltTokenDiagnostics.isRunAsExternal(root)) {
+			return undefined;
+		}
+		const helperPaths = [...documentText.matchAll(/<(?:[\w.-]+:)?helper\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)].map((match) => HrefPaths.toPath(match[2], documentPath)).filter((p): p is string => !!p);
+		return XsltTokenDiagnostics.xspecExternalModules(stylesheetPath, helperPaths);
 	}
 
 	// an XSpec file whose stylesheet is an xsl:package: its name, whether it's run externally - as it must be, as XSpec

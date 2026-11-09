@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { XSpecScenario } from './xspecScenario';
 import { XSpecLike } from './xspecLike';
+import { XSpecSourceMap } from './xspecSourceMap';
 import { XSpecSnippets } from './xspecSnippets';
 import { XslLexerLight } from './xslLexerLight';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
@@ -174,6 +175,15 @@ export class XsltTokenCompletions {
 		XsltTokenCompletions.xpath31 = docType === DocumentTypes.XPath && !XPathVersion.isXPath40(document);
 		// XSpec: the x:variable and x:param elements in scope where the cursor is, as XSpec scopes them - read only if a
 		// variable is completed
+		// XSpec, run-as="external": the functions and global variables of the stylesheet tested can't be used in XPath
+		// expressions, as the linter reports - only called with x:call, so its completion of names has them all
+		const xspecCallable = importedInstructionData;
+		const xspecExternal = docType === DocumentTypes.XSPEC && document.uri.scheme === 'file' ? XsltTokenDiagnostics.xspecExternalModulesOf(document.getText(), document.fileName) : undefined;
+		if (xspecExternal) {
+			const usableInXPath = [GlobalInstructionType.Variable, GlobalInstructionType.Parameter, GlobalInstructionType.Function];
+			importedInstructionData = importedInstructionData.filter((instruction) => !usableInXPath.includes(instruction.type) || !instruction.href ||
+				![...xspecExternal].some((module) => XSpecSourceMap.samePath(module, instruction.href!)));
+		}
 		XsltTokenCompletions.xspecVariables = docType === DocumentTypes.XSPEC && document.uri.scheme === 'file' ?
 			() => XSpecLike.variablesInScope(document.getText(), document.fileName, document.offsetAt(position)) : undefined;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
@@ -620,9 +630,9 @@ export class XsltTokenCompletions {
 									if (tagElementName === 'xsl:use-package') {
 										resultCompletions = XsltTokenCompletions.getPackageNameCompletions(document, position);
 									} else if (tagElementName === 'xsl:call-template' || (tagElementName === 'x:call' && xspecCallAttribute === 'template')) {
-										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, xspecCallable);
 									} else if (tagElementName === 'x:call' && xspecCallAttribute === 'function') {
-										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Function, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Function, globalInstructionData, xspecCallable);
 									} else if ((tagElementName === 'xsl:with-param' || tagElementName === 'x:param') && elementStack.length > 0) {
 										// get name attribute of parent
 										let parentElemment = elementStack[elementStack.length - 1];
