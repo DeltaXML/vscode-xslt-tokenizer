@@ -13,6 +13,8 @@ import { XSpecHrefs } from './xspecHrefs';
 import { XSpecLabels } from './xspecLabels';
 import { XSpecCompat } from './xspecCompat';
 import { XSpecRequired } from './xspecRequired';
+import { XSpecExpectResult } from './xspecExpectResult';
+import { XSpecFocus } from './xspecFocus';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
 import { XSpecLike } from './xspecLike';
@@ -1407,6 +1409,12 @@ export function activate(context: vscode.ExtensionContext) {
 	// quick fixes for x:expect elements that XSpec 4 stops the run for (see XSpecCompat)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecCompat.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
+	// a quick fix for an x:expect whose select uses $x:result (see XSpecExpectResult)
+	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecExpectResult.codeActions(document, context.diagnostics) },
+		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
+	// pending and focus on a scenario, and the quick fixes for a focus warning (see XSpecFocus)
+	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, range, context) => XSpecFocus.codeActions(document, range, context.diagnostics) },
+		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.RefactorRewrite] }));
 	// quick fixes for the attributes XSpec requires that an element is missing (see XSpecRequired)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecRequired.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));

@@ -231,6 +231,67 @@ suite('XSpec', () => {
 		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 	});
 
+	// the problems published for an XSpec file once it's open, and the code actions at an offset - as given those
+	const openWithProblems = async (content: string, includes: string) => {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file(`open${count++}.xspec`, content)));
+		await vscode.window.showTextDocument(document);
+		for (let i = 0; i < 50 && !vscode.languages.getDiagnostics(document.uri).some((d) => d.message.includes(includes)); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		const actionsAt = async (offset: number) => vscode.commands.executeCommand<vscode.CodeAction[]>('vscode.executeCodeActionProvider', document.uri,
+			new vscode.Range(document.positionAt(offset), document.positionAt(offset)));
+		return { document, actionsAt };
+	};
+
+	test('x:call of a function: an error for a number of parameters it isn\'t declared with - counted as XSpec merges the calls of nested scenarios', async () => {
+		const arity = (count: number, inherited = '') => `XSpec: f:double is called with ${count} parameters${inherited}, but the stylesheet declares it with 1 parameter - XSpec fails to compile the tests (XPST0017)`;
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call function="f:double"><x:param select="1"/><x:param select="2"/></x:call><x:expect label="e" select="2"/></x:scenario>`)), [arity(2)]);
+		// an inner x:call's parameter replaces the outer one at its position - or adds one at another position
+		assert.deepEqual(await problems(xspec(`<x:scenario label="o"><x:call function="f:double"><x:param select="1"/></x:call>
+  <x:scenario label="i"><x:call><x:param select="5"/></x:call><x:expect label="e" select="10"/></x:scenario></x:scenario>`)), []);
+		assert.deepEqual(await problems(xspec(`<x:scenario label="o"><x:call function="f:double"><x:param select="1"/></x:call>
+  <x:scenario label="i"><x:call><x:param position="2" select="5"/></x:call><x:expect label="e" select="10"/></x:scenario></x:scenario>`)), [arity(2)]);
+		// the call inherited as it is: reported on the x:call of the scenario it's from
+		assert.deepEqual(await problems(xspec(`<x:scenario label="o"><x:call function="f:double"><x:param select="1"/><x:param select="2"/></x:call>
+  <x:scenario label="i"><x:expect label="e" select="10"/></x:scenario></x:scenario>`)), [arity(2, ` - the x:call of the scenario 'o'`)]);
+		// not compiled: without an expectation, or pending
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call function="f:double"><x:param select="1"/><x:param select="2"/></x:call></x:scenario>
+<x:scenario label="p" pending="later"><x:call function="f:double"/><x:expect label="e" select="2"/></x:scenario>`)), []);
+	});
+
+	test('x:expect: a warning for $x:result in select - a test written in select - with a quick fix making it the test', async () => {
+		const warning = 'XSpec: select is the expected result, compared with the result - this uses $x:result, so it compares the result with its own value or a boolean. To test the result, use test, e.g. test="$x:result eq 2"';
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" select="$x:result eq 2"/></x:scenario>`)), [warning]);
+		// with test, select is compared with its value; and in a string literal, it's text
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" test="$x:result" select="$x:result"/><x:expect label="f" select="'$x:result'"/></x:scenario>`)), []);
+		const content = xspec(`<x:scenario label="s"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" select="$x:result eq 2"/></x:scenario>`);
+		const { document, actionsAt } = await openWithProblems(content, 'uses $x:result');
+		const action = (await actionsAt(content.indexOf('$x:result eq'))).find((a) => a.title.startsWith('Make select the test'));
+		assert.isDefined(action);
+		await vscode.workspace.applyEdit(action!.edit!);
+		assert.include(document.getText(), '<x:expect label="e" test="$x:result eq 2"/>');
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+	});
+
+	test('x:scenario: code actions for pending and focus, and information for focus - with quick fixes removing it, or all in the file', async () => {
+		const warning = 'XSpec: focus - only the focused scenarios are run, and every other scenario in this file is pending';
+		const content = xspec(`<x:scenario label="a" focus="me"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" select="2"/></x:scenario>
+<x:scenario label="b" focus="me too"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" select="2"/></x:scenario>
+<x:scenario label="c" pending="later"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" select="2"/></x:scenario>`);
+		assert.deepEqual(await problems(content), [warning, warning]);
+		const { document, actionsAt } = await openWithProblems(content, 'only the focused scenarios');
+		const titles = async (marker: string) => (await actionsAt(content.indexOf(marker))).map((a) => a.title);
+		assert.includeMembers(await titles('focus="me"'), ['Remove focus', 'Remove focus from all 2 scenarios in this file', 'Mark the scenario as pending']);
+		assert.includeMembers(await titles('label="c"'), ['Remove pending - run the scenario', 'Focus on the scenario - the others are pending']);
+		const removeAll = (await actionsAt(content.indexOf('focus="me"'))).find((a) => a.title.startsWith('Remove focus from all'))!;
+		await vscode.workspace.applyEdit(removeAll.edit!);
+		assert.notInclude(document.getText(), 'focus=');
+		const pending = (await actionsAt(content.indexOf('label="a"'))).find((a) => a.title === 'Mark the scenario as pending')!;
+		await vscode.workspace.applyEdit(pending.edit!);
+		assert.include(document.getText(), '<x:scenario label="a" pending="to do">');
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+	});
+
 	test('hover: an XSpec element\'s description, and the signature of a function of the stylesheet under test', async () => {
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:exp|ect label="e" select="1"/></x:scenario>`), 'vscode.executeHoverProvider')), 'x:expect');
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:context select="1"/><x:expect label="e" test="f:dou|ble(1) = 2"/></x:scenario>`), 'vscode.executeHoverProvider')), 'f:double');

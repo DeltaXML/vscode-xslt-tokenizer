@@ -32,6 +32,9 @@ import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XSpecCompat } from './xspecCompat';
 import { XSpecLike } from './xspecLike';
 import { XSpecRequired } from './xspecRequired';
+import { XSpecCallArity } from './xspecCallArity';
+import { XSpecExpectResult } from './xspecExpectResult';
+import { XSpecFocus } from './xspecFocus';
 import { XmlElement, parseXml } from './xspecXml';
 import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
@@ -3627,6 +3630,23 @@ export class XsltTokenDiagnostics {
 			allDiagnostics.push(...XSpecLike.problems(document));
 			// the attributes XSpec requires that elements are missing, e.g. x:variable's name
 			allDiagnostics.push(...XSpecRequired.problems(document));
+			// an x:expect whose select uses $x:result - a test written in select
+			allDiagnostics.push(...XSpecExpectResult.problems(document));
+			// a focus attribute: every other scenario in the file is pending
+			allDiagnostics.push(...XSpecFocus.problems(document));
+			// a function called with a number of parameters it isn't declared with, when the stylesheet tested is known
+			if (xspecScope?.testsStylesheet) {
+				const arities = new Map<string, number[]>();
+				checkedGlobalFnNames.concat(xspecExternalFnNames).forEach((nameWithArity) => {
+					const hash = nameWithArity.lastIndexOf('#');
+					const name = nameWithArity.substring(0, hash);
+					arities.set(name, [...(arities.get(name) ?? []), Number(nameWithArity.substring(hash + 1))]);
+				});
+				XSpecCallArity.problems(documentText, (name) => arities.get(name)).forEach((problem) => {
+					const start = document.positionAt(problem.offset);
+					allDiagnostics.push(new vscode.Diagnostic(new vscode.Range(start, start.translate(0, problem.length)), problem.message, vscode.DiagnosticSeverity.Error));
+				});
+			}
 			// with run-as="external", a function of the stylesheet tested called in an XPath expression: why it's not found
 			if (xspecExternalFnNames.length > 0) {
 				allDiagnostics.forEach((d) => {

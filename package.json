@@ -97,7 +97,8 @@
 				"editor.detectIndentation": true,
 				"editor.insertSpaces": true,
 				"editor.tabSize": 2,
-				"outline.showArrays": false
+				"outline.showArrays": false,
+				"breadcrumbs.showArrays": false
 			},
 			"[xsl]": {
 				"editor.semanticHighlighting.enabled": true
