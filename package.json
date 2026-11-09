@@ -336,6 +336,12 @@
 				"icon": "$(debug-alt)"
 			},
 			{
+				"command": "xslt-xpath.profileXslt",
+				"title": "Profile Stylesheet",
+				"category": "XSLT",
+				"icon": "$(pulse)"
+			},
+			{
 				"command": "xslt-xpath.analyseAsPackage",
 				"title": "Analyse as Package...",
 				"category": "XSLT",
@@ -595,6 +601,11 @@
 					"group": "navigation@3"
 				},
 				{
+					"command": "xslt-xpath.profileXslt",
+					"when": "resourceLangId == xslt",
+					"group": "1_xslt@2"
+				},
+				{
 					"command": "xslt-xpath.xspecRunFile",
 					"when": "editorLangId == xspec",
 					"group": "navigation"
@@ -653,6 +664,10 @@
 				},
 				{
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.profileXslt",
 					"when": "editorLangId == xslt"
 				},
 				{
