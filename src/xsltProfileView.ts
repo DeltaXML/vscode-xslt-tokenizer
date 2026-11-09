@@ -6,11 +6,16 @@
  */
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import { XsltProfile, ProfileDeclaration } from './xsltProfile';
 
 // a profiled template, function or global, as the Profile view shows it
 export interface ProfileRow {
     // 'template', 'function', 'variable' or 'param'
     kind: string;
+    // Saxon's, e.g. 'xsl:template', and what identifies the declaration as its module is edited (see
+    // XsltProfile.declarationKey) - undefined if the declaration wasn't found
+    construct: string;
+    key?: string;
     // a match template's pattern as written, else the name - '$name' for a variable or parameter
     label: string;
     mode?: string;
@@ -35,7 +40,14 @@ export interface ProfileRun {
     title: string;
     // e.g. 'SaxonJ'
     processor: string;
-    source?: string;
+    // what the times depend on, from the task: the XML source (or initial template), initial mode and parameters, e.g.
+    // { label: 'Source', value: 'data/orders.xml', note: '2.1 KB' } - in that order
+    settings: { label: string; value: string; note?: string }[];
+    // e.g. 'orders.xml (2.1 KB)', or 'no source' - for the settings' one-line summary
+    sourceSummary: string;
+    // the runs asked for (XSLT.tasks.profileRuns), and those the profile has - fewer if a run failed
+    requestedRuns: number;
+    runs: number;
     time: Date;
     total: number;
     netTotal: number;
@@ -47,9 +59,26 @@ export class XsltProfileView {
     public static readonly viewType = 'xslt-xpath.profile';
     private static panel: vscode.WebviewPanel | undefined;
     private static run: ProfileRun | undefined;
+    private static readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
+    // a profile is shown, or the view's closed, which clears the profile
+    public static readonly onDidChange = XsltProfileView.onDidChangeEmitter.event;
+
+    // the profile shown, if the view is open
+    public static current(): ProfileRun | undefined {
+        return XsltProfileView.run;
+    }
+
+    // the view, brought to the front with the row selected - from its CodeLens on the declaration
+    public static showRow(index: number) {
+        if (XsltProfileView.panel) {
+            XsltProfileView.panel.reveal(undefined, false);
+            XsltProfileView.panel.webview.postMessage({ command: 'select', index });
+        }
+    }
 
     public static show(run: ProfileRun) {
         XsltProfileView.run = run;
+        XsltProfileView.onDidChangeEmitter.fire();
         if (XsltProfileView.panel) {
             XsltProfileView.panel.title = XsltProfileView.title(run);
             XsltProfileView.panel.webview.html = XsltProfileView.html(XsltProfileView.panel.webview, run);
@@ -57,12 +86,15 @@ export class XsltProfileView {
             return;
         }
         const panel = vscode.window.createWebviewPanel(XsltProfileView.viewType, XsltProfileView.title(run),
-            { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true }, { enableScripts: true, localResourceRoots: [] });
+            { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true }, // kept when hidden, so a row selected from a CodeLens isn't lost while the page reloads - the page is small
+            { enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true });
         panel.iconPath = new vscode.ThemeIcon('pulse');
         panel.webview.html = XsltProfileView.html(panel.webview, run);
         panel.webview.onDidReceiveMessage((message) => XsltProfileView.received(message));
         panel.onDidDispose(() => {
             XsltProfileView.panel = undefined;
+            XsltProfileView.run = undefined;
+            XsltProfileView.onDidChangeEmitter.fire();
         });
         XsltProfileView.panel = panel;
     }
@@ -109,7 +141,8 @@ export class XsltProfileView {
         const nonce = crypto.randomBytes(16).toString('base64');
         // the data for the script - '<' escaped so nothing in it can end the script element
         const data = JSON.stringify({
-            title: run.title, processor: run.processor, source: run.source, time: run.time.toLocaleString(),
+            title: run.title, processor: run.processor, settings: run.settings, sourceSummary: run.sourceSummary,
+            requestedRuns: run.requestedRuns, runs: run.runs, time: run.time.toLocaleString(),
             total: run.total, netTotal: run.netTotal, rows: run.rows.map(({ selection: _s, file: _f, ...shown }) => shown)
         }).replace(/</g, '\\u003c');
         return `<!DOCTYPE html>
@@ -149,6 +182,15 @@ export class XsltProfileView {
 	.track { flex: 1; height: 10px; position: relative; }
 	.bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--vscode-charts-blue, var(--vscode-progressBar-background)); border-radius: 1px; min-width: 1px; }
 	.pct { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; }
+	details.settings { margin: 0 0 12px; }
+	details.settings summary { cursor: pointer; color: var(--vscode-descriptionForeground); }
+	details.settings summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
+	dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 16px; margin: 6px 0 0 16px; }
+	dt { color: var(--vscode-descriptionForeground); }
+	dd { margin: 0; overflow-wrap: anywhere; }
+	dd .value { font-family: var(--vscode-editor-font-family); }
+	dd .setting-note { color: var(--vscode-descriptionForeground); margin-left: 8px; }
+	.runs-warning { color: var(--vscode-editorWarning-foreground); }
 	.note { margin-top: 12px; font-size: 0.92em; }
 	.empty { margin-top: 24px; color: var(--vscode-descriptionForeground); }
 </style>
@@ -159,6 +201,10 @@ export class XsltProfileView {
 	<div class="meta" id="meta"></div>
 	<div class="summary"><span id="summary"></span><button id="rerun" title="Run the profile again">Run Again</button></div>
 </header>
+<details class="settings" id="settings" open>
+	<summary id="settings-summary"></summary>
+	<dl id="settings-list"></dl>
+</details>
 <table id="table" aria-label="Profiled templates, functions and globals">
 	<thead><tr id="head"></tr></thead>
 	<tbody id="body"></tbody>
@@ -185,7 +231,27 @@ export class XsltProfileView {
 	const el = (tag, className, text) => { const e = document.createElement(tag); if (className) { e.className = className; } if (text !== undefined) { e.textContent = text; } return e; };
 
 	document.getElementById('title').textContent = data.title;
-	document.getElementById('meta').textContent = 'Profiled with ' + data.processor + (data.source ? ' on ' + data.source : '') + ' \\u00b7 ' + data.time;
+	document.getElementById('meta').textContent = 'Profiled with ' + data.processor + ' \\u00b7 ' + data.time;
+
+	// what the times depend on: the source, parameters and runs
+	const parameterCount = data.settings.filter((s) => s.label.startsWith('$')).length;
+	const runsText = data.requestedRuns > 1 || data.runs > 1 ? 'run ' + data.runs + ' of ' + data.requestedRuns : '1 run';
+	document.getElementById('settings-summary').textContent = 'Run settings: ' + [data.sourceSummary,
+		parameterCount === 0 ? 'no parameters' : parameterCount === 1 ? '1 parameter' : parameterCount + ' parameters', runsText].join(' \\u00b7 ');
+	const settingsList = document.getElementById('settings-list');
+	const runsNote = data.runs < data.requestedRuns ? 'only ' + data.runs + ' of ' + data.requestedRuns + ' ran - the run failed' :
+		data.runs > 1 ? 'the times are the last run\\u2019s' : 'the first run\\u2019s times include the Java VM\\u2019s warm-up - see the XSLT.tasks.profileRuns setting';
+	for (const setting of data.settings.concat([{ label: 'Runs', value: String(data.requestedRuns), note: runsNote }])) {
+		const dd = el('dd');
+		dd.append(el('span', 'value', setting.value));
+		if (setting.note) {
+			dd.append(el('span', 'setting-note' + (setting.label === 'Runs' && data.runs < data.requestedRuns ? ' runs-warning' : ''), setting.note));
+		}
+		settingsList.append(el('dt', '', setting.label), dd);
+	}
+	const settingsDetails = document.getElementById('settings');
+	if (state.settingsOpen === false) { settingsDetails.open = false; }
+	settingsDetails.addEventListener('toggle', () => { state.settingsOpen = settingsDetails.open; vscode.setState(state); });
 	const summary = document.getElementById('summary');
 	summary.append('Total ', el('b', '', ms(data.total) + ' ms'), ' \\u00b7 in templates, functions and globals ', el('b', '', ms(data.netTotal) + ' ms'),
 		data.total > 0 ? ' (' + Math.round(100 * data.netTotal / data.total) + '%)' : '');
@@ -268,6 +334,17 @@ export class XsltProfileView {
 		document.getElementById('table').hidden = rows.length === 0;
 	}
 
+	// from a CodeLens: the row, focused and scrolled into view
+	window.addEventListener('message', (event) => {
+		if (event.data && event.data.command === 'select') {
+			const tr = body.querySelector('tr[data-index="' + Number(event.data.index) + '"]');
+			if (tr) {
+				tr.focus();
+				tr.scrollIntoView({ block: 'nearest' });
+			}
+		}
+	});
+
 	// the table header sticks below the page header
 	const header = document.getElementById('header');
 	const setHeaderHeight = () => document.documentElement.style.setProperty('--header-height', header.offsetHeight + 'px');
@@ -279,5 +356,57 @@ export class XsltProfileView {
 </script>
 </body>
 </html>`;
+    }
+}
+
+// on each profiled template, function and global in a module, its times from the profile shown in the Profile view -
+// until the view's closed. Found by key, so they follow their declarations as the module is edited
+export class XsltProfileCodeLensProvider implements vscode.CodeLensProvider {
+    public readonly onDidChangeCodeLenses = XsltProfileView.onDidChange;
+
+    public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+        const run = XsltProfileView.current();
+        if (!run) {
+            return [];
+        }
+        const uri = document.uri.toString();
+        const rows = run.rows.map((row, index) => ({ row, index })).filter(({ row }) => row.key !== undefined && vscode.Uri.parse(row.file).toString() === uri);
+        if (rows.length === 0) {
+            return [];
+        }
+        const text = document.getText();
+        // the module's declarations of each construct, found once
+        const declarations = new Map<string, ProfileDeclaration[]>();
+        const declarationsOf = (construct: string) => {
+            if (!declarations.has(construct)) {
+                declarations.set(construct, XsltProfile.declarationsOf(text, construct));
+            }
+            return declarations.get(construct)!;
+        };
+        const lenses: vscode.CodeLens[] = [];
+        for (const { row, index } of rows) {
+            const declaration = XsltProfile.nearest(declarationsOf(row.construct), row.construct, row.key!, row.line - 1);
+            if (!declaration) {
+                continue;
+            }
+            lenses.push(new vscode.CodeLens(new vscode.Range(declaration.line, 0, declaration.line, 0), {
+                title: XsltProfileCodeLensProvider.title(row, run.netTotal),
+                tooltip: `Profiled with ${run.processor}, ${run.time.toLocaleTimeString()} - show in the Profile view`,
+                command: 'xslt-xpath.showProfileRow',
+                arguments: [index]
+            }));
+        }
+        return lenses;
+    }
+
+    // e.g. '3 calls · 1.20 ms net (13%) · 4.50 ms gross' - for a global, evaluated once, just its time
+    public static title(row: ProfileRow, netTotal: number): string {
+        const ms = (n: number) => n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
+        const share = netTotal > 0 ? ` (${Math.round(100 * row.net / netTotal)}%)` : '';
+        if ((row.kind === 'variable' || row.kind === 'param') && row.count === 1) {
+            return `${ms(row.net)} ms${share}`;
+        }
+        const calls = `${row.count} ${row.count === 1 ? 'call' : 'calls'}`;
+        return row.gross > row.net ? `${calls} · ${ms(row.net)} ms net${share} · ${ms(row.gross)} ms gross` : `${calls} · ${ms(row.net)} ms${share}`;
     }
 }

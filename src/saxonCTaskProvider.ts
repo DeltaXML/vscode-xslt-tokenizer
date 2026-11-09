@@ -245,6 +245,10 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
                     case 'TPxslFilename':
                         commandLineArgs.push('-TPxsl:' + propValue);
                         break;
+                    case 'profileRepeat':
+                        // set by Profile Stylesheet only, from the XSLT.tasks.profileRuns setting - not a tasks.json property
+                        commandLineArgs.push('-repeat:' + propValue);
+                        break;
                     case 'allowSyntaxExtensions40':
                         commandLineArgs.push('--allowSyntaxExtensions:' + SaxonTaskProvider.syntaxExtensions40Value(propValue, taskSaxonCPath, SaxonTaskProvider.taskXsltPath(xsltTask)));
                         break;

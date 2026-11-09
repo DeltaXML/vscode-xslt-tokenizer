@@ -35,6 +35,34 @@ describe('XsltProfile', () => {
         expect(profile.entries[4].match).to.equal('element()[@n < 3]');
     });
 
+    it('reads the last run of several, as -repeat writes', () => {
+        const second = '<trace t-total="1.5">\n   <fn name="f:x" construct="xsl:function" file="file:/work/globals.xsl" count="1" t-sum-net="0.01" t-avg-net="0.01" t-sum="0.01" t-avg="0.01" line="8"></fn>\n</trace>';
+        const profile = XsltProfile.parse(profileXml + '\n' + second)!;
+        expect(profile.total).to.equal(1.5);
+        expect(profile.entries.map((e) => e.name)).to.deep.equal(['f:x']);
+        expect(profile.runs).to.equal(2);
+        expect(XsltProfile.parse(profileXml)!.runs).to.equal(1);
+    });
+
+    it('shows parameters with the values entered for tasks.json inputs', () => {
+        const entered = new Map([['limit', '10']]);
+        const settings = XsltProfile.parameterSettings([
+            { name: 'title', value: 'Orders' },
+            { name: '?limit', value: '${input:xsltParam-limit}' },
+            { name: 'mode', value: '${input:xsltParam-mode}' },
+            { name: '?when', value: 'current-date()' },
+            { name: 'other', value: '${input:someoneElses}' },
+        ], 'xsltParam-', (name) => entered.get(name));
+        expect(settings).to.deep.equal([
+            { label: '$title', value: 'Orders', note: undefined },
+            { label: '$limit', value: '10', note: 'entered, XPath' },
+            { label: '$mode', value: '${input:xsltParam-mode}', note: undefined },
+            { label: '$when', value: 'current-date()', note: 'XPath' },
+            { label: '$other', value: '${input:someoneElses}', note: undefined },
+        ]);
+        expect(XsltProfile.parameterSettings(undefined, 'xsltParam-', () => undefined)).to.deep.equal([]);
+    });
+
     it('is undefined for something else', () => {
         expect(XsltProfile.parse('<html><body>Saxon report</body></html>')).to.equal(undefined);
     });
@@ -77,5 +105,27 @@ describe('XsltProfile', () => {
         expect(XsltProfile.rowLabel(entries[2], undefined)).to.deep.equal({ kind: 'function', label: 'f:x', mode: undefined });
         expect(XsltProfile.rowLabel(entries[3], undefined)).to.deep.equal({ kind: 'variable', label: '$g1' });
         expect(XsltProfile.rowLabel(entries[0], undefined)).to.deep.equal({ kind: 'param', label: '$p1' });
+    });
+
+    it('keys a match template by pattern and mode, anything else by name', () => {
+        const key = (construct: string, line: number) => XsltProfile.declarationKey(construct, XsltProfile.declarationAt(stylesheet, construct, line)!.attributes);
+        expect(key('xsl:template', 7)).to.equal('match *[@n < 3] mode m2');
+        expect(key('xsl:template', 5)).to.equal('match / mode ');
+        expect(key('xsl:function', 8)).to.equal('function f:x');
+        expect(key('xsl:variable', 2)).to.equal('variable g1');
+    });
+
+    it('relocates a declaration after lines are added before it', () => {
+        const edited = stylesheet.replace('<xsl:mode name="m2"/>', '<xsl:mode name="m2"/>\n\n  <xsl:template name="added"/>\n');
+        const declaration = XsltProfile.relocate(edited, 'xsl:template', 'match *[@n < 3] mode m2', 5)!;
+        expect(declaration.line).to.equal(8);
+        expect(XsltProfile.relocate(edited, 'xsl:function', 'function f:x', 7)!.line).to.equal(10);
+    });
+
+    it('relocates to the nearest declaration with the key, and to none once it is gone', () => {
+        const twice = stylesheet.replace('</xsl:stylesheet>', '  <xsl:function name="f:x"><xsl:param name="a"/><xsl:param name="b"/></xsl:function>\n</xsl:stylesheet>');
+        expect(XsltProfile.relocate(twice, 'xsl:function', 'function f:x', 7)!.line).to.equal(7);
+        expect(XsltProfile.relocate(twice, 'xsl:function', 'function f:x', 9)!.line).to.equal(8);
+        expect(XsltProfile.relocate(stylesheet.replace('name="f:x"', 'name="f:y"'), 'xsl:function', 'function f:x', 7)).to.equal(undefined);
     });
 });

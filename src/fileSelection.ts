@@ -161,6 +161,12 @@ export class FileSelection {
     return value;
   }
 
+  // the value last entered (or picked) for a stylesheet parameter - after a run, the value it used
+  public lastParameterValue(name: string): string | undefined {
+    const recentValues: string[] | undefined = this.context.workspaceState.get(FileSelection.MMO_PREFIX + 'parameter:' + name);
+    return recentValues?.[0];
+  }
+
   public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean; prevStageLabel?: string; prevStageGroup?: string; xmlStylesheetPI?: boolean; noneItemDescription?: string; clearIncludesPrevStage?: boolean }) {
     // <?xml-stylesheet type="text/xsl" href="02list11.xsl"?>
     this.completedPick = true;

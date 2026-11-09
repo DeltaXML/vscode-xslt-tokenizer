@@ -68,7 +68,7 @@ import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, Xsl
 import { XsltEmptySteps } from './xsltEmptySteps';
 import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
 import { XsltProfile, ProfileDeclaration, ProfileEntry } from './xsltProfile';
-import { XsltProfileView, ProfileRow } from './xsltProfileView';
+import { XsltProfileView, XsltProfileCodeLensProvider, ProfileRow } from './xsltProfileView';
 import { XsltMcpDefinitionProvider, XsltMcpServer } from './mcp/xsltMcpServer';
 import { ClaudeCodeSetup, ClaudeScope } from './mcp/claudeCodeSetup';
 
@@ -1334,6 +1334,11 @@ export function activate(context: vscode.ExtensionContext) {
 		definition.TPfilename = profileFsPath;
 		definition.TPxslFilename = vscode.Uri.joinPath(context.extensionUri, 'xslt-resources', 'profile', 'profile-xml.xsl').fsPath;
 		definition.profileRun = true;
+		// more than one run, so the last is warm - see the setting
+		const requestedRuns = Math.max(1, Math.min(100, Math.floor(vscode.workspace.getConfiguration('XSLT.tasks', xsltDocument.uri).get<number>('profileRuns', 1)) || 1));
+		if (requestedRuns > 1) {
+			definition.profileRepeat = requestedRuns;
+		}
 		const task = quickRunTaskProviders[taskType].getTask(definition);
 		if (!task) {
 			return;
@@ -1371,11 +1376,41 @@ export function activate(context: vscode.ExtensionContext) {
 		if (exitCode !== undefined && exitCode !== 0) {
 			vscode.window.showWarningMessage(`${profileCommandName}: the run failed (exit code ${exitCode}) - the profile shows the part that ran.`);
 		}
+		const { settings, sourceSummary } = await profileSettings(definition, label, xmlSourceFsPath);
 		XsltProfileView.show({
-			stylesheet: xsltDocument.uri, title: path.basename(xsltFsPath), processor: processorName,
-			source: xmlSourceFsPath && xmlSourceFsPath !== xsltFsPath ? path.basename(xmlSourceFsPath) : undefined,
+			stylesheet: xsltDocument.uri, title: path.basename(xsltFsPath), processor: processorName, settings, sourceSummary,
+			requestedRuns, runs: profile.runs,
 			time: new Date(), total: profile.total, netTotal: XsltProfile.netTotal(profile), rows: await profileRows(profile.entries)
 		});
+	};
+
+	// what a profile's times depend on, from its task: the task, the XML source and its size (or the initial template it
+	// starts from), the initial mode, and the stylesheet parameters - with the values entered for this run
+	const profileSettings = async (definition: vscode.TaskDefinition, label: string, xmlSourceFsPath: string | undefined) => {
+		const settings: { label: string; value: string; note?: string }[] = [{ label: 'Task', value: label }];
+		const sizeText = (bytes: number) => bytes < 1024 ? `${bytes} bytes` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+		let sourceSummary: string;
+		if (xmlSourceFsPath) {
+			const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(xmlSourceFsPath));
+			const shown = folder ? path.relative(folder.uri.fsPath, xmlSourceFsPath).split(path.sep).join('/') : xmlSourceFsPath;
+			const size = await fs.promises.stat(xmlSourceFsPath).then((s) => sizeText(s.size), () => undefined);
+			settings.push({ label: 'Source', value: shown, note: size });
+			sourceSummary = path.basename(xmlSourceFsPath) + (size ? ` (${size})` : '');
+		} else {
+			sourceSummary = 'no source';
+		}
+		if (typeof definition.initialTemplate === 'string') {
+			settings.push({ label: 'Initial template', value: definition.initialTemplate === '' ? 'xsl:initial-template' : definition.initialTemplate });
+			if (!xmlSourceFsPath) {
+				sourceSummary = 'from ' + (definition.initialTemplate === '' ? 'xsl:initial-template' : definition.initialTemplate);
+			}
+		}
+		if (typeof definition.initialMode === 'string' && definition.initialMode !== '') {
+			settings.push({ label: 'Initial mode', value: definition.initialMode });
+		}
+		settings.push(...XsltProfile.parameterSettings(Array.isArray(definition.parameters) ? definition.parameters : undefined,
+			SaxonTaskProvider.parameterInputPrefix, (name) => fileSelector.lastParameterValue(name)));
+		return { settings, sourceSummary };
 	};
 
 	// the rows for the Profile view: each entry with its declaration found in its module - as open in an editor, else as saved
@@ -1404,6 +1439,7 @@ export function activate(context: vscode.ExtensionContext) {
 			const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : undefined;
 			rows.push({
 				kind, label, mode, file: entry.file,
+				construct: entry.construct, key: declaration ? XsltProfile.declarationKey(entry.construct, declaration.attributes) : undefined,
 				module: folder ? path.relative(folder.uri.fsPath, fsPath).split(path.sep).join('/') : path.basename(fsPath),
 				moduleTitle: fsPath,
 				line: declaration ? declaration.line + 1 : entry.line,
@@ -1414,6 +1450,9 @@ export function activate(context: vscode.ExtensionContext) {
 		return rows;
 	};
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.profileXslt', profileXslt));
+	// each profiled declaration's times, while the Profile view is open - a lens shows its row in the view
+	context.subscriptions.push(vscode.languages.registerCodeLensProvider({ language: 'xslt' }, new XsltProfileCodeLensProvider()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showProfileRow', (index: number) => XsltProfileView.showRow(index)));
 
 	// shows, in tasks.json, the task of this type that Quick Run (or for 'xslt', Debug too) uses for the active stylesheet
 	// (or the top-level stylesheet importing it) and the XML context file - first saving it, as a run would, if there

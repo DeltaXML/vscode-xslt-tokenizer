@@ -37,6 +37,8 @@ export interface Profile {
     // the whole run, in milliseconds - also the time outside templates, functions and globals, e.g. parsing the source
     total: number;
     entries: ProfileEntry[];
+    // how many runs the file has a trace for - the entries are the last's
+    runs: number;
 }
 
 // where a profile entry's declaration is in its module's text, and its attributes as written
@@ -51,15 +53,24 @@ export interface ProfileDeclaration {
 
 export class XsltProfile {
 
-    // the profile in Saxon's XML, or undefined if it isn't one
+    // the profile in Saxon's XML, or undefined if it isn't one. With -repeat:N, Saxon writes a trace for each run, one
+    // after another: the last, as the warmest - the first run's times are mostly the JVM's start-up and warm-up
     public static parse(xml: string): Profile | undefined {
-        const trace = /<trace\b([^>]*)>/.exec(xml);
+        const traceRgx = /<trace\b([^>]*)>/g;
+        let trace: RegExpExecArray | undefined;
+        let runs = 0;
+        let t: RegExpExecArray | null;
+        while ((t = traceRgx.exec(xml))) {
+            trace = t;
+            runs++;
+        }
         if (!trace) {
             return undefined;
         }
         const total = Number(XsltProfile.attributes(trace[1]).get('t-total') ?? NaN);
         const entries: ProfileEntry[] = [];
         const fnRgx = /<fn\b((?:[^>"']|"[^"]*"|'[^']*')*?)\/?>/g;
+        fnRgx.lastIndex = trace.index + trace[0].length;
         let fn: RegExpExecArray | null;
         while ((fn = fnRgx.exec(xml))) {
             const a = XsltProfile.attributes(fn[1]);
@@ -77,7 +88,22 @@ export class XsltProfile {
                 avgGross: number('t-avg'),
             });
         }
-        return { total, entries };
+        return { total, entries, runs };
+    }
+
+    // a task's stylesheet parameters as the Profile view shows them: '$name' and the value - for a value from a tasks.json
+    // input that asks for it (an id starting with inputPrefix, then the parameter's name), the value entered, if known.
+    // A name starting with '?' is Saxon's for a value that's an XPath expression
+    public static parameterSettings(parameters: { name: string; value: string }[] | undefined, inputPrefix: string,
+        entered: (name: string) => string | undefined): { label: string; value: string; note?: string }[] {
+        return (parameters ?? []).map(({ name, value }) => {
+            const xpath = name.startsWith('?');
+            const label = '$' + (xpath ? name.substring(1) : name);
+            const input = /^\$\{input:([^}]+)\}$/.exec(value)?.[1];
+            const enteredValue = input?.startsWith(inputPrefix) ? entered(input.substring(inputPrefix.length)) : undefined;
+            const note = enteredValue !== undefined ? (xpath ? 'entered, XPath' : 'entered') : xpath ? 'XPath' : undefined;
+            return { label, value: enteredValue ?? value, note };
+        });
     }
 
     // the time spent in templates, functions and globals: the sum of the net times. Each net time is then a share of
@@ -89,8 +115,8 @@ export class XsltProfile {
     // the declaration for a profile entry in its module's text: the element of the construct (with any prefix) whose start
     // tag ends on the entry's line - or for a start tag over several lines, the last that starts by then
     public static declarationAt(text: string, construct: string, line: number): ProfileDeclaration | undefined {
-        const localName = construct.replace(/^[^:]*:/, '');
-        if (!/^[\w.-]+$/.test(localName)) {
+        const tagRgx = XsltProfile.startTagRegExp(construct);
+        if (!tagRgx) {
             return undefined;
         }
         const lineStarts = XsltProfile.lineStarts(text);
@@ -99,7 +125,6 @@ export class XsltProfile {
         }
         const lineStart = lineStarts[line - 1];
         const lineEnd = line < lineStarts.length ? lineStarts[line] : text.length;
-        const tagRgx = new RegExp(`<((?:[\\w.-]+:)?${localName.replace(/[.]/g, '\\.')})(?=[\\s/>])((?:[^>"']|"[^"]*"|'[^']*')*)>`, 'g');
         // the start tag ending on the line, else (e.g. for a line Saxon counts differently) the last starting by its end
         let endsOnLine: RegExpExecArray | undefined;
         let startsBefore: RegExpExecArray | undefined;
@@ -112,9 +137,63 @@ export class XsltProfile {
             startsBefore = m;
         }
         const found = endsOnLine ?? startsBefore;
-        if (!found) {
+        return found ? XsltProfile.declaration(found, lineStarts) : undefined;
+    }
+
+    // what identifies a profiled declaration in its module as it's edited: a match template by its pattern and mode,
+    // anything else by its name - undefined if it has neither
+    public static declarationKey(construct: string, attributes: Map<string, string>): string | undefined {
+        const name = attributes.get('name');
+        if (name !== undefined) {
+            return construct.replace(/^[^:]*:/, '') + ' ' + name;
+        }
+        const match = attributes.get('match');
+        return match !== undefined ? 'match ' + match.replace(/\s+/g, ' ').trim() + ' mode ' + (attributes.get('mode') ?? '') : undefined;
+    }
+
+    // the declaration with the key in the module's text as it is now - of several (e.g. a function's overloads by arity,
+    // or a global variable and a local one with its name), the one nearest the 0-based line where it was
+    public static relocate(text: string, construct: string, key: string, line: number): ProfileDeclaration | undefined {
+        return XsltProfile.nearest(XsltProfile.declarationsOf(text, construct), construct, key, line);
+    }
+
+    // every element of the construct in the module's text - to find several declarations in it with nearest
+    public static declarationsOf(text: string, construct: string): ProfileDeclaration[] {
+        const tagRgx = XsltProfile.startTagRegExp(construct);
+        if (!tagRgx) {
+            return [];
+        }
+        const lineStarts = XsltProfile.lineStarts(text);
+        const declarations: ProfileDeclaration[] = [];
+        let m: RegExpExecArray | null;
+        while ((m = tagRgx.exec(text))) {
+            declarations.push(XsltProfile.declaration(m, lineStarts));
+        }
+        return declarations;
+    }
+
+    // of the declarations with the key, the one nearest the 0-based line
+    public static nearest(declarations: ProfileDeclaration[], construct: string, key: string, line: number): ProfileDeclaration | undefined {
+        let nearest: ProfileDeclaration | undefined;
+        for (const declaration of declarations) {
+            if (XsltProfile.declarationKey(construct, declaration.attributes) === key &&
+                (!nearest || Math.abs(declaration.line - line) < Math.abs(nearest.line - line))) {
+                nearest = declaration;
+            }
+        }
+        return nearest;
+    }
+
+    // a start tag of the construct's element, with any prefix: the element name, then the attributes
+    private static startTagRegExp(construct: string): RegExp | undefined {
+        const localName = construct.replace(/^[^:]*:/, '');
+        if (!/^[\w.-]+$/.test(localName)) {
             return undefined;
         }
+        return new RegExp(`<((?:[\\w.-]+:)?${localName.replace(/[.]/g, '\\.')})(?=[\\s/>])((?:[^>"']|"[^"]*"|'[^']*')*)>`, 'g');
+    }
+
+    private static declaration(found: RegExpExecArray, lineStarts: number[]): ProfileDeclaration {
         const position = (offset: number) => {
             const l = XsltProfile.lineOf(lineStarts, offset);
             return { line: l, character: offset - lineStarts[l] };
