@@ -2295,6 +2295,10 @@ export class XsltTokenDiagnostics {
 							const tokenOffset = document.offsetAt(new vscode.Position(token.line, token.startCharacter));
 							if (unResolvedToken !== null && !isCatchVariable && !(xspecScope && XsltTokenDiagnostics.isXSpecVariable(token.value, xspecPrefixes, xspecScope, tokenOffset))) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
+							} else if (unResolvedToken !== null && xspecScope?.onlyFromMissingImport && !XsltTokenDiagnostics.isXSpecBuiltInVariable(token.value, xspecPrefixes) &&
+								xspecScope.onlyFromMissingImport(token.value.substring(1), tokenOffset)) {
+								// XSpec: a variable that's not found, unless an x:import that isn't found declares it
+								problemTokens.push({ ...token, error: ErrorType.XSpecVariableFromMissingImport });
 							} else if (unResolvedToken !== null && xspecScope?.missingFrom) {
 								// XSpec: in a shared scenario, a variable only some of the scenarios using it with x:like declare
 								const missing = xspecScope.missingFrom(token.value.substring(1), tokenOffset);
@@ -4709,9 +4713,10 @@ export class XsltTokenDiagnostics {
 		const scopes = documentPath ? XSpecLike.scopes(documentText, documentPath) : undefined;
 		const inScope = scopes?.inScope;
 		const missingFrom = scopes?.missingFrom;
+		const onlyFromMissingImport = scopes?.onlyFromMissingImport;
 		const testsStylesheet = !!stylesheetPath && fs.existsSync(stylesheetPath);
 		const externalModules = XsltTokenDiagnostics.xspecExternalModulesOf(documentText, documentPath);
-		return { testsStylesheet, declared, inScope, missingFrom, externalModules, ...XsltTokenDiagnostics.xspecPackage(root, testsStylesheet ? stylesheetPath : undefined) };
+		return { testsStylesheet, declared, inScope, missingFrom, onlyFromMissingImport, externalModules, ...XsltTokenDiagnostics.xspecPackage(root, testsStylesheet ? stylesheetPath : undefined) };
 	}
 
 	// XSpec, run-as="external": the modules of the stylesheet tested, whose functions and global variables can't be used
@@ -4782,6 +4787,12 @@ export class XsltTokenDiagnostics {
 		if (!xspecScope.testsStylesheet || (xspecScope.inScope ? xspecScope.inScope(name, offset) : xspecScope.declared.has(name))) {
 			return true;
 		}
+		return XsltTokenDiagnostics.isXSpecBuiltInVariable(name, xspecPrefixes);
+	}
+
+	// one of XSpec's own variables, e.g. $x:result or $x:xspec-uri - with a prefix for its namespace, or as an EQName
+	private static isXSpecBuiltInVariable(reference: string, xspecPrefixes: string[]) {
+		const name = reference.startsWith('$') ? reference.substring(1) : reference;
 		const eqName = `Q{${XsltTokenDiagnostics.xspecNamespace}}`;
 		const colon = name.indexOf(':');
 		const localName = name.startsWith(eqName) ? name.substring(eqName.length) : colon > 0 && xspecPrefixes.includes(name.substring(0, colon)) ? name.substring(colon + 1) : undefined;
@@ -5651,6 +5662,10 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.MapKeyDuplicate:
 					msg = `XPath: Duplicate key in the map constructor: ${tokenValue}`;
+					break;
+				case ErrorType.XSpecVariableFromMissingImport:
+					msg = `XSpec: The variable ${tokenValue} isn't declared here - it may be declared in an XSpec file imported with x:import that isn't found`;
+					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.XSpecVariableNotInEveryCopy: {
 					const [variable, ...labels] = tokenValue.split('\u001f');

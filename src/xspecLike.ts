@@ -107,8 +107,10 @@ export class XSpecLike {
 	// - inScope: whether the variable is in scope in any copy - else it's unresolved
 	// - inEvery: whether it's in scope in every copy, for completion - any, where the uses aren't known
 	// - missingFrom: the labels of the scenarios whose x:like makes a copy where it isn't in scope, where it is in others
+	// - onlyFromMissingImport: whether it's in scope only as an x:import that isn't found may declare it
 	public static scopes(text: string, filePath: string): {
 		inScope: (name: string, offset: number) => boolean,
+		onlyFromMissingImport: (name: string, offset: number) => boolean,
 		inEvery: (name: string, offset: number) => boolean,
 		missingFrom: (name: string, offset: number) => string[],
 		declarationsOf: (name: string, offset: number) => XSpecVariableDeclaration[]
@@ -169,7 +171,7 @@ export class XSpecLike {
 		};
 		// a copy: the variables in scope in it - any, where they aren't known - and the label of the scenario whose x:like
 		// makes it, if one does
-		type Copy = { names: Declared | 'any', where?: string };
+		type Copy = { names: Declared | 'any', where?: string, missingImport?: boolean };
 		const copies = (f: XSpecFile, offset: number, seen: Set<string>): Copy[] => {
 			const key = `${f.file}#${offset}`;
 			if (seen.has(key) || !f.root) {
@@ -202,7 +204,7 @@ export class XSpecLike {
 			const innermostShared = [...scenarios].reverse().find((s) => s.scenario.shared);
 			const result: Copy[] = innermostShared ? [] : [{ names: declaredFrom(0), where: scenarios[scenarios.length - 1]?.scenario.label }];
 			if (incomplete) {
-				result.push({ names: 'any' });
+				result.push({ names: 'any', missingImport: true });
 			}
 			scenarios.filter((s) => !innermostShared || s.index >= innermostShared.index).forEach(({ index, scenario }) => {
 				const uses = files.flatMap((other) => other.likes.filter((like) => like.label === scenario.label && !XSpecLike.encloses(scenario, like)).map((like) => ({ other, like })));
@@ -213,7 +215,7 @@ export class XSpecLike {
 				uses.forEach(({ other, like }) => {
 					const where = [...ancestorsAt(other, like.elementStart)].reverse().map((e) => other.scenarios.find((s) => s.elementStart === e.start && isXSpec(other, e, 'scenario'))).find((s) => s)?.label;
 					copies(other, like.elementStart, seen).forEach((copy) =>
-						result.push({ names: copy.names === 'any' ? 'any' : merge(copy.names, within), where }));
+						result.push({ names: copy.names === 'any' ? 'any' : merge(copy.names, within), where, missingImport: copy.missingImport }));
 				});
 			});
 			return result;
@@ -237,13 +239,18 @@ export class XSpecLike {
 				const { expanded, copies } = lookup(name, offset);
 				return globals.has(expanded) || copies.some((copy) => has(copy, expanded));
 			},
+			onlyFromMissingImport: (name, offset) => {
+				const { expanded, copies } = lookup(name, offset);
+				return !globals.has(expanded) && copies.some((copy) => copy.missingImport) && !copies.some((copy) => !copy.missingImport && has(copy, expanded));
+			},
 			inEvery: (name, offset) => {
 				const { expanded, copies } = lookup(name, offset);
 				return globals.has(expanded) || copies.every((copy) => has(copy, expanded));
 			},
 			missingFrom: (name, offset) => {
 				const { expanded, copies } = lookup(name, offset);
-				if (globals.has(expanded) || !copies.some((copy) => has(copy, expanded))) {
+				// none where a copy's variables aren't known, e.g. with an x:import that isn't found: it may declare it
+				if (globals.has(expanded) || copies.some((copy) => copy.names === 'any') || !copies.some((copy) => has(copy, expanded))) {
 					return [];
 				}
 				return [...new Set(copies.filter((copy) => !has(copy, expanded)).map((copy) => copy.where ?? ''))];

@@ -816,6 +816,12 @@ suite('XSpec', () => {
 		assert.deepEqual(await problems(xspec(`${template}
 <x:scenario label="small"><x:variable name="width" select="1"/><x:like label="sized"/></x:scenario>
 <x:scenario label="large"><x:variable name="width" select="1000"/><x:like label="sized"/></x:scenario>`)), []);
+		// with an x:import that isn't found, e.g. a URI an XML catalog maps: a variable not declared here is a warning, as
+		// the import may declare it - not XSpec's own variable, with another prefix (as in XSpec's
+		// test/catalog/catalog-01_xspec-uri.xspec), or one declared here
+		assert.deepEqual((await problems(xspec(`<x:import href="catalog-01:/imported.xspec"/><x:variable name="here" select="1"/>
+<x:scenario label="outer"><x:call function="true"/><x:scenario label="in global variable"><x:expect label="e" test="$im:v eq $x:xspec-uri and $here"/></x:scenario></x:scenario>`, ' stylesheet="sut.xsl" xmlns:im="urn:im"'))).filter((p) => !p.includes('catalog')),
+			['XSpec: The variable $im:v isn\'t declared here - it may be declared in an XSpec file imported with x:import that isn\'t found']);
 		// names compared by namespace: a prefix, another prefix for it, or an EQName
 		assert.deepEqual(await problems(xspec(`<x:scenario label="s" xmlns:g="urn:f"><x:variable name="Q{urn:f}v" select="1"/><x:variable name="g:w" select="$f:v"/><x:context><p/></x:context><x:expect label="e" test="$f:w"/></x:scenario>`)), []);
 	});

@@ -2018,7 +2018,9 @@ export enum ErrorType {
 	MissingXsltAttribute,
     MapEntryNotMap,
     // XSpec: a variable in scope in some of the copies of a shared scenario that x:like makes, not all
-    XSpecVariableNotInEveryCopy
+    XSpecVariableNotInEveryCopy,
+    // XSpec: a variable in scope only as an x:import that isn't found may declare it
+    XSpecVariableFromMissingImport
 }
 
 export interface BaseToken {
