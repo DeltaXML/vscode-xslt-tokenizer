@@ -21,6 +21,12 @@ import { XmlElement, parseXml, localName, descendants, decodeReferences } from '
 // imports and, as an imported file is run from the file importing it, those importing it. For completion of the labels,
 // going to the scenario, finding the x:like elements using it, and the problems XSpec stops the run for
 
+// an x:variable, or an x:param of x:description or x:scenario: the file it's in, and its element there
+export interface XSpecVariableDeclaration {
+	file: string;
+	element: XmlElement;
+}
+
 export interface XSpecLabelled {
 	file: string;
 	label: string;
@@ -104,14 +110,29 @@ export class XSpecLike {
 	public static scopes(text: string, filePath: string): {
 		inScope: (name: string, offset: number) => boolean,
 		inEvery: (name: string, offset: number) => boolean,
-		missingFrom: (name: string, offset: number) => string[]
+		missingFrom: (name: string, offset: number) => string[],
+		declarationsOf: (name: string, offset: number) => XSpecVariableDeclaration[]
 	} {
 		const { own, importers } = XSpecLike.contexts(text, filePath);
 		const files = XSpecLike.union([own, ...importers]);
-		const globals = new Set(files.flatMap((f) => f.globals));
 		const incomplete = files.some((f) => f.importMissing);
 		const isXSpec = (f: XSpecFile, element: XmlElement, ...names: string[]) => names.some((name) => element.name === f.prefix + name);
 		const variableName = (element: XmlElement) => XSpecLike.expandedName(element.attributes.get('name')?.trim() ?? '', element);
+		// the declarations, by expanded name, each once
+		type Declared = Map<string, XSpecVariableDeclaration[]>;
+		const add = (declared: Declared, name: string, declarations: XSpecVariableDeclaration[]) => {
+			const list = declared.get(name) ?? [];
+			declarations.filter((d) => !list.some((e) => e.file === d.file && e.element === d.element)).forEach((d) => list.push(d));
+			declared.set(name, list);
+		};
+		const merge = (...all: Declared[]) => {
+			const result: Declared = new Map();
+			all.forEach((declared) => declared.forEach((declarations, name) => add(result, name, declarations)));
+			return result;
+		};
+		// x:description's x:variable and x:param elements, in any file of the run
+		const globals: Declared = new Map();
+		files.forEach((f) => (f.root?.children ?? []).filter((child) => isXSpec(f, child, 'variable', 'param')).forEach((element) => add(globals, variableName(element), [{ file: f.file, element }])));
 		const elements = new Map<XSpecFile, Map<number, XmlElement>>();
 		const elementAt = (f: XSpecFile, start: number) => {
 			if (!elements.has(f)) {
@@ -120,16 +141,23 @@ export class XSpecLike {
 			return elements.get(f)!.get(start);
 		};
 		// the variables the scenarios with the label declare, for the scenario using one with x:like
-		const declaredBy = (label: string, seen: Set<string>): string[] => {
+		const declaredBy = (label: string, seen: Set<string>): Declared => {
+			const result: Declared = new Map();
 			if (seen.has(label)) {
-				return [];
+				return result;
 			}
 			seen.add(label);
-			return files.flatMap((f) => f.scenarios.filter((scenario) => scenario.label === label).flatMap((scenario) => {
+			files.forEach((f) => f.scenarios.filter((scenario) => scenario.label === label).forEach((scenario) => {
 				const element = elementAt(f, scenario.elementStart);
-				return (element?.children ?? []).flatMap((child) => isXSpec(f, child, 'variable', 'param') ? [variableName(child) ?? ''] :
-					isXSpec(f, child, 'like') ? declaredBy(f.likes.find((like) => like.elementStart === child.start)?.label ?? '', seen) : []);
+				(element?.children ?? []).forEach((child) => {
+					if (isXSpec(f, child, 'variable', 'param')) {
+						add(result, variableName(child), [{ file: f.file, element: child }]);
+					} else if (isXSpec(f, child, 'like')) {
+						declaredBy(f.likes.find((like) => like.elementStart === child.start)?.label ?? '', seen).forEach((declarations, name) => add(result, name, declarations));
+					}
+				});
 			}));
+			return result;
 		};
 		// the elements an offset is in, outermost first
 		const ancestorsAt = (f: XSpecFile, offset: number) => {
@@ -141,17 +169,17 @@ export class XSpecLike {
 		};
 		// a copy: the variables in scope in it - any, where they aren't known - and the label of the scenario whose x:like
 		// makes it, if one does
-		type Copy = { names: Set<string> | 'any', where?: string };
+		type Copy = { names: Declared | 'any', where?: string };
 		const copies = (f: XSpecFile, offset: number, seen: Set<string>): Copy[] => {
 			const key = `${f.file}#${offset}`;
 			if (seen.has(key) || !f.root) {
-				return [{ names: new Set() }];
+				return [{ names: new Map() }];
 			}
 			seen = new Set(seen).add(key);
 			const ancestors = ancestorsAt(f, offset);
 			// those declared before the offset, by the scenarios from the ancestor at the index inwards
 			const declaredFrom = (from: number) => {
-				const names = new Set<string>();
+				const names: Declared = new Map();
 				for (let i = from + 1; i < ancestors.length; i++) {
 					const [parent, child] = [ancestors[i - 1], ancestors[i]];
 					if (!isXSpec(f, parent, 'scenario')) {
@@ -159,9 +187,9 @@ export class XSpecLike {
 					}
 					parent.children.filter((sibling) => sibling.end <= child.start).forEach((sibling) => {
 						if (isXSpec(f, sibling, 'variable', 'param')) {
-							names.add(variableName(sibling) ?? '');
+							add(names, variableName(sibling), [{ file: f.file, element: sibling }]);
 						} else if (isXSpec(f, sibling, 'like')) {
-							declaredBy(f.likes.find((like) => like.elementStart === sibling.start)?.label ?? '', new Set()).forEach((name) => names.add(name));
+							declaredBy(f.likes.find((like) => like.elementStart === sibling.start)?.label ?? '', new Set()).forEach((declarations, name) => add(names, name, declarations));
 						}
 					});
 				}
@@ -185,7 +213,7 @@ export class XSpecLike {
 				uses.forEach(({ other, like }) => {
 					const where = [...ancestorsAt(other, like.elementStart)].reverse().map((e) => other.scenarios.find((s) => s.elementStart === e.start && isXSpec(other, e, 'scenario'))).find((s) => s)?.label;
 					copies(other, like.elementStart, seen).forEach((copy) =>
-						result.push({ names: copy.names === 'any' ? 'any' : new Set([...copy.names, ...within]), where }));
+						result.push({ names: copy.names === 'any' ? 'any' : merge(copy.names, within), where }));
 				});
 			});
 			return result;
@@ -219,6 +247,13 @@ export class XSpecLike {
 					return [];
 				}
 				return [...new Set(copies.filter((copy) => !has(copy, expanded)).map((copy) => copy.where ?? ''))];
+			},
+			// the declarations a reference may be to: in any copy - more than one where a shared scenario's x:like elements
+			// bring in different ones - or else a global one. Not those of a copy whose variables aren't known
+			declarationsOf: (name, offset) => {
+				const { expanded, copies } = lookup(name, offset);
+				const local = merge(...copies.map((copy) => copy.names === 'any' ? new Map() : copy.names)).get(expanded) ?? [];
+				return local.length > 0 ? local : globals.get(expanded) ?? [];
 			}
 		};
 	}
@@ -235,6 +270,13 @@ export class XSpecLike {
 			}
 		});
 		return [...result.values()];
+	}
+
+	// the XSpec files gathered with the file - for any run it may be in, its own first - with their texts: an open
+	// document's, which may not be saved
+	public static gatheredFiles(text: string, filePath: string): { file: string, text: string }[] {
+		const open = XSpecLike.openDocuments();
+		return XSpecLike.all(text, filePath).map((f) => ({ file: f.file, text: XSpecSourceMap.samePath(f.file, filePath) ? text : XSpecLike.text(f.file, open) }));
 	}
 
 	// a variable's name as Q{uri}local, with the namespace its prefix is bound to on the element or an ancestor - a name

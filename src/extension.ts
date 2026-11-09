@@ -13,6 +13,7 @@ import { XSpecHrefs } from './xspecHrefs';
 import { XSpecLabels } from './xspecLabels';
 import { XSpecCompat } from './xspecCompat';
 import { XSpecRequired } from './xspecRequired';
+import { XSpecVariables } from './xspecVariables';
 import { XSpecExpectResult } from './xspecExpectResult';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecCleanup } from './xspecCleanup';
@@ -474,6 +475,8 @@ export function activate(context: vscode.ExtensionContext) {
 	requestSymbolsForProblems(context, ['xslt', 'dcp', 'sch', 'xspec', 'xml', 'bpmn']);
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xspec' }, xspecDefinitionProvider));
+	// a variable the XSpec file declares: each declaration it may be - one for each x:like using a shared scenario
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xspec' }, { provideDefinition: (document, position) => XSpecVariables.definition(document, position) }));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp' }, dcpDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'sch' }, schDefintiionProvider));
@@ -499,19 +502,22 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xpath' }, new XSLTSignatureHelpProvider(XPathConfiguration.configuration), '(', ','));
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	// a scenario's label, or an x:like's: the x:like elements using the scenario
-	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'xspec' }, { provideReferences: (document, position, referenceContext) => XSpecLike.references(document, position, referenceContext.includeDeclaration) }));
+	// and a variable's: its references, as XSpec scopes them (see XSpecVariables)
+	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'xspec' }, { provideReferences: (document, position, referenceContext) =>
+		XSpecVariables.references(document, position, referenceContext.includeDeclaration) ?? XSpecLike.references(document, position, referenceContext.includeDeclaration) }));
 	// and renamed there, and x:like's hover: the scenario it uses
 	context.subscriptions.push(vscode.languages.registerRenameProvider({ language: 'xspec' }, {
 		prepareRename: (document, position) => {
-			const label = XSpecLike.prepareRename(document, position);
-			if (!label) {
-				throw new Error('Only a scenario\'s label, or an x:like\'s, can be renamed');
+			const renamed = XSpecLike.prepareRename(document, position) ?? XSpecVariables.prepareRename(document, position);
+			if (!renamed) {
+				throw new Error('Only a scenario\'s label, an x:like\'s, or a variable declared in the XSpec file can be renamed');
 			}
-			return label;
+			return renamed;
 		},
-		provideRenameEdits: (document, position, newName) => XSpecLike.renameEdits(document, position, newName)
+		provideRenameEdits: (document, position, newName) => XSpecLike.prepareRename(document, position) ?
+			XSpecLike.renameEdits(document, position, newName) : XSpecVariables.renameEdits(document, position, newName)
 	}));
-	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecLike.hover(document, position) ?? XSpecLike.importHover(document, position) ??
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecVariables.hover(document, position) ?? XSpecLike.hover(document, position) ?? XSpecLike.importHover(document, position) ??
 		XSpecPackages.hover(document, position, XSLTHoverProvider.componentsMarkdown) }));
 	// x:helper's package-name and package-version
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, { provideCompletionItems: (document, position) => XSpecPackages.completions(document, position) }, '"', '\''));

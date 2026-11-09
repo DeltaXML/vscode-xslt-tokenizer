@@ -304,6 +304,56 @@ suite('XSpec', () => {
 		assert.include(await completions(xspec(`<x:scenario label="s"><x:call function="|"/></x:scenario>`, ' stylesheet="sut.xsl" run-as="external"')), 'f:double');
 	});
 
+	test('XSpec variables: definition, references, rename and hover - as XSpec scopes them, through x:like too', async () => {
+		// line:character of a location, in a file at<n>.xspec written for each request
+		const where = (locations: unknown[]) => (locations as (vscode.Location | vscode.LocationLink)[]).map((l) => 'uri' in l ?
+			`${path.basename(l.uri.fsPath).replace(/^at\d+/, 'at')}:${l.range.start.line}:${l.range.start.character}` : `${path.basename(l.targetUri.fsPath).replace(/^at\d+/, 'at')}:${l.targetRange.start.line}`).sort();
+		// where the text after the marker is, in the content without the marker: the nth occurrence of the text
+		const position = (content: string, text: string, n = 1) => {
+			let offset = -1;
+			for (let i = 0; i < n; i++) {
+				offset = content.indexOf(text, offset + 1);
+			}
+			const lines = content.substring(0, offset).split('\n');
+			return `at.xspec:${lines.length - 1}:${lines[lines.length - 1].length}`;
+		};
+		const body = `<x:variable name="glob" select="1"/>
+<x:scenario label="s">
+  <x:variable name="loc" select="2"/>
+  <x:call function="f:double"><x:param select="$lo|c + $glob"/></x:call>
+  <x:expect label="e" test="$x:result = $loc and (every $loc in (1, 2) satisfies $loc gt 0)"/>
+</x:scenario>
+<x:scenario label="other"><x:variable name="loc" select="3"/><x:call function="f:double"><x:param select="$loc"/></x:call><x:expect label="e" select="6"/></x:scenario>`;
+		const content = xspec(body);
+		const plain = content.replace('|', '');
+		const declaration = position(plain, 'loc" select="2"');
+		const uses = [position(plain, 'loc + $glob'), position(plain, 'loc and (every')];
+		assert.deepEqual(where(await at(content, 'vscode.executeDefinitionProvider')), [declaration]);
+		// its references: not those bound by every, or of the other scenario's $loc
+		assert.deepEqual(where(await at(content, 'vscode.executeReferenceProvider')), [declaration, ...uses].sort());
+		// from the declaration too
+		assert.deepEqual(where(await at(plain.replace('name="loc" select="2"', 'name="l|oc" select="2"'), 'vscode.executeReferenceProvider')), [declaration, ...uses].sort());
+		assert.include(hoverText(await at(content, 'vscode.executeHoverProvider')), '<x:variable name="loc" select="2"/>');
+		// a global one, and the stylesheet's - left to the XSLT providers
+		assert.deepEqual(where(await at(plain.replace('$glob"', '$gl|ob"'), 'vscode.executeDefinitionProvider')), [position(plain, 'glob" select')]);
+		assert.deepEqual(where(await at(xspec(`<x:scenario label="s"><x:expect label="e" test="$f:gree|ting"/></x:scenario>`), 'vscode.executeDefinitionProvider')).map((l) => l.replace(/:\d+$/, '')), ['sut.xsl:1']);
+
+		// rename: the declaration and its references
+		const renameFile = file(`rename${count++}.xspec`, plain);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(renameFile));
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', document.uri, document.positionAt(plain.indexOf('$loc + ') + 2), 'size');
+		assert.deepEqual(edit.get(document.uri).map((e) => `at.xspec:${e.range.start.line}:${e.range.start.character} ${e.newText}`).sort(), [declaration, ...uses].sort().map((p) => `${p} size`));
+
+		// in a shared scenario: each declaration it may be - one for each x:like using it - and each one's references include it
+		const shared = xspec(`<x:scenario label="sized" shared="yes"><x:call function="f:double"><x:param select="$wid|th"/></x:call><x:expect label="e" test="$x:result gt 0"/></x:scenario>
+<x:scenario label="small"><x:variable name="width" select="1"/><x:like label="sized"/></x:scenario>
+<x:scenario label="large"><x:variable name="width" select="1000"/><x:like label="sized"/></x:scenario>`);
+		const sharedPlain = shared.replace('|', '');
+		assert.deepEqual(where(await at(shared, 'vscode.executeDefinitionProvider')), [position(sharedPlain, 'width" select="1"'), position(sharedPlain, 'width" select="1000"')].sort());
+		const fromSmall = sharedPlain.replace('name="width" select="1"', 'name="wi|dth" select="1"');
+		assert.deepEqual(where(await at(fromSmall, 'vscode.executeReferenceProvider')), [position(sharedPlain, 'width" select="1"'), position(sharedPlain, 'width"/></x:call>')].sort());
+	});
+
 	test('hover: an XSpec element\'s description, and the signature of a function of the stylesheet under test', async () => {
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:exp|ect label="e" select="1"/></x:scenario>`), 'vscode.executeHoverProvider')), 'x:expect');
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:context select="1"/><x:expect label="e" test="f:dou|ble(1) = 2"/></x:scenario>`), 'vscode.executeHoverProvider')), 'f:double');
