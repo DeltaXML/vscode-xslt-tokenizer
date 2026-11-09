@@ -42,6 +42,7 @@ export interface XSpecDeclaration {
 
 export class XSpecScenario {
 	public static readonly command = 'xslt-xpath.createXSpecScenario';
+	private static readonly xsNamespace = 'http://www.w3.org/2001/XMLSchema';
 	public static readonly fileCommand = 'xslt-xpath.createXSpecFile';
 
 	// the cursor is in the start tag of the stylesheet's or package's outermost element
@@ -171,7 +172,8 @@ export class XSpecScenario {
 		}
 		const beside = vscode.Uri.file(path.join(path.dirname(stylesheetPath), path.basename(stylesheetPath, path.extname(stylesheetPath)) + '.xspec'));
 		if (!fs.existsSync(beside.fsPath)) {
-			fs.writeFileSync(beside.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n<x:description xmlns:x="${XSpecTests.namespace}"\n               stylesheet="${path.basename(stylesheetPath)}">\n</x:description>\n`);
+			// with xs, as test values are often typed
+			fs.writeFileSync(beside.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n<x:description xmlns:x="${XSpecTests.namespace}"\n               xmlns:xs="${XSpecScenario.xsNamespace}"\n               stylesheet="${path.basename(stylesheetPath)}">\n</x:description>\n`);
 		}
 		return beside;
 	}
@@ -341,7 +343,9 @@ export class XSpecScenario {
 				}
 				packageForm = picked.form;
 			}
-			const xmlns = [...used].map(([p, uri]) => `\n               xmlns:${p}="${uri}"`).join('');
+			// with xs, as test values are often typed - first, unless the declarations use it already
+			const withXs = used.has('xs') ? used : new Map([['xs', XSpecScenario.xsNamespace], ...used]);
+			const xmlns = [...withXs].map(([p, uri]) => `\n               xmlns:${p}="${uri}"`).join('');
 			const attribute = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 			let content: string;
 			if (packageDeclaration && packageForm === 'helper') {

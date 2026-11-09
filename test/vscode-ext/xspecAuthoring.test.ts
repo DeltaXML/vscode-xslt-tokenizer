@@ -66,8 +66,9 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		assert.include(text, '<x:param as="xs:double" select="1"/><!-- $width -->');
 		assert.include(text, '<x:param as="xs:string" select="\'text\'"/><!-- $label -->');
 		assert.include(text, '<x:expect label="the result" select="()"/>');
-		// the function's namespace, and xs for the types, declared on x:description
-		assert.match(text, /<x:description [^>]*xmlns:f="urn:f" xmlns:xs="http:\/\/www.w3.org\/2001\/XMLSchema">/);
+		// xs, in any new XSpec file, and the function's namespace, declared on x:description - xs once
+		assert.match(text, /<x:description [^>]*xmlns:xs="http:\/\/www.w3.org\/2001\/XMLSchema"[^>]*xmlns:f="urn:f">/);
+		assert.strictEqual(text.split('xmlns:xs=').length, 2);
 		assert.include(text, '<x:scenario label="f:area">');
 		await editor!.document.save();
 		const problems = await moduleDiagnostics.call(XsltSymbolProvider, editor!.document, false, XSpecConfiguration.configuration);
@@ -161,6 +162,7 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 			const editor = await XSpecScenario.createFile(vscode.Uri.file(packagePath), undefined, 'external');
 			const text = editor!.document.getText();
 			assert.include(text, 'run-as="external"');
+			assert.include(text, 'xmlns:xs="http://www.w3.org/2001/XMLSchema"');
 			assert.include(text, `stylesheet="${path.basename(packagePath)}"`);
 			assert.notInclude(text, 'x:helper');
 			assert.include(text, '<x:call function="s:area">');
@@ -191,6 +193,7 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 			const harness = `${path.basename(packagePath, '.xsl')}-xspec-harness.xsl`;
 			assert.include(text, `stylesheet="${harness}"`);
 			assert.include(text, '<x:helper package-name="urn:parts" package-version="2.0"/>');
+			assert.include(text, 'xmlns:xs="http://www.w3.org/2001/XMLSchema"');
 			assert.notInclude(text, 'run-as');
 			assert.include(text, '<x:call function="s:area">');
 			assert.notInclude(text, 's:hidden');
