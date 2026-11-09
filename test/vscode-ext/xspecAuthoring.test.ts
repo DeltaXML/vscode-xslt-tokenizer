@@ -8,6 +8,8 @@ import * as path from 'path';
 import { assert } from 'chai';
 import * as vscode from 'vscode';
 import { XSpecScenario } from '../../src/xspecScenario';
+import { XSpecSnippets } from '../../src/xspecSnippets';
+import { XSpecRequired } from '../../src/xspecRequired';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSpecConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
@@ -435,5 +437,49 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		const variables = list.items.filter((item) => item.kind === vscode.CompletionItemKind.Variable).map((item) => typeof item.label === 'string' ? item.label : item.label.label);
 		assert.include(variables, '$width');
 		assert.notInclude(variables, '$only-small');
+	});
+
+	test('XSpec element snippets: every form has the attributes XSpec requires of the element', () => {
+		// each element with a rule, where its snippets are offered - x:param in x:call or x:context is completed for
+		// each parameter of the function or template instead
+		const placed: [string, string][] = [['variable', 'scenario'], ['param', 'description'], ['param', 'scenario'], ['import', 'description'],
+			['like', 'scenario'], ['scenario', 'description'], ['expect', 'scenario'], ['helper', 'description']];
+		for (const [element, parent] of placed) {
+			const rule = XSpecRequired.ruleFor(element, parent, () => false);
+			const snippets = XSpecSnippets.forElement(`x:${element}`, parent);
+			assert.isDefined(rule, element);
+			assert.isNotEmpty(snippets, element);
+			for (const snippet of snippets!) {
+				assert.isTrue(rule!.oneOf.some((attribute) => snippet.body.includes(` ${attribute}="`)), `${snippet.label}: ${snippet.body}`);
+			}
+		}
+		// with the prefix the file uses
+		assert.strictEqual(XSpecSnippets.forElement('t:like', 'scenario')![0].body, 't:like label="$1"/>$0');
+		assert.isUndefined(XSpecSnippets.forElement('x:param', 'call'));
+	});
+
+	test('XSpec element completion: each form of an element, with the list of values shown where they have completion', async () => {
+		const uri = stylesheet(`forms${count++}.xsl`);
+		const xspecPath = path.join(dir, `forms${count++}.xspec`);
+		const content = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.basename(uri.fsPath)}">
+  <x:scenario label="s">
+    <
+  </x:scenario>
+</x:description>`;
+		fs.writeFileSync(xspecPath, content);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		await vscode.window.showTextDocument(document);
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(content.indexOf('<\n') + 1));
+		const items = new Map(list.items.map((item) => [typeof item.label === 'string' ? item.label : item.label.label, item]));
+		const body = (label: string) => (items.get(label)?.insertText as vscode.SnippetString | undefined)?.value;
+		assert.strictEqual(body('x:expect'), 'x:expect label="$1" select="$2"/>$0');
+		assert.strictEqual(body('x:expect (test)'), 'x:expect label="$1" test="$2"/>$0');
+		assert.strictEqual(body('x:expect (content)'), 'x:expect label="$1">\n\t$0\n</x:expect>');
+		assert.strictEqual(body('x:call'), 'x:call function="$1">\n\t$0\n</x:call>');
+		assert.strictEqual(body('x:call (template)'), 'x:call template="$1">\n\t$0\n</x:call>');
+		assert.strictEqual(body('x:context (href)'), 'x:context href="$1" select="$2"/>$0');
+		assert.strictEqual(body('x:like'), 'x:like label="$1"/>$0');
+		assert.strictEqual(items.get('x:like')?.command?.command, 'editor.action.triggerSuggest');
+		assert.isUndefined(items.get('x:expect')?.command);
 	});
 });

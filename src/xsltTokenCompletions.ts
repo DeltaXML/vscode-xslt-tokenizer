@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { XSpecScenario } from './xspecScenario';
 import { XSpecLike } from './xspecLike';
+import { XSpecSnippets } from './xspecSnippets';
 import { XslLexerLight } from './xslLexerLight';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, Data } from './xpLexer';
@@ -3389,19 +3390,22 @@ export class XsltTokenCompletions {
 					newItem.insertText = new vscode.SnippetString('subtreeProcessingMode defaultMode="${1:text}">\n\t<subtrees>\n\t\t<subtree elemXpath="${3:/container}" mode="${4:data}"/>$0\n\t</subtrees>\n</subtreeProcessingMode>');
 					completionItems.push(newItem);
 				}
-			} else if (docType === DocumentTypes.XSPEC && XsltTokenCompletions.isXSpecDeclaration(tagName, XsltTokenCompletions.parentInText(document, pos))) {
-				// x:variable - or x:param of x:description or x:scenario - with its name and type, for the value in select or
-				// as content, e.g. XML test data. The type is a placeholder: typing there lists the types, as for any 'as'
-				useCurrent = false;
-				const start = `${tagName} name="\${1:name}" as="\${2:item()*}"`;
-				const withSelect = new vscode.CompletionItem(tagName + ' (select)', vscode.CompletionItemKind.Struct);
-				withSelect.documentation = tagDetail.length > 0 ? tagDetail : undefined;
-				withSelect.insertText = new vscode.SnippetString(`${start} select="$3"/>$0`);
-				completionItems.push(withSelect);
-				const withContent = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
-				withContent.documentation = tagDetail.length > 0 ? tagDetail : undefined;
-				withContent.insertText = new vscode.SnippetString(`${start}>\n\t$0\n</${tagName}>`);
-				completionItems.push(withContent);
+			} else if (docType === DocumentTypes.XSPEC) {
+				// each form an XSpec element is written in, with the attributes it needs (see XSpecSnippets)
+				const parent = XsltTokenCompletions.parentInText(document, pos)?.replace(/^.*:/, '');
+				const snippets = XSpecSnippets.forElement(tagName, parent);
+				if (snippets) {
+					useCurrent = false;
+					snippets.forEach((snippet) => {
+						const item = new vscode.CompletionItem(snippet.label, vscode.CompletionItemKind.Struct);
+						item.documentation = tagDetail.length > 0 ? tagDetail : undefined;
+						item.insertText = new vscode.SnippetString(snippet.body);
+						if (snippet.suggest) {
+							item.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
+						}
+						completionItems.push(item);
+					});
+				}
 			}
 			if (useCurrent) {
 				switch (snippetAttrs.length) {
@@ -3442,13 +3446,6 @@ export class XsltTokenCompletions {
 			}
 		});
 		return completionItems;
-	}
-
-	// in an XSpec file: an element that declares a variable - x:variable, or x:param in x:description or x:scenario (a
-	// global or scenario parameter, not one passed by x:call, x:context or x:apply)
-	private static isXSpecDeclaration(tagName: string, parent: string | null) {
-		const localName = (name: string | null) => name?.replace(/^.*:/, '') ?? '';
-		return localName(tagName) === 'variable' || (localName(tagName) === 'param' && ['description', 'scenario'].includes(localName(parent)));
 	}
 
 	// the name of the element a '<' just typed is in, from the text before it - the element stack can end before, e.g.

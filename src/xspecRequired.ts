@@ -56,6 +56,31 @@ export class XSpecRequired {
 		});
 	}
 
+	// the attributes an XSpec element must have - one of them, for oneOf; 'label' is a label attribute or an x:label child
+	// - by its local name, and for x:param, where it is. fails: XSpec fails without it, so it's an error
+	public static ruleFor(element: string, parent: string | undefined, parentHas: (attribute: string) => boolean): { oneOf: string[], fails: boolean } | undefined {
+		switch (element) {
+			case 'variable':
+				return { oneOf: ['name'], fails: false };
+			case 'param': {
+				// a function's parameters are passed in order - a template's, and those of x:context, by name
+				const isTemplateParam = parent === 'context' || (parent === 'call' && parentHas('template'));
+				return isTemplateParam || parent === 'description' || parent === 'scenario' ? { oneOf: ['name'], fails: isTemplateParam } : undefined;
+			}
+			case 'import':
+				return { oneOf: ['href'], fails: true };
+			case 'like':
+				return { oneOf: ['label'], fails: true };
+			case 'scenario':
+			case 'expect':
+				return { oneOf: ['label'], fails: false };
+			case 'helper':
+				return { oneOf: ['stylesheet', 'package-name', 'query', 'xproc'], fails: false };
+			default:
+				return undefined;
+		}
+	}
+
 	// the elements with an attribute missing: from x:description, not within user content - e.g. x:context's or
 	// x:expect's, where an element with the XSpec prefix isn't XSpec's
 	private static missing(text: string): { element: XmlElement, prefix: string, attribute?: string, oneOf?: string[], severity: vscode.DiagnosticSeverity }[] {
@@ -71,45 +96,10 @@ export class XSpecRequired {
 		const { Error, Warning } = vscode.DiagnosticSeverity;
 		const userContent = ['context', 'expect', 'param', 'variable', 'input', 'option', 'label', 'text'];
 		const visit = (element: XmlElement) => {
-			const parent = name(element.parent);
-			switch (name(element)) {
-				case 'variable':
-					if (!has(element, 'name')) {
-						result.push({ element, prefix, attribute: 'name', severity: Warning });
-					}
-					break;
-				case 'param':
-					if (!has(element, 'name')) {
-						// a function's parameters are passed in order - a template's, and those of x:context, by name
-						const isTemplateParam = parent === 'context' || (parent === 'call' && has(element.parent!, 'template'));
-						if (isTemplateParam || parent === 'description' || parent === 'scenario') {
-							result.push({ element, prefix, attribute: 'name', severity: isTemplateParam ? Error : Warning });
-						}
-					}
-					break;
-				case 'import':
-					if (!has(element, 'href')) {
-						result.push({ element, prefix, attribute: 'href', severity: Error });
-					}
-					break;
-				case 'like':
-					if (!hasLabel(element)) {
-						result.push({ element, prefix, attribute: 'label', severity: Error });
-					}
-					break;
-				case 'scenario':
-				case 'expect':
-					if (!hasLabel(element)) {
-						result.push({ element, prefix, attribute: 'label', severity: Warning });
-					}
-					break;
-				case 'helper': {
-					const oneOf = ['stylesheet', 'package-name', 'query', 'xproc'];
-					if (!oneOf.some((attribute) => has(element, attribute))) {
-						result.push({ element, prefix, oneOf, severity: Warning });
-					}
-					break;
-				}
+			const parent = element.parent;
+			const rule = XSpecRequired.ruleFor(name(element) ?? '', name(parent), (attribute) => !!parent && has(parent, attribute));
+			if (rule && !rule.oneOf.some((attribute) => attribute === 'label' ? hasLabel(element) : has(element, attribute))) {
+				result.push({ element, prefix, ...(rule.oneOf.length === 1 ? { attribute: rule.oneOf[0] } : { oneOf: rule.oneOf }), severity: rule.fails ? Error : Warning });
 			}
 			// within user content, only x:context's own x:param elements
 			const own = name(element) ?? '';
