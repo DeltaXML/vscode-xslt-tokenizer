@@ -501,21 +501,76 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xslt' }, new XSLTSignatureHelpProvider(XSLTConfiguration.configuration, xsltDefintiionProvider), '(', ',', '"', '\'', '<'));
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xpath' }, new XSLTSignatureHelpProvider(XPathConfiguration.configuration), '(', ','));
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({language: 'xslt'}, new XSLTReferenceProvider()));
+	// in an XSpec file, the function, named template or mode of the stylesheet under test whose name is at the position,
+	// e.g. x:call's function or x:context's mode: its declaration, and the name's range
+	const stylesheetComponentAt = async (document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken) => {
+		const nameRange = document.getWordRangeAtPosition(position, /Q\{[^}]*\}[\w.-]+|[\w.-]+(?::[\w.-]+)?/);
+		const definition = nameRange ? await xspecDefinitionProvider.provideDefinition(document, position, token) : undefined;
+		const componentTypes = [GlobalInstructionType.Function, GlobalInstructionType.Template, GlobalInstructionType.Mode, GlobalInstructionType.ModeInstruction, GlobalInstructionType.ModeTemplate];
+		if (!nameRange || !definition?.instruction || !componentTypes.includes(definition.instruction.type) || definition.uri.scheme !== 'file' || definition.uri.toString() === document.uri.toString()) {
+			return undefined;
+		}
+		return { definition, declarationDocument: await vscode.workspace.openTextDocument(definition.uri), nameRange };
+	};
 	// a scenario's label, or an x:like's: the x:like elements using the scenario
 	// and a variable's: its references, as XSpec scopes them (see XSpecVariables)
-	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'xspec' }, { provideReferences: (document, position, referenceContext) =>
-		XSpecVariables.references(document, position, referenceContext.includeDeclaration) ?? XSpecLike.references(document, position, referenceContext.includeDeclaration) }));
-	// and renamed there, and x:like's hover: the scenario it uses
+	// and a function, named template or mode of the stylesheet under test, e.g. x:call's function or x:context's mode: its
+	// references in the stylesheets and the XSpec files, as found from its declaration
+	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'xspec' }, { provideReferences: async (document, position, referenceContext, token) => {
+		const xspecReferences = XSpecVariables.references(document, position, referenceContext.includeDeclaration) ?? XSpecLike.references(document, position, referenceContext.includeDeclaration);
+		if (xspecReferences) {
+			return xspecReferences;
+		}
+		const component = await stylesheetComponentAt(document, position, token);
+		if (!component) {
+			return undefined;
+		}
+		const { definition, declarationDocument } = component;
+		const references = await new XSLTReferenceProvider().provideReferences(declarationDocument, definition.range.start, referenceContext, token) ?? [];
+		return referenceContext.includeDeclaration ? references : references.filter((l) => !(l.uri.toString() === definition.uri.toString() && l.range.intersection(definition.range)));
+	} }));
+	// and renamed there, and x:like's hover: the scenario it uses - and a function, named template or mode of the
+	// stylesheet under test, renamed from its declaration
 	context.subscriptions.push(vscode.languages.registerRenameProvider({ language: 'xspec' }, {
-		prepareRename: (document, position) => {
+		prepareRename: async (document, position, token) => {
 			const renamed = XSpecLike.prepareRename(document, position) ?? XSpecVariables.prepareRename(document, position);
-			if (!renamed) {
-				throw new Error('Only a scenario\'s label, an x:like\'s, or a variable declared in the XSpec file can be renamed');
+			if (renamed) {
+				return renamed;
 			}
-			return renamed;
+			const component = await stylesheetComponentAt(document, position, token);
+			if (!component) {
+				throw new Error('Only a scenario\'s label, an x:like\'s, a variable declared in the XSpec file, or a function, template or mode of the stylesheet can be renamed');
+			}
+			// the declaration's other declarations may prevent it, e.g. an overriding function
+			try {
+				await new XSLTReferenceProvider().prepareRename(component.declarationDocument, component.definition.range.start, token);
+			} catch (reason) {
+				throw reason instanceof Error ? reason : new Error(String(reason));
+			}
+			return { range: component.nameRange, placeholder: document.getText(component.nameRange) };
 		},
-		provideRenameEdits: (document, position, newName) => XSpecLike.prepareRename(document, position) ?
-			XSpecLike.renameEdits(document, position, newName) : XSpecVariables.renameEdits(document, position, newName)
+		provideRenameEdits: async (document, position, newName, token) => {
+			if (XSpecLike.prepareRename(document, position)) {
+				return XSpecLike.renameEdits(document, position, newName);
+			}
+			if (XSpecVariables.prepareRename(document, position)) {
+				return XSpecVariables.renameEdits(document, position, newName);
+			}
+			const component = await stylesheetComponentAt(document, position, token);
+			if (!component) {
+				return undefined;
+			}
+			// the new name with the XSpec file's prefix, e.g. g:triple for g:double, is given the declaration's, e.g. f:triple
+			const { definition, declarationDocument, nameRange } = component;
+			const prefixOf = (name: string) => /^([^:{]+):/.exec(name)?.[1];
+			const xspecPrefix = prefixOf(document.getText(nameRange));
+			// the instruction's name has the XSpec file's prefix: the declaration's own is in its text
+			const declarationPrefix = prefixOf(declarationDocument.getText(definition.range).replace(/^["']/, ''));
+			const name = xspecPrefix !== undefined && declarationPrefix !== undefined && prefixOf(newName) === xspecPrefix ? declarationPrefix + newName.substring(newName.indexOf(':')) : newName;
+			const provider = new XSLTReferenceProvider();
+			await provider.prepareRename(declarationDocument, definition.range.start, token);
+			return provider.provideRenameEdits(declarationDocument, definition.range.start, name, token);
+		}
 	}));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecVariables.hover(document, position) ?? XSpecLike.hover(document, position) ?? XSpecLike.scenarioHover(document, position, 'label') ?? XSpecLike.importHover(document, position) ??
 		XSpecPackages.hover(document, position, XSLTHoverProvider.componentsMarkdown) }));

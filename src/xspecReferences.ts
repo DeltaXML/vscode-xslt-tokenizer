@@ -18,14 +18,14 @@ import { HrefPaths } from './hrefPaths';
 import { XSpecSourceMap } from './xspecSourceMap';
 import { XSpecPackages } from './xspecPackages';
 
-// The uses of a stylesheet's function or named template in the XSpec files that test it - for Find All References and
-// Rename (see XSLTReferenceProvider): x:call's function or template, and function calls in XPath expressions, e.g. a
+// The uses of a stylesheet's function, named template or mode in the XSpec files that test it - for Find All References and
+// Rename (see XSLTReferenceProvider): x:call's function or template, x:context's mode, and function calls in XPath expressions, e.g. a
 // test="f:double(2) = 4". Names are compared with their namespaces, as an XSpec file may use another prefix
 export class XSpecReferences {
 
 	// the locations of the names, in the XSpec files whose stylesheet - or helper - is one of the modules, e.g. the module
 	// declaring it, or a stylesheet that imports it
-	public static async find(kind: 'function' | 'template', expandedName: string, modules: string[]): Promise<vscode.Location[]> {
+	public static async find(kind: 'function' | 'template' | 'mode', expandedName: string, modules: string[]): Promise<vscode.Location[]> {
 		const locations: vscode.Location[] = [];
 		// the workspace's XSpec files, and any open in an editor
 		const uris = await vscode.workspace.findFiles('**/*.xspec', '**/node_modules/**');
@@ -72,7 +72,7 @@ export class XSpecReferences {
 		return [...stylesheets, ...packages].some((file) => modules.some((module) => XSpecSourceMap.samePath(module, file)));
 	}
 
-	private static inXSpec(text: string, uri: vscode.Uri, kind: 'function' | 'template', expandedName: string): vscode.Location[] {
+	private static inXSpec(text: string, uri: vscode.Uri, kind: 'function' | 'template' | 'mode', expandedName: string): vscode.Location[] {
 		const lexer = new XslLexer(XSpecConfiguration.configuration);
 		const tokens = lexer.analyse(text);
 		const bindings = lexer.prefixBindings;
@@ -89,8 +89,8 @@ export class XSpecReferences {
 			return new vscode.Position(line, offset - lineStarts[line]);
 		};
 		const locations: vscode.Location[] = [];
-		// x:call function="…" or template="…"
-		const callPattern = new RegExp(`<${prefix ? prefix + ':' : ''}call\\b[^>]*>`, 'g');
+		// x:call function="…" or template="…" - or x:context mode="…"
+		const callPattern = new RegExp(`<${prefix ? prefix + ':' : ''}${kind === 'mode' ? 'context' : 'call'}\\b[^>]*>`, 'g');
 		for (const call of text.matchAll(callPattern)) {
 			const attribute = new RegExp(`\\s${kind}\\s*=\\s*(["'])(\\s*)([^"']*?)\\s*\\1`).exec(call[0]);
 			if (attribute && ModulePrefixes.expandedName(attribute[3], bindings) === expandedName) {

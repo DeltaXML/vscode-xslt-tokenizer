@@ -676,6 +676,54 @@ suite('XSpec', () => {
 		assert.deepEqual(edit.get(vscode.Uri.file(tested)).map((e) => e.newText), ['g:triple', 'g:triple']);
 	});
 
+	test('find all references to a mode of the stylesheet: x:context\'s mode in the XSpec files testing it - and from the XSpec file, the stylesheet\'s references', async () => {
+		const tested = file(`modeRefs${count++}.xspec`, `<x:description ${xspecNs} xmlns:g="urn:f" stylesheet="sut.xsl">
+  <x:scenario label="s"><x:context mode="g:para"><p/></x:context><x:expect label="e" select="()"/></x:scenario>
+  <x:scenario label="t"><x:context mode="#default"><p/></x:context><x:expect label="e" select="()"/></x:scenario>
+  <x:scenario label="u"><x:call function="g:double"><x:param select="1"/></x:call><x:expect label="e" select="2"/></x:scenario>
+</x:description>`);
+		const xspecDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(tested));
+		const sut = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'sut.xsl')));
+		const describe = (locations: vscode.Location[]) => locations.map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line + 1}`).sort();
+		const offset = sut.getText().indexOf('mode="f:para"') + 7;
+		const fromMode = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', sut.uri, sut.positionAt(offset));
+		assert.includeMembers(describe(fromMode), ['sut.xsl:5', `${path.basename(tested)}:2`]);
+		assert.notInclude(describe(fromMode), `${path.basename(tested)}:3`);
+		// from the XSpec file: the same, for x:context's mode and x:call's function
+		const xspecAt = (text: string) => xspecDocument.positionAt(xspecDocument.getText().indexOf(text) + 2);
+		const fromContext = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', xspecDocument.uri, xspecAt('g:para'));
+		assert.deepEqual(describe(fromContext), describe(fromMode));
+		const fromCall = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', xspecDocument.uri, xspecAt('g:double'));
+		assert.includeMembers(describe(fromCall), ['sut.xsl:3', `${path.basename(tested)}:4`]);
+		// renamed in the XSpec file too
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', sut.uri, sut.positionAt(offset), 'f:para2');
+		assert.deepEqual(edit.get(vscode.Uri.file(tested)).map((e) => e.newText), ['g:para2']);
+		// and from the XSpec file, with its prefix: the stylesheet keeps its own
+		const fromXSpec = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', xspecDocument.uri, xspecAt('g:double'), 'g:triple');
+		assert.deepEqual(fromXSpec.get(vscode.Uri.file(tested)).map((e) => e.newText), ['g:triple']);
+		assert.include(fromXSpec.get(sut.uri).map((e) => e.newText), 'f:triple');
+		assert.notInclude(fromXSpec.get(sut.uri).map((e) => e.newText), 'g:triple');
+	});
+
+	test('duplicate labels: a warning for sibling scenarios, or a scenario\'s expectations, with the same label', async () => {
+		const ctx = '<x:context><p/></x:context>';
+		// siblings at the top level, with an x:label, and in x:pending
+		assert.deepEqual(await problems(xspec(`<x:scenario label="a">${ctx}<x:expect label="e" select="()"/></x:scenario>
+<x:scenario><x:label> a </x:label>${ctx}<x:expect label="e" select="()"/></x:scenario>
+<x:pending><x:scenario label="a">${ctx}<x:expect label="e" select="()"/></x:scenario></x:pending>`)), [
+			'XSpec: another scenario at the top level of this file has the label \'a\' - the report and the Test Explorer show the same name for both',
+			'XSpec: another scenario at the top level of this file has the label \'a\' - the report and the Test Explorer show the same name for both']);
+		// expectations of one scenario, and nested scenarios
+		assert.deepEqual(await problems(xspec(`<x:scenario label="a">${ctx}<x:expect label="e" select="()"/><x:expect label="e" test="true()"/>
+<x:scenario label="n"><x:expect label="f" select="()"/></x:scenario><x:scenario label="n"><x:expect label="f" select="()"/></x:scenario></x:scenario>`)), [
+			'XSpec: another expectation in this scenario has the label \'e\' - the report and the Test Explorer show the same name for both',
+			'XSpec: another scenario in this scenario has the label \'n\' - the report and the Test Explorer show the same name for both']);
+		// not: the same label in different scenarios, or a shared scenario's
+		assert.deepEqual(await problems(xspec(`<x:scenario label="a">${ctx}<x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="b">${ctx}<x:expect label="e" select="()"/><x:scenario label="a"><x:expect label="e" select="()"/></x:scenario></x:scenario>
+<x:scenario label="s" shared="yes"><x:expect label="e" select="()"/></x:scenario><x:scenario label="c">${ctx}<x:like label="s"/></x:scenario>`)), []);
+	});
+
 	test('files: a link for each file an XSpec file refers to, e.g. x:context\'s href - and a problem for one that isn\'t found', async () => {
 		file('input.xml', '<doc/>');
 		fs.mkdirSync(path.join(dir, 'data'), { recursive: true });

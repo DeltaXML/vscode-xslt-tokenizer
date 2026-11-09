@@ -35,6 +35,7 @@ import { XSpecRequired } from './xspecRequired';
 import { XSpecCallArity } from './xspecCallArity';
 import { XSpecExpectResult } from './xspecExpectResult';
 import { XSpecFocus } from './xspecFocus';
+import { XSpecDuplicateLabels } from './xspecDuplicateLabels';
 import { XmlElement, parseXml } from './xspecXml';
 import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
@@ -3634,6 +3635,8 @@ export class XsltTokenDiagnostics {
 			allDiagnostics.push(...XSpecExpectResult.problems(document));
 			// a focus attribute: every other scenario in the file is pending
 			allDiagnostics.push(...XSpecFocus.problems(document));
+			// scenarios, or expectations, with the same label in one scenario - the report shows the same name for both
+			allDiagnostics.push(...XSpecDuplicateLabels.problems(document));
 			// a function called with a number of parameters it isn't declared with, when the stylesheet tested is known
 			if (xspecScope?.testsStylesheet) {
 				const arities = new Map<string, number[]>();

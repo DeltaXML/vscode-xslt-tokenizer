@@ -273,6 +273,15 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					const kind = declaration.elementName === 'xsl:function' ? 'function' : 'template';
 					locations = locations.concat(await XSpecReferences.find(kind, declaration.expandedName, modules));
 				}
+				// for a mode: its uses in the XSpec files that test it, e.g. x:context mode="m:index"
+				const isMode = [GlobalInstructionType.Mode, GlobalInstructionType.ModeInstruction, GlobalInstructionType.ModeTemplate].includes(instruction.type);
+				if (isMode && !instruction.name.startsWith('#') && this.definition.uri.scheme === 'file') {
+					const modeDocument = await vscode.workspace.openTextDocument(this.definition.uri);
+					const modules = XSpecReferences.modulesOf(modeDocument.fileName, await ImportIndex.moduleTrees(modeDocument));
+					const expandedName = ModulePrefixes.expandedName(instruction.name, XslLexerLight.prefixBindingsOf(modeDocument.getText()));
+					const xspecLocations = await XSpecReferences.find('mode', expandedName, modules);
+					locations = locations.concat(xspecLocations.filter((x) => !locations.some((l) => l.uri.toString() === x.uri.toString() && l.range.isEqual(x.range))));
+				}
 			}
 		}
 		return new Promise(resolve => {
