@@ -68,7 +68,8 @@ import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, Xsl
 import { XsltEmptySteps } from './xsltEmptySteps';
 import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
 import { XsltProfile, ProfileDeclaration, ProfileEntry } from './xsltProfile';
-import { XsltProfileView, XsltProfileCodeLensProvider, ProfileRow } from './xsltProfileView';
+import { XsltProfileView, XsltProfileCodeLensProvider, ProfileRow, ProfileRun } from './xsltProfileView';
+import { XsltProfileTimeline } from './xsltProfileTimeline';
 import { XsltMcpDefinitionProvider, XsltMcpServer } from './mcp/xsltMcpServer';
 import { ClaudeCodeSetup, ClaudeScope } from './mcp/claudeCodeSetup';
 
@@ -1377,11 +1378,13 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showWarningMessage(`${profileCommandName}: the run failed (exit code ${exitCode}) - the profile shows the part that ran.`);
 		}
 		const { settings, sourceSummary } = await profileSettings(definition, label, xmlSourceFsPath);
-		XsltProfileView.show({
+		const run: ProfileRun = {
 			stylesheet: xsltDocument.uri, title: path.basename(xsltFsPath), processor: processorName, settings, sourceSummary,
 			requestedRuns, runs: profile.runs,
 			time: new Date(), total: profile.total, netTotal: XsltProfile.netTotal(profile), rows: await profileRows(profile.entries)
-		});
+		};
+		XsltProfileView.show(run);
+		await XsltProfileTimeline.record(run);
 	};
 
 	// what a profile's times depend on, from its task: the task, the XML source and its size (or the initial template it
@@ -1453,6 +1456,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// each profiled declaration's times, while the Profile view is open - a lens shows its row in the view
 	context.subscriptions.push(vscode.languages.registerCodeLensProvider({ language: 'xslt' }, new XsltProfileCodeLensProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showProfileRow', (index: number) => XsltProfileView.showRow(index)));
+	// the profiles kept for each stylesheet, in its Timeline view
+	XsltProfileTimeline.register(context);
 
 	// shows, in tasks.json, the task of this type that Quick Run (or for 'xslt', Debug too) uses for the active stylesheet
 	// (or the top-level stylesheet importing it) and the XML context file - first saving it, as a run would, if there

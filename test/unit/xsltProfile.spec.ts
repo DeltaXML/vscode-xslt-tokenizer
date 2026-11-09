@@ -63,6 +63,13 @@ describe('XsltProfile', () => {
         expect(XsltProfile.parameterSettings(undefined, 'xsltParam-', () => undefined)).to.deep.equal([]);
     });
 
+    it('prunes kept profiles to a number per stylesheet and in all, newest first', () => {
+        const history = ['a', 'b', 'a', 'a', 'c', 'b', 'a'].map((stylesheet, id) => ({ id, stylesheet }));
+        const { kept, removed } = XsltProfile.prune(history, 2, 4);
+        expect(kept.map((e) => e.id)).to.deep.equal([0, 1, 2, 4]);
+        expect(removed.map((e) => e.id)).to.deep.equal([3, 5, 6]);
+    });
+
     it('is undefined for something else', () => {
         expect(XsltProfile.parse('<html><body>Saxon report</body></html>')).to.equal(undefined);
     });

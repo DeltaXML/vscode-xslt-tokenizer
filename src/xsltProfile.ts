@@ -106,6 +106,24 @@ export class XsltProfile {
         });
     }
 
+    // of the profiles kept (newest first), those to keep and those to remove: at most perStylesheet for each stylesheet,
+    // and at most overall in all
+    public static prune<T extends { stylesheet: string }>(history: T[], perStylesheet: number, overall: number): { kept: T[]; removed: T[] } {
+        const counts = new Map<string, number>();
+        const kept: T[] = [];
+        const removed: T[] = [];
+        for (const entry of history) {
+            const count = counts.get(entry.stylesheet) ?? 0;
+            if (count < perStylesheet && kept.length < overall) {
+                counts.set(entry.stylesheet, count + 1);
+                kept.push(entry);
+            } else {
+                removed.push(entry);
+            }
+        }
+        return { kept, removed };
+    }
+
     // the time spent in templates, functions and globals: the sum of the net times. Each net time is then a share of
     // it - the shares add up to 100%, as gross times, which include each other, wouldn't
     public static netTotal(profile: Profile): number {
