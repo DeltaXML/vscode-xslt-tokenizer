@@ -135,7 +135,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		}
 		const markdown = new MarkdownString();
 		markdown.appendCodeblock(`<${name}>`, 'xml');
-		markdown.appendText(detail);
+		markdown.appendMarkdown(XSpecLike.escapeMarkdown(detail));
 		return new Hover(markdown, range);
 	}
 
@@ -206,7 +206,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		markdown.appendMarkdown(`Calls the ${target.kind} \`${target.name}\`, as the \`${x}call\` of the enclosing scenario '${target.from.replace(/[\\`*_[\]<>]/g, '\\$&')}' does\n\n---\n`);
 		const calledHover = declared ? (target.kind === 'function' ? this.functionHover(document, declared) : this.templateHover(document, declared)) : undefined;
 		const detail = this.languageConfiguration?.schemaData?.elements['x:call']?.detail;
-		return new Hover([markdown, ...(calledHover?.contents ?? []), ...(detail ? [new MarkdownString().appendText(detail)] : [])], range);
+		return new Hover([markdown, ...(calledHover?.contents ?? []), ...(detail ? [new MarkdownString(XSpecLike.escapeMarkdown(detail))] : [])], range);
 	}
 
 	// in an XSpec file: x:call's function or template, the declaration's signature and documentation note, as for a call

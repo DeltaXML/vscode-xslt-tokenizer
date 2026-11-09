@@ -370,10 +370,14 @@ export class XSpecLike {
 		const summary = labelled ? XSpecLike.summaryLines(f, labelled, filePath, true) : ['**Scenario** — no label', ''];
 		const markdown = new vscode.MarkdownString(summary.join('\n').trim());
 		if (description) {
-			// as markdown, escaped - appendText writes each space as &nbsp;, so a long line doesn't wrap
-			markdown.appendMarkdown('\n\n---\n\n' + description.replace(/[\\`*_{}[\]<>()#+\-.!|]/g, '\\$&'));
+			markdown.appendMarkdown('\n\n---\n\n' + XSpecLike.escapeMarkdown(description));
 		}
 		return new vscode.Hover(markdown, range);
+	}
+
+	// text as markdown, escaped - not with appendText, which writes each space as &nbsp;, so a long line doesn't wrap
+	public static escapeMarkdown(text: string): string {
+		return text.replace(/[\\`*_{}[\]<>()#+\-.!|]/g, '\\$&');
 	}
 
 	// a scenario's summary, as markdown lines: its label and where it is, then what it has - with, for its own hover
