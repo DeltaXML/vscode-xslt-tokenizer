@@ -517,7 +517,7 @@ export function activate(context: vscode.ExtensionContext) {
 		provideRenameEdits: (document, position, newName) => XSpecLike.prepareRename(document, position) ?
 			XSpecLike.renameEdits(document, position, newName) : XSpecVariables.renameEdits(document, position, newName)
 	}));
-	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecVariables.hover(document, position) ?? XSpecLike.hover(document, position) ?? XSpecLike.importHover(document, position) ??
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecVariables.hover(document, position) ?? XSpecLike.hover(document, position) ?? XSpecLike.scenarioHover(document, position, 'label') ?? XSpecLike.importHover(document, position) ??
 		XSpecPackages.hover(document, position, XSLTHoverProvider.componentsMarkdown) }));
 	// x:helper's package-name and package-version
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, { provideCompletionItems: (document, position) => XSpecPackages.completions(document, position) }, '"', '\''));

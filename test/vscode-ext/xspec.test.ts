@@ -354,6 +354,33 @@ suite('XSpec', () => {
 		assert.deepEqual(where(await at(fromSmall, 'vscode.executeReferenceProvider')), [position(sharedPlain, 'width" select="1"'), position(sharedPlain, 'width"/></x:call>')].sort());
 	});
 
+	test('hover on x:scenario - its name or label: a summary, with what it runs as XSpec merges the enclosing scenarios\' calls, then XSpec\'s description', async () => {
+		const content = (marker: string) => xspec(`<x:scenario label="outer"><x:call template="f:named"><x:param name="size" select="1"/><x:param name="colour" select="'red'"/></x:call>
+  <x:x${marker === 'inner' ? '' : ''}scenario label="${marker === 'label' ? 'in|ner' : 'inner'}" pending="later">
+    <x:call><x:param name="size" select="2"/></x:call>
+    <x:variable name="v" select="1"/>
+    <x:expect label="a heading" test="exists($x:result)"/>
+  </x:scenario>
+</x:scenario>
+<x:scenario label="row" shared="yes" focus="now"><x:context mode="m"><p/></x:context><x:expect label="e" select="1"/></x:scenario>
+<x:scenario label="uses"><x:like label="row"/></x:scenario>`.replace('<x:xscenario label="inner"', marker === 'name' ? '<x:sce|nario label="inner"' : '<x:scenario label="inner"').replace('<x:xscenario', '<x:scenario'));
+		for (const marker of ['name', 'label']) {
+			const text = hoverText(await at(content(marker), 'vscode.executeHoverProvider'));
+			assert.include(text, '**Scenario** inner — line 3 — _pending: later_', marker);
+			// the template from the outer x:call, with size from the inner one
+			assert.include(text, 'Calls: `f:named` with `$size`: `2`, `$colour`: `\'red\'` — from _outer_', marker);
+			assert.include(text, 'Variables: `$v`', marker);
+			assert.include(text, 'Expectations: _a heading_', marker);
+			// XSpec's description: only on the name
+			assert.strictEqual(text.includes('A scenario defines the environment'), marker === 'name', marker);
+		}
+		const shared = hoverText(await at(xspec(`<x:scenario label="row" shared="yes" focus="now"><x:context mode="m"><p/></x:context><x:expect label="e" select="1"/></x:scenario>
+<x:scenario label="uses"><x:like label="row"/></x:scenario>`).replace('<x:scenario label="row"', '<x:scen|ario label="row"'), 'vscode.executeHoverProvider'));
+		assert.include(shared, '**Shared scenario** row — line 2 — _focus: now_');
+		assert.include(shared, 'Context: `x:context mode="m"` with content');
+		assert.include(shared, 'Used by x:like at: line 3');
+	});
+
 	test('hover: an XSpec element\'s description, and the signature of a function of the stylesheet under test', async () => {
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:exp|ect label="e" select="1"/></x:scenario>`), 'vscode.executeHoverProvider')), 'x:expect');
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:context select="1"/><x:expect label="e" test="f:dou|ble(1) = 2"/></x:scenario>`), 'vscode.executeHoverProvider')), 'f:double');

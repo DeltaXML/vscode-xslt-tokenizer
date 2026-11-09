@@ -335,6 +335,50 @@ export class XSpecLike {
 			return undefined;
 		}
 		const { f, scenario } = found[0];
+		return new vscode.Hover(new vscode.MarkdownString(XSpecLike.summaryLines(f, scenario, filePath).join('\n').trim()), range);
+	}
+
+	// at an x:scenario's name in its start or end tag, or at its label attribute's value: a summary of the scenario - what
+	// it runs, with what it inherits from the scenarios it's in, and what it has - then XSpec's description of x:scenario
+	// at: the element's name - with XSpec's description, given - or its label (see XSLTHoverProvider for the other)
+	public static scenarioHover(document: vscode.TextDocument, position: vscode.Position, at: 'name' | 'label', description?: string): vscode.Hover | undefined {
+		if (document.uri.scheme !== 'file') {
+			return undefined;
+		}
+		const text = document.getText();
+		const filePath = document.fileName;
+		const offset = document.offsetAt(position);
+		const f = XSpecLike.parse(text, filePath);
+		if (!f.root) {
+			return undefined;
+		}
+		const scenarioName = f.prefix + 'scenario';
+		const element = descendants(f.root).find((e) => e.name === scenarioName && (
+			(offset > e.start && offset <= e.start + 1 + e.name.length) ||
+			(e.contentEnd < e.end && offset > e.contentEnd + 1 && offset <= e.contentEnd + 2 + e.name.length)));
+		if ((at === 'name') !== !!element) {
+			return undefined;
+		}
+		const labelled = element ? f.scenarios.find((s) => s.elementStart === element.start) : XSpecLike.scenarioAt(text, filePath, offset);
+		const scenarioElement = element ?? (labelled ? descendants(f.root).find((e) => e.start === labelled.elementStart) : undefined);
+		if (!scenarioElement) {
+			return undefined;
+		}
+		const range = element ? new vscode.Range(document.positionAt(offset > element.contentEnd ? element.contentEnd + 2 : element.start + 1),
+			document.positionAt((offset > element.contentEnd ? element.contentEnd + 2 : element.start + 1) + element.name.length)) :
+			new vscode.Range(document.positionAt(labelled!.start), document.positionAt(labelled!.end));
+		const summary = labelled ? XSpecLike.summaryLines(f, labelled, filePath, true) : ['**Scenario** — no label', ''];
+		const markdown = new vscode.MarkdownString(summary.join('\n').trim());
+		if (description) {
+			// as markdown, escaped - appendText writes each space as &nbsp;, so a long line doesn't wrap
+			markdown.appendMarkdown('\n\n---\n\n' + description.replace(/[\\`*_{}[\]<>()#+\-.!|]/g, '\\$&'));
+		}
+		return new vscode.Hover(markdown, range);
+	}
+
+	// a scenario's summary, as markdown lines: its label and where it is, then what it has - with, for its own hover
+	// (full), whether it's shared, pending or focused, what it runs, and the x:like elements using it
+	private static summaryLines(f: XSpecFile, scenario: XSpecLabelled, filePath: string, full = false): string[] {
 		const element = f.root ? descendants(f.root).find((e) => e.start === scenario.elementStart) : undefined;
 		const children = element?.children ?? [];
 		const named = (name: string) => children.filter((child) => child.name === f.prefix + name);
@@ -343,14 +387,103 @@ export class XSpecLike {
 			return XSpecLike.normalize(labelElement ? descendants(labelElement).reduce((t, e) => t + e.text, labelElement.text) : child.attributes.get('label') ?? '');
 		};
 		const escape = (value: string) => value.replace(/[\\`*_{}[\]<>()#+\-.!|]/g, '\\$&');
-		const lines = [`**${scenario.shared ? 'Shared scenario' : 'Scenario'}** ${escape(XSpecLike.normalize(scenario.label))} — ${escape(XSpecLike.where(scenario, filePath))}`, ''];
+		const status: string[] = [];
+		if (full && element) {
+			const pending = element.attributes.get('pending');
+			const inPending = (() => {
+				for (let e = element.parent; e; e = e.parent) {
+					if (e.name === f.prefix + 'pending' || (e.name === f.prefix + 'scenario' && e.attributes.has('pending'))) {
+						return true;
+					}
+				}
+				return false;
+			})();
+			if (pending !== undefined) {
+				status.push(`_pending${pending.trim() ? ': ' + escape(XSpecLike.normalize(pending)) : ''}_`);
+			} else if (inPending) {
+				status.push('_pending, within a pending scenario_');
+			}
+			if (element.attributes.has('focus')) {
+				status.push(`_focus${element.attributes.get('focus')!.trim() ? ': ' + escape(XSpecLike.normalize(element.attributes.get('focus')!)) : ''}_`);
+			}
+		}
+		const lines = [`**${scenario.shared ? 'Shared scenario' : 'Scenario'}** ${escape(XSpecLike.normalize(scenario.label))} — ${escape(XSpecLike.where(scenario, filePath))}${status.length > 0 ? ' — ' + status.join(', ') : ''}`, ''];
 		const list = (title: string, items: string[]) => items.length > 0 && lines.push(`${title}: ${items.join(', ')}`, '');
+		if (full && element) {
+			XSpecLike.runs(f, element).forEach((line) => lines.push(line, ''));
+		}
 		list('Variables', [...named('variable'), ...named('param')].map((v) => `\`$${v.attributes.get('name')?.trim() ?? ''}\``));
-		list('Sets', [...named('context'), ...named('call')].map((c) => `\`${c.name}\``));
+		if (!full) {
+			list('Sets', [...named('context'), ...named('call')].map((c) => `\`${c.name}\``));
+		}
 		list('Uses', named('like').map((l) => `_${escape(labelOf(l))}_`));
 		list('Expectations', children.filter((c) => c.name.startsWith(f.prefix + 'expect')).map((e) => `_${escape(labelOf(e))}_`));
 		list('Scenarios', named('scenario').map((s) => `**${escape(labelOf(s))}**`));
-		return new vscode.Hover(new vscode.MarkdownString(lines.join('\n').trim()), range);
+		if (full && scenario.shared) {
+			const text = XSpecLike.text(f.file, XSpecLike.openDocuments());
+			const users = XSpecLike.likesOf(text, f.file, scenario.label).filter((like) => !XSpecLike.encloses(scenario, like));
+			lines.push(users.length > 0 ? `Used by x:like at: ${users.map((like) => escape(XSpecLike.where(like, filePath))).join(', ')}` : 'Not used by an x:like in the workspace', '');
+		}
+		return lines;
+	}
+
+	// what a scenario runs, as XSpec merges the x:call and x:context elements of the scenarios it's in with its own: the
+	// function or template called, with its parameters - the inner replacing the outer, by position for a function and
+	// by name for a template - or the context, and the scenario they're from, when it's an enclosing one
+	private static runs(f: XSpecFile, element: XmlElement): string[] {
+		const chain: XmlElement[] = [];
+		for (let e: XmlElement | undefined = element; e && e !== f.root; e = e.parent) {
+			if (e.name === f.prefix + 'scenario') {
+				chain.unshift(e);
+			}
+		}
+		const labelOf = (scenario: XmlElement) => XSpecLike.normalize(scenario.attributes.get('label') ?? '');
+		const value = (param: XmlElement) => {
+			const select = param.attributes.get('select');
+			const shown = select !== undefined ? XSpecLike.normalize(select) : param.children.length > 0 || param.text.trim() !== '' ? '…' : param.attributes.has('href') ? `href: ${param.attributes.get('href')}` : '()';
+			return shown.length > 40 ? shown.substring(0, 39) + '…' : shown;
+		};
+		let attributes = new Map<string, string>();
+		let calledIn: XmlElement | undefined;
+		const byPosition = new Map<number, string>();
+		const byName = new Map<string, string>();
+		let context: { element: XmlElement, scenario: XmlElement } | undefined;
+		for (const scenario of chain) {
+			const call = scenario.children.find((child) => child.name === f.prefix + 'call');
+			if (call) {
+				attributes = new Map([...attributes, ...call.attributes]);
+				if (call.attributes.has('function') || call.attributes.has('template')) {
+					calledIn = scenario;
+				}
+				call.children.filter((child) => child.name === f.prefix + 'param').forEach((param, index) => {
+					const name = param.attributes.get('name')?.trim();
+					byPosition.set(Number(param.attributes.get('position')?.trim() || index + 1), value(param));
+					if (name) {
+						byName.set(name, value(param));
+					}
+				});
+			}
+			const ownContext = scenario.children.find((child) => child.name === f.prefix + 'context');
+			if (ownContext) {
+				context = { element: ownContext, scenario };
+			}
+		}
+		const from = (scenario: XmlElement | undefined) => scenario && scenario !== element ? ` — from _${labelOf(scenario).replace(/[\\`*_{}[\]<>()#+\-.!|]/g, '\\$&')}_` : '';
+		const lines: string[] = [];
+		const fn = attributes.get('function')?.trim();
+		const template = attributes.get('template')?.trim();
+		if (fn) {
+			const args = [...byPosition].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+			lines.push(`Calls: \`${fn}(${args.join(', ')})\`${from(calledIn)}`);
+		} else if (template) {
+			lines.push(`Calls: \`${template}\`${byName.size > 0 ? ' with ' + [...byName].map(([n, v]) => `\`$${n}\`: \`${v}\``).join(', ') : ''}${from(calledIn)}`);
+		}
+		if (context) {
+			const parts = ['mode', 'select', 'href'].filter((name) => context!.element.attributes.has(name)).map((name) => `${name}="${XSpecLike.normalize(context!.element.attributes.get(name)!)}"`);
+			const hasContent = context.element.children.some((child) => child.name !== f.prefix + 'param') || context.element.text.trim() !== '';
+			lines.push(`Context: \`${[`${f.prefix}context`, ...parts].join(' ')}\`${hasContent ? ' with content' : ''}${from(context.scenario)}`);
+		}
+		return lines;
 	}
 
 	// a scenario's label, or an x:like's: the label - renamed in the scenarios with it and the x:like elements using them

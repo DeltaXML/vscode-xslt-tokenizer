@@ -18,6 +18,7 @@ import { XsltPackages } from './xsltPackages';
 import { ModulePrefixes } from './modulePrefixes';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecScenario } from './xspecScenario';
+import { XSpecLike } from './xspecLike';
 import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XPathVersion } from './xpathVersion';
 
@@ -124,6 +125,13 @@ export class XSLTHoverProvider implements HoverProvider {
 		const detail = this.languageConfiguration?.schemaData?.elements['x:' + name.substring(prefix.length + 1)]?.detail;
 		if (!detail) {
 			return undefined;
+		}
+		// x:scenario: a summary of the scenario, before the description
+		if (name === `${prefix}:scenario`) {
+			const summary = XSpecLike.scenarioHover(document, position, 'name', detail);
+			if (summary) {
+				return summary;
+			}
 		}
 		const markdown = new MarkdownString();
 		markdown.appendCodeblock(`<${name}>`, 'xml');
