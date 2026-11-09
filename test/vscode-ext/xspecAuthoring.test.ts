@@ -46,6 +46,27 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
 	});
 
+	test('an XSpec file created for a stylesheet, then deleted: the stylesheet isn\'t checked as a module of it', async () => {
+		const uri = stylesheet(`deleted${count++}.xsl`);
+		const editor = await XSpecScenario.create(uri, at('<xsl:function'));
+		const xspecUri = editor!.document.uri;
+		// once it's checked, as when it's open
+		for (let i = 0; i < 20 && !XsltSymbolProvider.importSymbolHrefs.has(xspecUri.fsPath) && ![...XsltSymbolProvider.importSymbolHrefs.values()].some((hrefs) => hrefs.includes(uri.fsPath)); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+		fs.unlinkSync(xspecUri.fsPath);
+		// the stylesheet's problems, as published when it's open - after a change, as it's checked again then
+		const stylesheetEditor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+		await stylesheetEditor.edit((edit) => edit.insert(new vscode.Position(0, 0), ' '));
+		const notFound = () => vscode.languages.getDiagnostics(uri).filter((d) => d.message.includes('not found')).map((d) => d.message);
+		for (let i = 0; i < 30 && notFound().length === 0; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		assert.deepEqual(notFound(), []);
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+	});
+
 	test('the declaration at the cursor: a top-level function, named template or template rule', () => {
 		assert.deepEqual(XSpecScenario.declarationAt(stylesheetText, at('<xsl:function')), { kind: 'function', name: 'f:area', as: 'xs:double', params: [{ name: 'width', as: 'xs:double' }, { name: 'label', as: 'xs:string' }] });
 		// a tunnel parameter isn't passed by x:call

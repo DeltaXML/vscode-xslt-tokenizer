@@ -161,9 +161,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private static findMatchingParent(map: Map<string, string[]>, path: string) {
 		let matchingKey: string | undefined;
-		// use last entry
+		// use last entry - not one for a file that's been deleted since, which would be reported as not found
 		for (const entry of map.entries()) {
-			if (entry[1].find((x) => x === path)) {
+			if (entry[1].find((x) => x === path) && !XsltSymbolProvider.isDeletedFile(entry[0])) {
 				matchingKey = entry[0];
 			}
 		}
@@ -350,6 +350,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return fs.existsSync(utils) ? HrefPaths.fileUri(utils) : undefined;
 	}
 
+	// a path of a file that isn't there now - not a name with no folder, e.g. an untitled document's
+	private static isDeletedFile(fileName: string) {
+		return path.isAbsolute(fileName) && !fs.existsSync(fileName);
+	}
+
 	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[], parent: boolean | string = true) {
 		const inferParent = parent === true;
 		let matchingParent = typeof parent === 'string' ? parent : inferParent ? this.findMatchingParent(localImportedHrefs, document.fileName) : undefined;
@@ -393,7 +398,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		accumulatedHrefs = [importedG.href];
 		importedGlobals1 = [importedG];
 		const inheritHrefs = this.getImportHrefs(xsltPackages, importedGlobals1);
-		if (update) {
+		// not an XSpec file, whose x:description stylesheet is read as an import: the stylesheet it tests would be checked
+		// with it as its top-level stylesheet - and once it's deleted, report it as not found
+		if (update && document.languageId !== 'xspec') {
 			if (matchingParent) {
 				const newInheritHres = localImportedHrefs.get(matchingParent)?.concat(inheritHrefs);
 				if (newInheritHres) {
