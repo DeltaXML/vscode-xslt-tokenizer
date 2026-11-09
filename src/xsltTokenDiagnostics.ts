@@ -31,6 +31,7 @@ import { XSpecHrefs } from './xspecHrefs';
 import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XSpecCompat } from './xspecCompat';
 import { XSpecLike } from './xspecLike';
+import { XSpecRequired } from './xspecRequired';
 import { XmlElement, parseXml } from './xspecXml';
 import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
@@ -3624,6 +3625,8 @@ export class XsltTokenDiagnostics {
 			allDiagnostics.push(...XSpecCompat.problems(document));
 			// an x:like with no scenario with its label, or more than one, or one enclosing it
 			allDiagnostics.push(...XSpecLike.problems(document));
+			// the attributes XSpec requires that elements are missing, e.g. x:variable's name
+			allDiagnostics.push(...XSpecRequired.problems(document));
 			// with run-as="external", a function of the stylesheet tested called in an XPath expression: why it's not found
 			if (xspecExternalFnNames.length > 0) {
 				allDiagnostics.forEach((d) => {

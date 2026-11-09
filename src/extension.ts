@@ -12,6 +12,7 @@ import { XSpecRunner } from './xspecRunner';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecLabels } from './xspecLabels';
 import { XSpecCompat } from './xspecCompat';
+import { XSpecRequired } from './xspecRequired';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
 import { XSpecLike } from './xspecLike';
@@ -1405,6 +1406,9 @@ export function activate(context: vscode.ExtensionContext) {
 		{ providedCodeActionKinds: [vscode.CodeActionKind.Refactor] }));
 	// quick fixes for x:expect elements that XSpec 4 stops the run for (see XSpecCompat)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecCompat.codeActions(document, context.diagnostics) },
+		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
+	// quick fixes for the attributes XSpec requires that an element is missing (see XSpecRequired)
+	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecRequired.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecRunFile', () => vscode.commands.executeCommand('testing.runCurrentFile')));
 	// the files the tests leave in the xspec folders - with the reports, or keeping them

@@ -185,6 +185,52 @@ suite('XSpec', () => {
 	};
 	const hoverText = (hovers: unknown[]) => (hovers as vscode.Hover[]).flatMap((hover) => hover.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n');
 
+	test('required attributes: an error where XSpec fails without one, else a warning - with a quick fix adding it', async () => {
+		const content = xspec(`<x:import/>
+<x:variable select="1"/>
+<x:param select="1"/>
+<x:helper/>
+<x:scenario>
+  <x:like/>
+  <x:call template="f:named"><x:param select="1"/></x:call>
+  <x:expect select="1"/>
+</x:scenario>
+<x:scenario label="s"><x:label>ignored</x:label>
+  <x:call function="f:double"><x:param select="2"/></x:call>
+  <x:expect select="4"><x:label>four</x:label></x:expect>
+</x:scenario>
+<x:scenario label="rule"><x:context mode="m"><x:param select="1"/><x:variable/><x:scenario/></x:context><x:expect label="e" select="1"/></x:scenario>`);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file(`required${count++}.xspec`, content)));
+		const diagnostics = (await moduleDiagnostics.call(XsltSymbolProvider, document, false, XSpecConfiguration.configuration))
+			.filter((d) => d.message.includes(' must have '));
+		const found = diagnostics.map((d) => `${d.severity === vscode.DiagnosticSeverity.Error ? 'error' : 'warning'} ${document.getText(d.range)}:${d.range.start.line} ${d.message}`);
+		assert.deepEqual(found, [
+			`error x:import:1 XSpec: x:import must have a 'href' attribute - XSpec fails without it`,
+			`warning x:variable:2 XSpec: x:variable must have a 'name' attribute`,
+			`warning x:param:3 XSpec: x:param must have a 'name' attribute`,
+			`warning x:helper:4 XSpec: x:helper must have one of the attributes 'stylesheet', 'package-name', 'query', 'xproc'`,
+			`warning x:scenario:5 XSpec: x:scenario must have a label - a label attribute or an x:label element`,
+			`error x:like:6 XSpec: x:like must have a label - a label attribute or an x:label element - XSpec fails without it`,
+			`error x:param:7 XSpec: x:param must have a 'name' attribute - XSpec fails without it`,
+			`warning x:expect:8 XSpec: x:expect must have a label - a label attribute or an x:label element`,
+			// x:context's own x:param - not the elements of its user content
+			`error x:param:14 XSpec: x:param must have a 'name' attribute - XSpec fails without it`
+		]);
+		// the quick fix: the attribute, before the end of the start tag, with its value to give
+		const editor = await vscode.window.showTextDocument(document);
+		// once the problems are published, as the code actions are given those
+		for (let i = 0; i < 50 && !vscode.languages.getDiagnostics(document.uri).some((d) => d.message.includes(' must have ')); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		const variable = vscode.languages.getDiagnostics(document.uri).find((d) => d.message.includes('x:variable must have'))!;
+		const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>('vscode.executeCodeActionProvider', document.uri, variable.range);
+		const action = actions.find((a) => a.title === `Add a 'name' attribute`);
+		assert.isDefined(action);
+		await vscode.workspace.applyEdit(action!.edit!);
+		assert.include(editor.document.getText(), '<x:variable select="1" name=""/>');
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+	});
+
 	test('hover: an XSpec element\'s description, and the signature of a function of the stylesheet under test', async () => {
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:exp|ect label="e" select="1"/></x:scenario>`), 'vscode.executeHoverProvider')), 'x:expect');
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:context select="1"/><x:expect label="e" test="f:dou|ble(1) = 2"/></x:scenario>`), 'vscode.executeHoverProvider')), 'f:double');
