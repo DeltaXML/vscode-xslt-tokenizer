@@ -323,4 +323,93 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		assert.include(text, 'pending="to do"');
 		assert.match(text, /<\/x:description>\s*$/);
 	});
+
+	test('x:variable and scenario x:param: with a name and a type, for a value in select or as content', async () => {
+		const uri = stylesheet(`snippets${count++}.xsl`);
+		const xspecPath = path.join(dir, `snippets${count++}.xspec`);
+		const content = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.basename(uri.fsPath)}">
+  <x:scenario label="area">
+    IN_SCENARIO
+    <x:call function="f:area">IN_CALL</x:call>
+  </x:scenario>
+</x:description>`;
+		const text = content.replace('IN_SCENARIO', '<').replace('IN_CALL', '<');
+		fs.writeFileSync(xspecPath, text);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		await vscode.window.showTextDocument(document);
+		const completions = async (marker: string) => {
+			const offset = content.replace(marker === 'IN_SCENARIO' ? 'IN_CALL' : 'IN_SCENARIO', '<').indexOf(marker) + 1;
+			const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(offset));
+			return new Map(list.items.map((item) => [typeof item.label === 'string' ? item.label : item.label.label, item.insertText instanceof vscode.SnippetString ? item.insertText.value : String(item.insertText)]));
+		};
+		const inScenario = await completions('IN_SCENARIO');
+		assert.strictEqual(inScenario.get('x:variable (select)'), 'x:variable name="${1:name}" as="${2:item()*}" select="$3"/>$0');
+		assert.strictEqual(inScenario.get('x:variable'), 'x:variable name="${1:name}" as="${2:item()*}">\n\t$0\n</x:variable>');
+		assert.strictEqual(inScenario.get('x:param (select)'), 'x:param name="${1:name}" as="${2:item()*}" select="$3"/>$0');
+		// an x:param of x:call passes a value: not a declaration
+		const inCall = await completions('IN_CALL');
+		assert.isFalse(inCall.has('x:param (select)'));
+		assert.notInclude(inCall.get('x:param') ?? '', 'item()*');
+	});
+
+	test('variable completion where XPath is expected: the variables in scope as XSpec scopes them, with their types', async () => {
+		const uri = stylesheet(`scoped${count++}.xsl`);
+		const sharedName = `shared${count++}.xspec`;
+		fs.writeFileSync(path.join(dir, sharedName), `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="${path.basename(uri.fsPath)}">
+  <x:variable name="imported-global" select="2"/>
+  <x:scenario label="common" shared="yes"><x:variable name="from-shared" as="xs:integer" select="3"/></x:scenario>
+</x:description>`);
+		const xspecPath = path.join(dir, `scoped${count++}.xspec`);
+		const content = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.basename(uri.fsPath)}">
+  <x:import href="${sharedName}"/>
+  <x:variable name="own-global" select="1"/>
+  <x:scenario label="outer">
+    <x:variable name="outer-var" as="element(item)"><item/></x:variable>
+    <x:scenario label="area">
+      <x:like label="common"/>
+      <x:variable name="local" as="xs:double" select="1"/>
+      <x:variable name="this-one" select="$|"/>
+      <x:call function="f:area"><x:param select="1"/><x:param select="'a'"/></x:call>
+      <x:variable name="later" select="1"/>
+    </x:scenario>
+  </x:scenario>
+  <x:scenario label="other"><x:variable name="not-visible" select="1"/></x:scenario>
+</x:description>`;
+		const offset = content.indexOf('|');
+		fs.writeFileSync(xspecPath, content.replace('|', ''));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		await vscode.window.showTextDocument(document);
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(offset));
+		const variables = new Map(list.items.filter((item) => item.kind === vscode.CompletionItemKind.Variable)
+			.map((item) => [typeof item.label === 'string' ? item.label : item.label.label, item.detail]));
+		for (const name of ['$own-global', '$imported-global', '$outer-var', '$from-shared', '$local']) {
+			assert.isTrue(variables.has(name), `${name} in ${[...variables.keys()].join(' ')}`);
+		}
+		for (const name of ['$this-one', '$later', '$not-visible']) {
+			assert.isFalse(variables.has(name), name);
+		}
+		assert.strictEqual(variables.get('$local'), 'xs:double');
+		assert.strictEqual(variables.get('$outer-var'), 'element(item)');
+		assert.strictEqual(variables.get('$from-shared'), 'xs:integer');
+	});
+
+	test('variable completion in a shared scenario: those in scope at every x:like using it', async () => {
+		const uri = stylesheet(`template${count++}.xsl`);
+		const xspecPath = path.join(dir, `template${count++}.xspec`);
+		const content = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.basename(uri.fsPath)}">
+  <x:scenario label="sized" shared="yes">
+    <x:call function="f:area"><x:param select="$|"/><x:param select="'a'"/></x:call>
+  </x:scenario>
+  <x:scenario label="small"><x:variable name="width" select="1"/><x:variable name="only-small" select="1"/><x:like label="sized"/></x:scenario>
+  <x:scenario label="large"><x:variable name="width" select="1000"/><x:like label="sized"/></x:scenario>
+</x:description>`;
+		const offset = content.indexOf('|');
+		fs.writeFileSync(xspecPath, content.replace('|', ''));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		await vscode.window.showTextDocument(document);
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(offset));
+		const variables = list.items.filter((item) => item.kind === vscode.CompletionItemKind.Variable).map((item) => typeof item.label === 'string' ? item.label : item.label.label);
+		assert.include(variables, '$width');
+		assert.notInclude(variables, '$only-small');
+	});
 });

@@ -369,9 +369,9 @@ suite('XSpec', () => {
 </xsl:stylesheet>`);
 		const attributes = ' stylesheet="params.xsl"';
 		const labels = await completions(xspec(`  <|`, attributes));
-		const params = labels.filter((label) => label.startsWith('x:param '));
+		const params = labels.filter((label) => label.startsWith('x:param ') && !label.endsWith(')'));
 		assert.deepEqual(params, ['x:param rate', 'x:param f:currency']);
-		assert.deepEqual((await completions(xspec(`  <x:param name="rate" select="1.2"/>\n  <|`, attributes))).filter((label) => label.startsWith('x:param ')), ['x:param f:currency']);
+		assert.deepEqual((await completions(xspec(`  <x:param name="rate" select="1.2"/>\n  <|`, attributes))).filter((label) => label.startsWith('x:param ') && !label.endsWith(')')), ['x:param f:currency']);
 		// in a scenario's x:call, not the global parameters
 		assert.notInclude(await completions(xspec(`<x:scenario label="s"><x:call template="t"><|</x:call></x:scenario>`, attributes)), 'x:param rate');
 
@@ -381,7 +381,7 @@ suite('XSpec', () => {
 
 		// with run-as="external": a scenario's x:param sets them too, for its tests
 		const external = ' stylesheet="params.xsl" run-as="external"';
-		assert.include((await completions(xspec(`<x:scenario label="s">\n  <|\n</x:scenario>`, external))).filter((label) => label.startsWith('x:param ')), 'x:param f:currency');
+		assert.include((await completions(xspec(`<x:scenario label="s">\n  <|\n</x:scenario>`, external))).filter((label) => label.startsWith('x:param ') && !label.endsWith(')')), 'x:param f:currency');
 		assert.notInclude((await completions(xspec(`<x:scenario label="s">\n  <|\n</x:scenario>`, attributes))), 'x:param f:currency');
 		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:param name="f:curr|ency" select="'EUR'"/></x:scenario>`, external), 'vscode.executeHoverProvider')), 'f:currency');
 		assert.notInclude(await problems(xspec(`<x:scenario label="s"><x:param name="rate" select="1.2"/><x:context><p/></x:context><x:expect label="e" select="1"/></x:scenario>`, external)), warning);
@@ -433,7 +433,7 @@ suite('XSpec', () => {
 		const nested = (inner: string, outerCall = '<x:call template="f:named"><x:param name="size" select="1"/></x:call>') =>
 			xspec(`<x:scenario label="outer">${outerCall}\n<x:scenario label="inner">${inner}<x:expect label="e" select="1"/></x:scenario>\n</x:scenario>`);
 		// completion: the parameters not passed, by it or the x:call it inherits from
-		const params = (await completions(nested('<x:call><|</x:call>'))).filter((label) => label.startsWith('x:param '));
+		const params = (await completions(nested('<x:call><|</x:call>'))).filter((label) => label.startsWith('x:param ') && !label.endsWith(')'));
 		assert.deepEqual(params, ['x:param colour']);
 		// the hover of the x:call: what it calls, and where it's from
 		const callHover = hoverText(await at(nested('<x:ca|ll><x:param name="colour" select="2"/></x:call>'), 'vscode.executeHoverProvider'));
@@ -563,6 +563,15 @@ suite('XSpec', () => {
 <x:scenario label="s"><x:context><p/></x:context><x:like label="row"/><x:variable name="from-user" select="1"/></x:scenario>`)), [unresolved('from-user')]);
 		// a shared scenario no x:like uses here may be used elsewhere, so any is in scope
 		assert.deepEqual(await problems(xspec(shared)), []);
+		// one in scope where some of the scenarios using it declare it, not all: a warning, naming those that don't
+		const template = `<x:scenario label="sized" shared="yes"><x:context><p/></x:context><x:expect label="e" test="$width gt 0"/></x:scenario>`;
+		const notInEvery = (labels: string) => `XSpec: $width isn't in scope where the scenario ${labels} uses this with x:like - XSpec fails to compile it (XPST0008)`;
+		assert.deepEqual(await problems(xspec(`${template}
+<x:scenario label="small"><x:variable name="width" select="1"/><x:like label="sized"/></x:scenario>
+<x:scenario label="large"><x:like label="sized"/></x:scenario>`)), [notInEvery("'large'")]);
+		assert.deepEqual(await problems(xspec(`${template}
+<x:scenario label="small"><x:variable name="width" select="1"/><x:like label="sized"/></x:scenario>
+<x:scenario label="large"><x:variable name="width" select="1000"/><x:like label="sized"/></x:scenario>`)), []);
 		// names compared by namespace: a prefix, another prefix for it, or an EQName
 		assert.deepEqual(await problems(xspec(`<x:scenario label="s" xmlns:g="urn:f"><x:variable name="Q{urn:f}v" select="1"/><x:variable name="g:w" select="$f:v"/><x:context><p/></x:context><x:expect label="e" test="$f:w"/></x:scenario>`)), []);
 	});

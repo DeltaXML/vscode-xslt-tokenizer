@@ -2016,7 +2016,9 @@ export enum ErrorType {
     // an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
     ApplyTemplatesDefaultMode,
 	MissingXsltAttribute,
-    MapEntryNotMap
+    MapEntryNotMap,
+    // XSpec: a variable in scope in some of the copies of a shared scenario that x:like makes, not all
+    XSpecVariableNotInEveryCopy
 }
 
 export interface BaseToken {

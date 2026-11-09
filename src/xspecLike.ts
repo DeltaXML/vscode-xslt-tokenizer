@@ -41,6 +41,8 @@ interface XSpecFile {
 	likes: XSpecLabelled[];
 	// the names of its x:variable elements, and of the x:param elements of x:description and x:scenario
 	variables: string[];
+	// those elements' names and types, in document order
+	declarations: { name: string, as?: string }[];
 	imports: string[];
 	// whether an x:import isn't found, e.g. a URI an XML catalog maps - so its scenarios aren't known
 	importMissing: boolean;
@@ -89,6 +91,21 @@ export class XSpecLike {
 	// in scope at each x:like. Any is in scope in a scenario whose uses aren't known: a shared one that no x:like uses
 	// here - it may be used from a file outside the workspace - or with an x:import that isn't found
 	public static scopeChecker(text: string, filePath: string): (name: string, offset: number) => boolean {
+		return XSpecLike.scopes(text, filePath).inScope;
+	}
+
+	// The variables in scope at an offset, for each copy of the element there that XSpec compiles: x:like is replaced
+	// by the child elements of the scenario it uses, and a shared scenario is then removed - so an element in a shared
+	// scenario is compiled once for each x:like using it, with the variables in scope there, and one in a scenario that
+	// isn't shared, in place too. Of a variable reference:
+	// - inScope: whether the variable is in scope in any copy - else it's unresolved
+	// - inEvery: whether it's in scope in every copy, for completion - any, where the uses aren't known
+	// - missingFrom: the labels of the scenarios whose x:like makes a copy where it isn't in scope, where it is in others
+	public static scopes(text: string, filePath: string): {
+		inScope: (name: string, offset: number) => boolean,
+		inEvery: (name: string, offset: number) => boolean,
+		missingFrom: (name: string, offset: number) => string[]
+	} {
 		const { own, importers } = XSpecLike.contexts(text, filePath);
 		const files = XSpecLike.union([own, ...importers]);
 		const globals = new Set(files.flatMap((f) => f.globals));
@@ -114,62 +131,110 @@ export class XSpecLike {
 					isXSpec(f, child, 'like') ? declaredBy(f.likes.find((like) => like.elementStart === child.start)?.label ?? '', seen) : []);
 			}));
 		};
-		const visible = (f: XSpecFile, offset: number, seen: Set<string>): { names: Set<string>, any: boolean } => {
-			const result = { names: new Set<string>(), any: false };
-			const key = `${f.file}#${offset}`;
-			if (seen.has(key) || !f.root) {
-				return result;
-			}
-			seen.add(key);
-			// the elements the offset is in, outermost first
+		// the elements an offset is in, outermost first
+		const ancestorsAt = (f: XSpecFile, offset: number) => {
 			const ancestors: XmlElement[] = [];
 			for (let e: XmlElement | undefined = f.root; e; e = e.children.find((c) => c.start <= offset && offset < c.end)) {
 				ancestors.push(e);
 			}
-			for (let i = 1; i < ancestors.length; i++) {
-				const [parent, child] = [ancestors[i - 1], ancestors[i]];
-				if (!isXSpec(f, parent, 'scenario')) {
-					continue;
-				}
-				parent.children.filter((sibling) => sibling.end <= child.start).forEach((sibling) => {
-					if (isXSpec(f, sibling, 'variable', 'param')) {
-						result.names.add(variableName(sibling) ?? '');
-					} else if (isXSpec(f, sibling, 'like')) {
-						declaredBy(f.likes.find((like) => like.elementStart === sibling.start)?.label ?? '', new Set()).forEach((name) => result.names.add(name));
-					}
-				});
+			return ancestors;
+		};
+		// a copy: the variables in scope in it - any, where they aren't known - and the label of the scenario whose x:like
+		// makes it, if one does
+		type Copy = { names: Set<string> | 'any', where?: string };
+		const copies = (f: XSpecFile, offset: number, seen: Set<string>): Copy[] => {
+			const key = `${f.file}#${offset}`;
+			if (seen.has(key) || !f.root) {
+				return [{ names: new Set() }];
 			}
-			// in a scenario that x:like uses: those in scope at the x:like
-			ancestors.filter((e) => isXSpec(f, e, 'scenario')).forEach((element) => {
-				const scenario = f.scenarios.find((s) => s.elementStart === element.start);
-				if (!scenario) {
-					return;
+			seen = new Set(seen).add(key);
+			const ancestors = ancestorsAt(f, offset);
+			// those declared before the offset, by the scenarios from the ancestor at the index inwards
+			const declaredFrom = (from: number) => {
+				const names = new Set<string>();
+				for (let i = from + 1; i < ancestors.length; i++) {
+					const [parent, child] = [ancestors[i - 1], ancestors[i]];
+					if (!isXSpec(f, parent, 'scenario')) {
+						continue;
+					}
+					parent.children.filter((sibling) => sibling.end <= child.start).forEach((sibling) => {
+						if (isXSpec(f, sibling, 'variable', 'param')) {
+							names.add(variableName(sibling) ?? '');
+						} else if (isXSpec(f, sibling, 'like')) {
+							declaredBy(f.likes.find((like) => like.elementStart === sibling.start)?.label ?? '', new Set()).forEach((name) => names.add(name));
+						}
+					});
 				}
+				return names;
+			};
+			const scenarios = ancestors.map((element, index) => ({ index, scenario: isXSpec(f, element, 'scenario') ? f.scenarios.find((s) => s.elementStart === element.start) : undefined }))
+				.filter((s): s is { index: number, scenario: XSpecLabelled } => !!s.scenario);
+			// within a shared scenario, only its copies are compiled: those the x:like elements using it - or the scenarios
+			// within it that x:like uses - make
+			const innermostShared = [...scenarios].reverse().find((s) => s.scenario.shared);
+			const result: Copy[] = innermostShared ? [] : [{ names: declaredFrom(0), where: scenarios[scenarios.length - 1]?.scenario.label }];
+			if (incomplete) {
+				result.push({ names: 'any' });
+			}
+			scenarios.filter((s) => !innermostShared || s.index >= innermostShared.index).forEach(({ index, scenario }) => {
 				const uses = files.flatMap((other) => other.likes.filter((like) => like.label === scenario.label && !XSpecLike.encloses(scenario, like)).map((like) => ({ other, like })));
-				if (uses.length === 0 && (scenario.shared || incomplete)) {
-					result.any = true;
+				if (uses.length === 0 && scenario === innermostShared?.scenario) {
+					result.push({ names: 'any' });
 				}
+				const within = declaredFrom(index);
 				uses.forEach(({ other, like }) => {
-					const atUse = visible(other, like.elementStart, seen);
-					atUse.names.forEach((name) => result.names.add(name));
-					result.any = result.any || atUse.any;
+					const where = [...ancestorsAt(other, like.elementStart)].reverse().map((e) => other.scenarios.find((s) => s.elementStart === e.start && isXSpec(other, e, 'scenario'))).find((s) => s)?.label;
+					copies(other, like.elementStart, seen).forEach((copy) =>
+						result.push({ names: copy.names === 'any' ? 'any' : new Set([...copy.names, ...within]), where }));
 				});
 			});
 			return result;
 		};
-		return (name: string, offset: number) => {
+		const cached = new Map<number, Copy[]>();
+		const lookup = (name: string, offset: number) => {
 			// the name, with the namespace of its prefix where it is
 			let element = own[0].root;
 			for (let child = element; child; child = child.children.find((c) => c.start <= offset && offset < c.end)) {
 				element = child;
 			}
 			const expanded = element ? XSpecLike.expandedName(name, element) : name;
-			if (globals.has(expanded)) {
-				return true;
+			if (!cached.has(offset)) {
+				cached.set(offset, copies(own[0], offset, new Set()));
 			}
-			const inScope = visible(own[0], offset, new Set());
-			return inScope.any || inScope.names.has(expanded);
+			return { expanded, copies: cached.get(offset)! };
 		};
+		const has = (copy: Copy, name: string) => copy.names === 'any' || copy.names.has(name);
+		return {
+			inScope: (name, offset) => {
+				const { expanded, copies } = lookup(name, offset);
+				return globals.has(expanded) || copies.some((copy) => has(copy, expanded));
+			},
+			inEvery: (name, offset) => {
+				const { expanded, copies } = lookup(name, offset);
+				return globals.has(expanded) || copies.every((copy) => has(copy, expanded));
+			},
+			missingFrom: (name, offset) => {
+				const { expanded, copies } = lookup(name, offset);
+				if (globals.has(expanded) || !copies.some((copy) => has(copy, expanded))) {
+					return [];
+				}
+				return [...new Set(copies.filter((copy) => !has(copy, expanded)).map((copy) => copy.where ?? ''))];
+			}
+		};
+	}
+
+	// the variables in scope at an offset, for completion where XPath is expected: those in scope in every copy that
+	// XSpec compiles of the element there (see scopes) - of this file and the others gathered with it - by their names
+	// as declared, each once, with its type if it has one
+	public static variablesInScope(text: string, filePath: string, offset: number): { name: string, as?: string }[] {
+		const { inEvery } = XSpecLike.scopes(text, filePath);
+		const result = new Map<string, { name: string, as?: string }>();
+		XSpecLike.all(text, filePath).flatMap((f) => f.declarations).forEach((declaration) => {
+			if (!result.has(declaration.name) && inEvery(declaration.name, offset)) {
+				result.set(declaration.name, declaration);
+			}
+		});
+		return [...result.values()];
 	}
 
 	// a variable's name as Q{uri}local, with the namespace its prefix is bound to on the element or an ancestor - a name
@@ -513,7 +578,7 @@ export class XSpecLike {
 	}
 
 	private static parse(text: string, filePath: string): XSpecFile {
-		const result: XSpecFile = { file: filePath, scenarios: [], likes: [], variables: [], imports: [], importMissing: false, globals: [], prefix: '' };
+		const result: XSpecFile = { file: filePath, scenarios: [], likes: [], variables: [], declarations: [], imports: [], importMissing: false, globals: [], prefix: '' };
 		const root = parseXml(text);
 		if (!root || localName(root.name) !== 'description') {
 			return result;
@@ -536,6 +601,7 @@ export class XSpecLike {
 				const name = element.attributes.get('name')?.trim();
 				if (name) {
 					result.variables.push(name);
+					result.declarations.push({ name, as: element.attributes.get('as')?.trim() || undefined });
 					if (element.parent === root) {
 						result.globals.push(XSpecLike.expandedName(name, element));
 					}

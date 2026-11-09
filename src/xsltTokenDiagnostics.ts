@@ -2287,8 +2287,15 @@ export class XsltTokenDiagnostics {
 							// content from the end of its start tag (try-019)
 							const isCatchVariable = unResolvedToken !== null && tagElementName === 'xsl:catch' && XsltTokenDiagnostics.isCatchVariable(unResolvedToken.value,
 								(name) => expandedNameAt(name, unResolvedToken!));
-							if (unResolvedToken !== null && !isCatchVariable && !(xspecScope && XsltTokenDiagnostics.isXSpecVariable(token.value, xspecPrefixes, xspecScope, document.offsetAt(new vscode.Position(token.line, token.startCharacter))))) {
+							const tokenOffset = document.offsetAt(new vscode.Position(token.line, token.startCharacter));
+							if (unResolvedToken !== null && !isCatchVariable && !(xspecScope && XsltTokenDiagnostics.isXSpecVariable(token.value, xspecPrefixes, xspecScope, tokenOffset))) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
+							} else if (unResolvedToken !== null && xspecScope?.missingFrom) {
+								// XSpec: in a shared scenario, a variable only some of the scenarios using it with x:like declare
+								const missing = xspecScope.missingFrom(token.value.substring(1), tokenOffset);
+								if (missing.length > 0) {
+									problemTokens.push({ ...token, error: ErrorType.XSpecVariableNotInEveryCopy, value: `${token.value}\u001f${missing.join('\u001f')}` });
+								}
 							}
 							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 							const nextValue = allTokens[index + 1]?.value;
@@ -4673,11 +4680,13 @@ export class XsltTokenDiagnostics {
 		// into the scenario using it, where the using scenario's are in scope
 		XSpecLike.gatheredVariables(documentText, documentPath).forEach((name) => declared.add(name));
 		// for a variable reference: whether one of them is in scope where it is, as XSpec scopes them
-		const inScope = documentPath ? XSpecLike.scopeChecker(documentText, documentPath) : undefined;
+		const scopes = documentPath ? XSpecLike.scopes(documentText, documentPath) : undefined;
+		const inScope = scopes?.inScope;
+		const missingFrom = scopes?.missingFrom;
 		const testsStylesheet = !!stylesheetPath && fs.existsSync(stylesheetPath);
 		const helperPaths = [...documentText.matchAll(/<(?:[\w.-]+:)?helper\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)].map((match) => HrefPaths.toPath(match[2], documentPath)).filter((p): p is string => !!p);
 		const externalModules = testsStylesheet && XsltTokenDiagnostics.isRunAsExternal(root) ? XsltTokenDiagnostics.xspecExternalModules(stylesheetPath!, helperPaths) : undefined;
-		return { testsStylesheet, declared, inScope, externalModules, ...XsltTokenDiagnostics.xspecPackage(root, testsStylesheet ? stylesheetPath : undefined) };
+		return { testsStylesheet, declared, inScope, missingFrom, externalModules, ...XsltTokenDiagnostics.xspecPackage(root, testsStylesheet ? stylesheetPath : undefined) };
 	}
 
 	// an XSpec file whose stylesheet is an xsl:package: its name, whether it's run externally - as it must be, as XSpec
@@ -5605,6 +5614,13 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MapKeyDuplicate:
 					msg = `XPath: Duplicate key in the map constructor: ${tokenValue}`;
 					break;
+				case ErrorType.XSpecVariableNotInEveryCopy: {
+					const [variable, ...labels] = tokenValue.split('\u001f');
+					const where = labels.map((label) => `'${label}'`).join(', ');
+					msg = `XSpec: ${variable} isn't in scope where ${labels.length === 1 ? 'the scenario' : 'the scenarios'} ${where} ${labels.length === 1 ? 'uses' : 'use'} this with x:like - XSpec fails to compile ${labels.length === 1 ? 'it' : 'them'} (XPST0008)`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
 				case ErrorType.MapEntryNotMap:
 					msg = `XPath: Expected ':' after the map key ${tokenValue} - a map constructor entry without ':' must be a map, to merge`;
 					break;

@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { XSpecScenario } from './xspecScenario';
+import { XSpecLike } from './xspecLike';
 import { XslLexerLight } from './xslLexerLight';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, Data } from './xpLexer';
@@ -170,6 +171,10 @@ export class XsltTokenCompletions {
 		let isXSLT = docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40;
 		XsltTokenCompletions.xspecXPath40 = docType === DocumentTypes.XSPEC && XsltTokenDiagnostics.isXSpecXPath40(document.getText());
 		XsltTokenCompletions.xpath31 = docType === DocumentTypes.XPath && !XPathVersion.isXPath40(document);
+		// XSpec: the x:variable and x:param elements in scope where the cursor is, as XSpec scopes them - read only if a
+		// variable is completed
+		XsltTokenCompletions.xspecVariables = docType === DocumentTypes.XSPEC && document.uri.scheme === 'file' ?
+			() => XSpecLike.variablesInScope(document.getText(), document.fileName, document.offsetAt(position)) : undefined;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined = false;
@@ -2765,8 +2770,24 @@ export class XsltTokenCompletions {
 		XsltTokenCompletions.pushStackVariableNames(0, xpathStack, completionStrings);
 		// startIndex = 2 - so we miss out globals
 		XsltTokenCompletions.pushStackVariableNames(2, elementStack, completionStrings);
-		return XsltTokenCompletions.createVariableCompletions(pos, '$', completionStrings, token, vscode.CompletionItemKind.Variable);
+		// XSpec: the variables of the enclosing scenarios, and those x:like brings in - with the type of each declared
+		const xspecVariables = XsltTokenCompletions.xspecVariables?.() ?? [];
+		xspecVariables.forEach((variable) => {
+			if (completionStrings.indexOf(variable.name) < 0) {
+				completionStrings.push(variable.name);
+			}
+		});
+		const items = XsltTokenCompletions.createVariableCompletions(pos, '$', completionStrings, token, vscode.CompletionItemKind.Variable);
+		xspecVariables.filter((variable) => variable.as).forEach((variable) => {
+			const item = items.find((i) => i.label === '$' + variable.name);
+			if (item) {
+				item.detail = variable.as;
+			}
+		});
+		return items;
 	}
+
+	private static xspecVariables: (() => { name: string, as?: string }[]) | undefined;
 
 	private static getTokenSpecialCompletions(token: BaseToken, type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
 		let completionStrings: string[] = [];
@@ -3368,6 +3389,19 @@ export class XsltTokenCompletions {
 					newItem.insertText = new vscode.SnippetString('subtreeProcessingMode defaultMode="${1:text}">\n\t<subtrees>\n\t\t<subtree elemXpath="${3:/container}" mode="${4:data}"/>$0\n\t</subtrees>\n</subtreeProcessingMode>');
 					completionItems.push(newItem);
 				}
+			} else if (docType === DocumentTypes.XSPEC && XsltTokenCompletions.isXSpecDeclaration(tagName, XsltTokenCompletions.parentInText(document, pos))) {
+				// x:variable - or x:param of x:description or x:scenario - with its name and type, for the value in select or
+				// as content, e.g. XML test data. The type is a placeholder: typing there lists the types, as for any 'as'
+				useCurrent = false;
+				const start = `${tagName} name="\${1:name}" as="\${2:item()*}"`;
+				const withSelect = new vscode.CompletionItem(tagName + ' (select)', vscode.CompletionItemKind.Struct);
+				withSelect.documentation = tagDetail.length > 0 ? tagDetail : undefined;
+				withSelect.insertText = new vscode.SnippetString(`${start} select="$3"/>$0`);
+				completionItems.push(withSelect);
+				const withContent = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+				withContent.documentation = tagDetail.length > 0 ? tagDetail : undefined;
+				withContent.insertText = new vscode.SnippetString(`${start}>\n\t$0\n</${tagName}>`);
+				completionItems.push(withContent);
 			}
 			if (useCurrent) {
 				switch (snippetAttrs.length) {
@@ -3408,6 +3442,22 @@ export class XsltTokenCompletions {
 			}
 		});
 		return completionItems;
+	}
+
+	// in an XSpec file: an element that declares a variable - x:variable, or x:param in x:description or x:scenario (a
+	// global or scenario parameter, not one passed by x:call, x:context or x:apply)
+	private static isXSpecDeclaration(tagName: string, parent: string | null) {
+		const localName = (name: string | null) => name?.replace(/^.*:/, '') ?? '';
+		return localName(tagName) === 'variable' || (localName(tagName) === 'param' && ['description', 'scenario'].includes(localName(parent)));
+	}
+
+	// the name of the element a '<' just typed is in, from the text before it - the element stack can end before, e.g.
+	// with <x:call><</x:call> the '<' is read with the end tag after it
+	private static parentInText(document: vscode.TextDocument, pos: vscode.Position): string | null {
+		const text = document.getText();
+		const tagStart = text.lastIndexOf('<', document.offsetAt(pos) - 1);
+		const ancestors = tagStart > -1 ? RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart) : [];
+		return ancestors[ancestors.length - 1]?.name ?? null;
 	}
 
 	private static addNewCompletionItem(completionItems: vscode.CompletionItem[], itemLabel: string, documentation: string, snippetString: string) {
