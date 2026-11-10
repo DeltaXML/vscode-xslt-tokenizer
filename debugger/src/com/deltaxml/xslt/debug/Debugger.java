@@ -312,6 +312,17 @@ final class Debugger {
         return false;
     }
 
+    // in an XSpec test run, an xsl:message of the test runner or XSpec's own modules - e.g. the runner's progress
+    // message for each scenario, such as 'PENDING: (force focus) o:heading' - rather than of the stylesheet tested: the
+    // modules a step doesn't stop in (see stepSkipped). The Test Explorer shows the outcomes, so it isn't written
+    boolean isXSpecMessage(net.sf.saxon.s9api.Location location) {
+        if (!values.hideXSpecGlobals || location == null || location.getSystemId() == null) {
+            return false;
+        }
+        String path = pathOf(location.getSystemId());
+        return path != null && isStepSkipped(path);
+    }
+
     // one of the runner's lines for an XSpec file's step (see stepStops)
     private boolean isStepStop(String path, int line) {
         Set<Integer> lines = stepStops.get(path);

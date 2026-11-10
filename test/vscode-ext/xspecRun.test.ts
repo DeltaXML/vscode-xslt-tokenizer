@@ -195,6 +195,46 @@ suite('XSpec: running tests', function () {
 		}
 	});
 
+	test('debug a scenario: the stylesheet\'s xsl:message is in the Debug Console - not the test runner\'s, e.g. PENDING for each scenario not run', async () => {
+		fs.writeFileSync(path.join(dir, 'messages.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0">
+  <xsl:function name="f:half"><xsl:param name="n"/><xsl:message select="'halving ' || $n"/><xsl:sequence select="$n div 2"/></xsl:function>
+</xsl:stylesheet>`);
+		const messagesXspec = path.join(dir, 'messages.xspec');
+		fs.writeFileSync(messagesXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="messages.xsl">
+  <x:scenario label="four"><x:call function="f:half"><x:param select="4"/></x:call><x:expect label="is two" select="2"/></x:scenario>
+  <x:scenario label="six"><x:call function="f:half"><x:param select="6"/></x:call><x:expect label="is three" select="3"/></x:scenario>
+  <x:scenario label="eight"><x:call function="f:half"><x:param select="8"/></x:call><x:expect label="is four" select="4"/></x:scenario>
+</x:description>`);
+		const output: string[] = [];
+		const tracker = vscode.debug.registerDebugAdapterTrackerFactory('xslt-saxon', {
+			createDebugAdapterTracker: () => ({
+				onDidSendMessage: (message: { type: string, event?: string, body?: { output?: string } }) => {
+					if (message.type === 'event' && message.event === 'output' && message.body?.output) {
+						output.push(message.body.output);
+					}
+				}
+			})
+		});
+		try {
+			const xspec = XSpecTestController.instance!;
+			const uri = vscode.Uri.file(messagesXspec);
+			await vscode.workspace.openTextDocument(uri);
+			const fileItem = xspec.testController.items.get(uri.toString())!;
+			const outcomes = new Map<string, string>();
+			xspec.createRun = () => recordingRun(outcomes, new Map());
+			// one scenario: the others are pending, with force-focus
+			await xspec.debugProfile.runHandler(new vscode.TestRunRequest([child(fileItem, 'six')]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			assert.strictEqual(outcomes.get('is three'), 'passed', JSON.stringify([...outcomes]));
+			const text = output.join('');
+			assert.include(text, 'halving 6');
+			assert.notInclude(text, 'PENDING', text);
+			assert.notInclude(text, 'four', 'nor the runner\'s message for a scenario not run');
+		} finally {
+			tracker.dispose();
+		}
+	});
+
 	// XSpec's focus bug (4.1.2, reported): an outer scenario's x:variable using $x:context gives XPST0008 in the runner
 	// when an inner scenario is focused - by force-focus, which runs one scenario, or a focus attribute in the file
 	test('XSpec\'s focus bug: each scenario, and the whole file, run without the focus that XSpec can\'t run', async () => {
