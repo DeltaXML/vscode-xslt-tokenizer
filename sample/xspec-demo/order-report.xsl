@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    An order report: functions for the line totals and amounts, a named template for the heading, and template rules
-    that turn orders.xml into an HTML report - tested by order-report.xspec (functions and templates) and
-    order-rules.xspec (template rules). Run it with Quick Run, with orders.xml.
+     An order report: functions for the line totals and amounts, a named template for the heading, and template rules
+     that turn orders.xml into an HTML report - tested by order-report.xspec (functions and templates) and
+     order-rules.xspec (template rules). Run it with Quick Run, with orders.xml.
 
-    Things to try:
-    - in the start tag of a function or template: the code action 'Create XSpec scenario for …'
-    - in the start tag of xsl:stylesheet: the code action to create a test file with a scenario for each declaration
-    - Find All References on o:line-total: its uses in the XSpec files too
+     Things to try:
+     - in the start tag of a function or template: the code action 'Create XSpec scenario for …'
+     - in the start tag of xsl:stylesheet: the code action to create a test file with a scenario for each declaration
+     - Find All References on o:line-total: its uses in the XSpec files too
 -->
 <xsl:stylesheet version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-    xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    xmlns:o="http://example.com/orders"
-    exclude-result-prefixes="#all" expand-text="yes">
+                xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                xmlns:o="http://example.com/orders"
+                exclude-result-prefixes="#all" expand-text="yes">
 
   <xsl:output method="html" indent="yes"/>
 
@@ -35,10 +35,10 @@
   <xsl:function name="o:summary" as="map(xs:string, item())">
     <xsl:param name="order" as="element(order)"/>
     <xsl:sequence select="map {
-      'id': string($order/@id),
-      'lines': count($order/line),
-      'total': sum($order/line ! o:line-total(xs:integer(@quantity), xs:decimal(@price)))
-    }"/>
+        'id': string($order/@id),
+        'lines': count($order/line),
+        'total': sum($order/line ! o:line-total(xs:integer(@quantity), xs:decimal(@price)))
+      }"/>
   </xsl:function>
 
   <!-- the products of an order's lines, as an array -->
@@ -58,6 +58,9 @@
     <xsl:param name="repeats" as="xs:integer" select="1"/>
     <section>
       <xsl:for-each select="1 to $repeats">
+        <xsl:if test=". eq 2">
+          <para class="midle">paragraph: 2</para>
+        </xsl:if>
         <para><xsl:value-of select="$text || ' ' || position()"/></para>
       </xsl:for-each>
     </section>
@@ -66,9 +69,9 @@
   <xsl:template name="o:repeatParas">
     <xsl:param name="text" as="xs:string"/>
     <xsl:param name="repeats" as="xs:integer" select="1"/>
-      <xsl:for-each select="1 to $repeats">
-        <para><xsl:value-of select="$text || ' ' || position()"/></para>
-      </xsl:for-each>
+    <xsl:for-each select="1 to $repeats">
+      <para><xsl:value-of select="$text || ' ' || position()"/></para>
+    </xsl:for-each>
   </xsl:template>
 
   <xsl:template match="/orders">
