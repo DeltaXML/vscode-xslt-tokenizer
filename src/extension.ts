@@ -756,7 +756,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		const result = await ClaudeCodeSetup.setUp(XsltMcpServer.url(), await mcpServer.getToken(), choice.scope, folder?.uri.fsPath);
 		if (result.ok) {
-			vscode.window.showInformationMessage(`Claude Code is set up to use the XSLT/XPath MCP server${folder ? ` in ${folder.name}` : ' in all projects'} - in a Claude Code session already running, run /mcp to connect.`);
+			vscode.window.showInformationMessage(`Claude Code is set up to use the XSLT/XPath MCP server${folder ? ` in ${folder.name}` : ' in all projects'}. Start a new Claude Code session to use it: a session already running keeps its old settings.`);
 		} else {
 			XsltMcpServer.log.error(`claude mcp add failed: ${result.output}`);
 			await copyClaudeCommand(choice.scope, result.notFound ? 'Claude Code\'s \'claude\' command wasn\'t found.' : `Claude Code couldn't set up the server: ${result.output}`);
@@ -772,7 +772,7 @@ export function activate(context: vscode.ExtensionContext) {
 		// Claude Code set up with the old token: for all projects, or for a workspace folder
 		const { updated, result } = await ClaudeCodeSetup.update(XsltMcpServer.url(), token, (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath));
 		const setUp = 'Set Up MCP Server for Claude Code';
-		const claude = updated.length > 0 ? `Claude Code is set up again with it, for ${updated.join(' and ')}.`
+		const claude = updated.length > 0 ? `Claude Code is set up again with it, for ${updated.join(' and ')} - start a new Claude Code session: one already running keeps the old token.`
 			: result?.notFound ? `Claude Code's 'claude' command wasn't found: set it up again with '${setUp}' after 'claude mcp remove xslt-xpath'.`
 				: result ? `Claude Code couldn't be set up again: ${result.output}` : 'Claude Code wasn\'t set up with the old one.';
 		if (result && !result.notFound) {
