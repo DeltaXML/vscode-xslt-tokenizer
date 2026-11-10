@@ -85,6 +85,7 @@ export class XsltProfileView {
             XsltProfileView.panel.reveal(undefined, true);
             return;
         }
+        const groupCount = vscode.window.tabGroups.all.length;
         const panel = vscode.window.createWebviewPanel(XsltProfileView.viewType, XsltProfileView.title(run),
             { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true }, // kept when hidden, so a row selected from a CodeLens isn't lost while the page reloads - the page is small
             { enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true });
@@ -97,6 +98,43 @@ export class XsltProfileView {
             XsltProfileView.onDidChangeEmitter.fire();
         });
         XsltProfileView.panel = panel;
+        XsltProfileView.narrowGroup(panel, groupCount);
+    }
+
+    // the width the view opens at, in its slim mode
+    private static readonly openWidth = 480;
+
+    // the new editor group the view opened in, narrowed to openWidth - the width going to the group on its left. Only
+    // for a row of side-by-side groups with the view's last: any other layout is left as it is. groupCount is the
+    // number of groups before the view opened - the new group, and the panel's viewColumn, show up only once the
+    // workbench has opened the panel, so they're waited for (up to a second)
+    private static async narrowGroup(panel: vscode.WebviewPanel, groupCount: number) {
+        type GroupLayout = { size?: number; groups?: GroupLayout[] };
+        try {
+            for (let i = 0; i < 20 && (vscode.window.tabGroups.all.length <= groupCount || panel.viewColumn === undefined); i++) {
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            if (vscode.window.tabGroups.all.length <= groupCount || XsltProfileView.panel !== panel) {
+                return;
+            }
+            const layout = await vscode.commands.executeCommand<{ orientation: number; groups: GroupLayout[] }>('vscode.getEditorLayout');
+            const groups = layout?.groups;
+            if (!groups || layout.orientation !== 0 || groups.length < 2 || panel.viewColumn !== groups.length ||
+                groups.some((g) => g.groups || typeof g.size !== 'number')) {
+                return;
+            }
+            const last = groups[groups.length - 1];
+            const previous = groups[groups.length - 2];
+            const spare = last.size! - XsltProfileView.openWidth;
+            if (spare <= 0 || previous.size! + spare < XsltProfileView.openWidth) {
+                return;
+            }
+            previous.size = previous.size! + spare;
+            last.size = XsltProfileView.openWidth;
+            await vscode.commands.executeCommand('vscode.setEditorLayout', { orientation: 0, groups: groups.map((g) => ({ size: g.size })) });
+        } catch {
+            // the layout commands are VS Code's own - if they change, the view just opens at the width it's given
+        }
     }
 
     private static title(run: ProfileRun) {
