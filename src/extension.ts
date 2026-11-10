@@ -70,6 +70,7 @@ import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
 import { XsltProfile, ProfileDeclaration, ProfileEntry } from './xsltProfile';
 import { XsltProfileView, XsltProfileCodeLensProvider, ProfileRow, ProfileRun } from './xsltProfileView';
 import { XsltProfileTimeline } from './xsltProfileTimeline';
+import { TimelineCommands } from './timelineCommands';
 import { XsltMcpDefinitionProvider, XsltMcpServer } from './mcp/xsltMcpServer';
 import { ClaudeCodeSetup, ClaudeScope } from './mcp/claudeCodeSetup';
 
@@ -1458,6 +1459,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showProfileRow', (index: number) => XsltProfileView.showRow(index)));
 	// the profiles kept for each stylesheet, in its Timeline view
 	XsltProfileTimeline.register(context);
+	// commands to clear the profiles and XSpec runs from the Timeline view
+	TimelineCommands.register(context);
 
 	// shows, in tasks.json, the task of this type that Quick Run (or for 'xslt', Debug too) uses for the active stylesheet
 	// (or the top-level stylesheet importing it) and the XML context file - first saving it, as a run would, if there

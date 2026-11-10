@@ -21,6 +21,7 @@ interface TimelineItem {
 	iconPath?: vscode.ThemeIcon;
 	description?: string;
 	tooltip?: string | vscode.MarkdownString;
+	contextValue?: string;
 }
 interface TimelineOptions { readonly cursor?: string; readonly limit?: number }
 interface Timeline { readonly items: readonly TimelineItem[]; readonly cursor?: string }
@@ -118,6 +119,46 @@ export class XSpecTimeline {
 		return XSpecTimeline.instance?.runs();
 	}
 
+	// removes the XSpec file's outcomes from the runs - or with no file, all the runs. A run that had only that file is
+	// removed; one with others is kept for them. The number of the file's outcomes, or runs, removed
+	public static async clear(file?: vscode.Uri): Promise<number> {
+		return XSpecTimeline.remove(() => true, file?.fsPath);
+	}
+
+	// removes one entry: in the workspace timeline, a run - and in an XSpec file's, the file's outcome in the run
+	public static async deleteEntry(id: string, file?: vscode.Uri): Promise<number> {
+		return XSpecTimeline.remove((run) => String(run.start) === id, file?.fsPath);
+	}
+
+	// removes the runs chosen - or with a file, its outcome in them
+	private static async remove(removing: (run: XSpecRunRecord) => boolean, file?: string): Promise<number> {
+		const timeline = XSpecTimeline.instance;
+		if (!timeline) {
+			return 0;
+		}
+		let count = 0;
+		const changedFiles = new Set<string>();
+		const runs = timeline.runs().flatMap((run) => {
+			if (!removing(run)) {
+				return [run];
+			}
+			const files = run.files.filter((f) => file !== undefined && f.file !== file);
+			if (files.length === run.files.length) {
+				return [run];
+			}
+			count++;
+			run.files.filter((f) => !files.includes(f)).forEach((f) => changedFiles.add(f.file));
+			return files.length > 0 ? [{ ...run, files }] : [];
+		});
+		if (count === 0) {
+			return 0;
+		}
+		await timeline.state.update(XSpecTimeline.stateKey, runs);
+		timeline.workspaceChanged.fire();
+		timeline.changed.fire([...changedFiles].map((f) => vscode.Uri.file(f)));
+		return count;
+	}
+
 	// newest first
 	private runs(): XSpecRunRecord[] {
 		return this.state.get<XSpecRunRecord[]>(XSpecTimeline.stateKey, []);
@@ -159,6 +200,7 @@ export class XSpecTimeline {
 		const stopped = run.files.filter((f) => f.stopped !== undefined);
 		const item = new this.itemClass(`XSpec ${run.kind.toLowerCase()}: ` + XSpecTimeline.counts(totals) + (stopped.length > 0 ? `, ${stopped.length} stopped` : ''), run.start);
 		item.id = String(run.start);
+		item.contextValue = 'xspecRun';
 		item.iconPath = XSpecTimeline.icon(totals.failed > 0, stopped.length > 0 || run.cancelled);
 		const files = run.files.length === 1 ? vscode.workspace.asRelativePath(run.files[0].file) : `${run.files.length} files`;
 		item.description = [files, XSpecTimeline.seconds(run), ...(run.cancelled ? ['cancelled'] : [])].join(' · ');
@@ -176,6 +218,7 @@ export class XSpecTimeline {
 	private fileItem(run: XSpecRunRecord, file: XSpecRunFile): TimelineItem {
 		const item = new this.itemClass(`XSpec ${run.kind.toLowerCase()}: ` + (file.stopped !== undefined ? 'stopped' : XSpecTimeline.counts(file)), run.start);
 		item.id = String(run.start);
+		item.contextValue = 'xspecRunFile';
 		item.iconPath = XSpecTimeline.icon(file.failed > 0, file.stopped !== undefined);
 		const testTime = XSpecTimeline.testTimeText(file);
 		item.description = [...(testTime ? [testTime] : []), ...(run.files.length > 1 ? [`in a run of ${run.files.length} files`] : [])].join(' · ');

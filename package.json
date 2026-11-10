@@ -342,6 +342,21 @@
 				"icon": "$(pulse)"
 			},
 			{
+				"command": "xslt-xpath.clearTimelineFile",
+				"title": "Clear Profiles and XSpec Runs from Timeline (Current File)",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.clearTimelineAll",
+				"title": "Clear Profiles and XSpec Runs from Timeline (All Files)",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.deleteTimelineEntry",
+				"title": "Delete",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.analyseAsPackage",
 				"title": "Analyse as Package...",
 				"category": "XSLT",
@@ -628,6 +643,24 @@
 					"group": "xspec@1"
 				}
 			],
+			"timeline/title": [
+				{
+					"command": "xslt-xpath.clearTimelineFile",
+					"when": "resourceLangId =~ /^(xslt|xspec)$/",
+					"group": "xslt@1"
+				},
+				{
+					"command": "xslt-xpath.clearTimelineAll",
+					"group": "xslt@2"
+				}
+			],
+			"timeline/item/context": [
+				{
+					"command": "xslt-xpath.deleteTimelineEntry",
+					"when": "timeline == xslt-profiles || timeline == xspec-runs",
+					"group": "xslt@1"
+				}
+			],
 			"view/item/context": [
 				{
 					"command": "xslt-xpath.quickRunModule",
@@ -669,6 +702,14 @@
 				{
 					"command": "xslt-xpath.profileXslt",
 					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.clearTimelineFile",
+					"when": "editorLangId =~ /^(xslt|xspec)$/"
+				},
+				{
+					"command": "xslt-xpath.deleteTimelineEntry",
+					"when": "false"
 				},
 				{
 					"command": "xslt-xpath.wrapWith",

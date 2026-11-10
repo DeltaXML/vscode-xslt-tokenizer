@@ -25,6 +25,7 @@ interface TimelineItem {
 	description?: string;
 	tooltip?: string | vscode.MarkdownString;
 	command?: vscode.Command;
+	contextValue?: string;
 }
 interface TimelineOptions { readonly cursor?: string; readonly limit?: number }
 interface Timeline { readonly items: readonly TimelineItem[]; readonly cursor?: string }
@@ -119,6 +120,34 @@ export class XsltProfileTimeline {
 		return XsltProfileTimeline.instance?.records();
 	}
 
+	// removes the stylesheet's profiles - or with no stylesheet, all of them - and their files; the number removed
+	public static async clear(stylesheet?: vscode.Uri): Promise<number> {
+		return XsltProfileTimeline.remove((r) => !stylesheet || r.stylesheet === stylesheet.fsPath);
+	}
+
+	// removes one profile, by its timeline item's id
+	public static async deleteEntry(id: string): Promise<number> {
+		return XsltProfileTimeline.remove((r) => String(r.id) === id);
+	}
+
+	private static async remove(removing: (record: ProfileRecord) => boolean): Promise<number> {
+		const timeline = XsltProfileTimeline.instance;
+		if (!timeline) {
+			return 0;
+		}
+		const records = timeline.records();
+		const removed = records.filter(removing);
+		if (removed.length === 0) {
+			return 0;
+		}
+		await timeline.state.update(XsltProfileTimeline.stateKey, records.filter((r) => !removing(r)));
+		for (const old of removed) {
+			await vscode.workspace.fs.delete(timeline.file(old.id)).then(undefined, () => undefined);
+		}
+		timeline.changed.fire([...new Set(removed.map((r) => r.stylesheet))].map((s) => vscode.Uri.file(s)));
+		return removed.length;
+	}
+
 	// newest first
 	private records(): ProfileRecord[] {
 		return this.state.get<ProfileRecord[]>(XsltProfileTimeline.stateKey, []);
@@ -157,6 +186,7 @@ export class XsltProfileTimeline {
 		const ms = XsltProfileTimeline.ms;
 		const item = new this.itemClass(`Profile: ${ms(record.netTotal)} ms`, record.id);
 		item.id = String(record.id);
+		item.contextValue = 'xsltProfile';
 		item.iconPath = new vscode.ThemeIcon('pulse');
 		const runs = XsltProfile.runsText(record.runs, record.requestedRuns);
 		item.description = [record.sourceSummary, runs, record.processor].join(' · ');
