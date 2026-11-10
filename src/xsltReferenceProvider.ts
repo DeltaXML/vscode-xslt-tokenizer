@@ -380,6 +380,13 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					});
 				}
 			}
+			// the x:param names in the XSpec files that call the template, e.g. <x:call template="t"><x:param name="p"/>
+			if (declarationName !== undefined && definition.uri.scheme === 'file') {
+				const modules = XSpecReferences.modulesOf(declarationDocument.fileName, await ImportIndex.moduleTrees(declarationDocument));
+				const xspecLocations = await XSpecReferences.findTemplateParams(ModulePrefixes.expandedName(declarationName.trim(), declarationBindings),
+					ModulePrefixes.expandedName(paramName, declarationBindings), modules);
+				locations.push(...xspecLocations);
+			}
 			return locations;
 		}
 		// the calls of the function that its arity allows - the parameters with required="no" are optional, and the

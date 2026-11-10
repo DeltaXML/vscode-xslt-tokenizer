@@ -517,6 +517,26 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		return { definition, declarationDocument: await vscode.workspace.openTextDocument(definition.uri), nameRange };
 	};
+	// the name of an x:param of x:call - for a named template, its xsl:param: the declaration, its document, and the
+	// name's range in the XSpec file. Not x:description's x:param, for a global parameter
+	const templateParamAt = async (document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken) => {
+		const param = XSpecScenario.templateParamAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document));
+		if (!param) {
+			return undefined;
+		}
+		const nameRange = new vscode.Range(document.positionAt(param.nameStart), document.positionAt(param.nameStart + param.param.length));
+		const definition = await xspecDefinitionProvider.provideDefinition(document, position, token);
+		if (!definition || definition.uri.scheme !== 'file' || definition.uri.toString() === document.uri.toString()) {
+			return undefined;
+		}
+		const declarationDocument = await vscode.workspace.openTextDocument(definition.uri);
+		const declarationText = declarationDocument.getText();
+		const tagStart = declarationText.lastIndexOf('<', declarationDocument.offsetAt(definition.range.start));
+		if (tagStart < 0 || !/^<[\w.-]+:param\s/.test(declarationText.substring(tagStart, tagStart + 40))) {
+			return undefined;
+		}
+		return { definition, declarationDocument, nameRange };
+	};
 	// a scenario's label, or an x:like's: the x:like elements using the scenario
 	// and a variable's: its references, as XSpec scopes them (see XSpecVariables)
 	// and a function, named template or mode of the stylesheet under test, e.g. x:call's function or x:context's mode: its
@@ -526,7 +546,7 @@ export function activate(context: vscode.ExtensionContext) {
 		if (xspecReferences) {
 			return xspecReferences;
 		}
-		const component = await stylesheetComponentAt(document, position, token);
+		const component = await stylesheetComponentAt(document, position, token) ?? await templateParamAt(document, position, token);
 		if (!component) {
 			return undefined;
 		}
@@ -542,9 +562,9 @@ export function activate(context: vscode.ExtensionContext) {
 			if (renamed) {
 				return renamed;
 			}
-			const component = await stylesheetComponentAt(document, position, token);
+			const component = await stylesheetComponentAt(document, position, token) ?? await templateParamAt(document, position, token);
 			if (!component) {
-				throw new Error('Only a scenario\'s label, an x:like\'s, a variable declared in the XSpec file, or a function, template or mode of the stylesheet can be renamed');
+				throw new Error('Only a scenario\'s label, an x:like\'s, a variable declared in the XSpec file, a function, template or mode of the stylesheet, or a parameter of the template can be renamed');
 			}
 			// the declaration's other declarations may prevent it, e.g. an overriding function
 			try {
@@ -560,6 +580,12 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 			if (XSpecVariables.prepareRename(document, position)) {
 				return XSpecVariables.renameEdits(document, position, newName);
+			}
+			const param = await templateParamAt(document, position, token);
+			if (param) {
+				const provider = new XSLTReferenceProvider();
+				await provider.prepareRename(param.declarationDocument, param.definition.range.start, token);
+				return provider.provideRenameEdits(param.declarationDocument, param.definition.range.start, newName, token);
 			}
 			const component = await stylesheetComponentAt(document, position, token);
 			if (!component) {

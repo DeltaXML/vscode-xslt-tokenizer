@@ -676,6 +676,39 @@ suite('XSpec', () => {
 		assert.deepEqual(edit.get(vscode.Uri.file(tested)).map((e) => e.newText), ['g:triple', 'g:triple']);
 	});
 
+	test('rename a named template\'s parameter: its x:param in the XSpec files calling the template - in an inner scenario\'s x:call too, which calls the outer one\'s template - not another template\'s', async () => {
+		file('params.xsl', `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0">
+  <xsl:template name="f:box"><xsl:param name="width"/><xsl:sequence select="$width"/></xsl:template>
+  <xsl:template name="f:other"><xsl:param name="width"/></xsl:template>
+</xsl:stylesheet>`);
+		const tested = file(`paramRename${count++}.xspec`, `<x:description ${xspecNs} xmlns:g="urn:f" stylesheet="params.xsl">
+  <x:scenario label="direct"><x:call template="g:box"><x:param name="width" select="1"/></x:call><x:expect label="e" select="1"/></x:scenario>
+  <x:scenario label="outer">
+    <x:call template="g:box"/>
+    <x:scenario label="inner"><x:call><x:param name = 'width' select="2"/></x:call><x:expect label="e" select="2"/></x:scenario>
+  </x:scenario>
+  <x:scenario label="other"><x:call template="g:other"><x:param name="width" select="3"/></x:call><x:expect label="e" select="()"/></x:scenario>
+</x:description>`);
+		const xspecDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(tested));
+		const sut = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'params.xsl')));
+		const offset = sut.getText().indexOf('name="width"') + 7;
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', sut.uri, sut.positionAt(offset), 'size');
+		const edits = edit.get(xspecDocument.uri);
+		assert.deepEqual(edits.map((e) => `${e.range.start.line + 1}:${xspecDocument.getText(e.range)}->${e.newText}`), ['2:width->size', '5:width->size']);
+		// in the stylesheet: the parameter and its reference, not f:other's
+		assert.deepEqual(edit.get(sut.uri).map((e) => e.range.start.line + 1), [2, 2]);
+		// and from the XSpec file - the x:param of x:call, or of the inner scenario's x:call - the same edits
+		for (const [text, n] of [['width" select="1"', 0], ['width\' select="2"', 0]] as [string, number][]) {
+			const at = xspecDocument.positionAt(xspecDocument.getText().indexOf(text, n) + 2);
+			const fromXSpec = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', xspecDocument.uri, at, 'size');
+			assert.deepEqual(fromXSpec.get(xspecDocument.uri).map((e) => e.range.start.line + 1), [2, 5], text);
+			assert.deepEqual(fromXSpec.get(sut.uri).map((e) => e.range.start.line + 1), [2, 2], text);
+		}
+		// the other template's x:param: its own parameter, not f:box's
+		const references = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', xspecDocument.uri, xspecDocument.positionAt(xspecDocument.getText().indexOf('width" select="3"') + 2));
+		assert.deepEqual(references.map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line + 1}`).sort(), [`${path.basename(tested)}:7`, 'params.xsl:3']);
+	});
+
 	test('find all references to a mode of the stylesheet: x:context\'s mode in the XSpec files testing it - and from the XSpec file, the stylesheet\'s references', async () => {
 		const tested = file(`modeRefs${count++}.xspec`, `<x:description ${xspecNs} xmlns:g="urn:f" stylesheet="sut.xsl">
   <x:scenario label="s"><x:context mode="g:para"><p/></x:context><x:expect label="e" select="()"/></x:scenario>

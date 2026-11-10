@@ -17,6 +17,7 @@ import { ModulePrefixes } from './modulePrefixes';
 import { HrefPaths } from './hrefPaths';
 import { XSpecSourceMap } from './xspecSourceMap';
 import { XSpecPackages } from './xspecPackages';
+import { XmlElement, parseXml, descendants } from './xspecXml';
 
 // The uses of a stylesheet's function, named template or mode in the XSpec files that test it - for Find All References and
 // Rename (see XSLTReferenceProvider): x:call's function or template, x:context's mode, and function calls in XPath expressions, e.g. a
@@ -26,8 +27,19 @@ export class XSpecReferences {
 	// the locations of the names, in the XSpec files whose stylesheet - or helper - is one of the modules, e.g. the module
 	// declaring it, or a stylesheet that imports it
 	public static async find(kind: 'function' | 'template' | 'mode', expandedName: string, modules: string[]): Promise<vscode.Location[]> {
+		return XSpecReferences.inTestFiles(modules, (text, uri) => XSpecReferences.inXSpec(text, uri, kind, expandedName));
+	}
+
+	// the names of the x:param elements that pass a named template's parameter, in the XSpec files whose stylesheet - or
+	// helper - is one of the modules: x:call template="…" - or, in an inner scenario, an x:call without a template
+	// attribute, which calls the template of an outer scenario's x:call, as XSpec merges them
+	public static async findTemplateParams(templateName: string, paramName: string, modules: string[]): Promise<vscode.Location[]> {
+		return XSpecReferences.inTestFiles(modules, (text, uri) => XSpecReferences.templateParamsInXSpec(text, uri, templateName, paramName));
+	}
+
+	// the locations found in each XSpec file - in the workspace, or open in an editor - that tests one of the modules
+	private static async inTestFiles(modules: string[], inFile: (text: string, uri: vscode.Uri) => vscode.Location[]): Promise<vscode.Location[]> {
 		const locations: vscode.Location[] = [];
-		// the workspace's XSpec files, and any open in an editor
 		const uris = await vscode.workspace.findFiles('**/*.xspec', '**/node_modules/**');
 		vscode.workspace.textDocuments.filter((document) => document.languageId === 'xspec' && document.uri.scheme === 'file' && !uris.some((uri) => uri.toString() === document.uri.toString()))
 			.forEach((document) => uris.push(document.uri));
@@ -36,10 +48,64 @@ export class XSpecReferences {
 				const open = vscode.workspace.textDocuments.find((document) => document.uri.toString() === uri.toString());
 				const text = open ? open.getText() : fs.readFileSync(uri.fsPath, 'utf8');
 				if (XSpecReferences.testsAny(text, uri.fsPath, modules)) {
-					locations.push(...XSpecReferences.inXSpec(text, uri, kind, expandedName));
+					locations.push(...inFile(text, uri));
 				}
 			} catch {
 				// a file that can't be read
+			}
+		}
+		return locations;
+	}
+
+	private static templateParamsInXSpec(text: string, uri: vscode.Uri, templateName: string, paramName: string): vscode.Location[] {
+		const root = parseXml(text);
+		if (!root) {
+			return [];
+		}
+		const lexer = new XslLexer(XSpecConfiguration.configuration);
+		lexer.analyse(text);
+		const bindings = lexer.prefixBindings;
+		const prefix = root.name.includes(':') ? root.name.substring(0, root.name.indexOf(':') + 1) : '';
+		const isXSpec = (element: XmlElement, name: string) => element.name === prefix + name;
+		// the template an x:call calls: its own, or that of the nearest outer scenario's x:call with one
+		const calledTemplate = (call: XmlElement): string | undefined => {
+			const own = call.attributes.get('template');
+			if (own !== undefined) {
+				return own.trim();
+			}
+			for (let scenario = call.parent?.parent; scenario; scenario = scenario.parent) {
+				const outer = scenario.children.find((child) => isXSpec(child, 'call'));
+				if (outer?.attributes.has('function')) {
+					return undefined;
+				}
+				if (outer?.attributes.has('template')) {
+					return outer.attributes.get('template')!.trim();
+				}
+			}
+			return undefined;
+		};
+		const toPosition = (offset: number) => {
+			const before = text.substring(0, offset);
+			const line = before.split('\n').length - 1;
+			return new vscode.Position(line, offset - (before.lastIndexOf('\n') + 1));
+		};
+		const locations: vscode.Location[] = [];
+		for (const call of descendants(root).filter((element) => isXSpec(element, 'call') && !element.attributes.has('function'))) {
+			const template = calledTemplate(call);
+			if (template === undefined || ModulePrefixes.expandedName(template, bindings) !== templateName) {
+				continue;
+			}
+			for (const param of call.children.filter((child) => isXSpec(child, 'param'))) {
+				const name = param.attributes.get('name');
+				if (name === undefined || ModulePrefixes.expandedName(name.trim(), bindings) !== paramName) {
+					continue;
+				}
+				// the name's offset, in the param's start tag
+				const attribute = /\sname\s*=\s*(["'])(\s*)/.exec(text.substring(param.start, param.contentStart));
+				if (attribute) {
+					const start = param.start + attribute.index + attribute[0].length;
+					locations.push(new vscode.Location(uri, new vscode.Range(toPosition(start), toPosition(start + name.trim().length))));
+				}
 			}
 		}
 		return locations;

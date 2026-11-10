@@ -420,6 +420,13 @@ export class XSpecScenario {
 
 	// the name of an x:param, at the offset, of an x:call of a template it inherits from an enclosing scenario's x:call
 	public static inheritedParamAt(text: string, offset: number, prefix: string): { template: string, param: string } | undefined {
+		const param = XSpecScenario.templateParamAt(text, offset, prefix);
+		return param?.inherited ? { template: param.template, param: param.param } : undefined;
+	}
+
+	// the name of an x:param, at the offset, of an x:call of a template - its own, or one it inherits from an enclosing
+	// scenario's x:call - with the offset of the name
+	public static templateParamAt(text: string, offset: number, prefix: string): { template: string, param: string, inherited: boolean, nameStart: number } | undefined {
 		const x = prefix ? prefix + ':' : '';
 		const tagStart = text.lastIndexOf('<', offset);
 		if (tagStart < 0 || !text.startsWith(`<${x}param`, tagStart) || !/[\s/>]/.test(text.charAt(tagStart + x.length + 6))) {
@@ -432,7 +439,7 @@ export class XSpecScenario {
 		}
 		const parent = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart).pop();
 		const target = parent?.name === `${x}call` ? XSpecScenario.callTarget(text, parent.offset, prefix) : undefined;
-		return target?.kind === 'template' && target.from !== undefined ? { template: target.name, param: name.trim() } : undefined;
+		return target?.kind === 'template' ? { template: target.name, param: name.trim(), inherited: target.from !== undefined, nameStart: nameStart + name.indexOf(name.trim()) } : undefined;
 	}
 
 	// in an XSpec file with no outermost element yet, after '<': x:description, with the XSpec and XML Schema namespaces,
