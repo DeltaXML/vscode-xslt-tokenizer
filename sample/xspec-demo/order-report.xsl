@@ -58,10 +58,11 @@
     <xsl:param name="repeats" as="xs:integer" select="1"/>
     <section>
       <xsl:for-each select="1 to $repeats">
-        <xsl:if test=". eq 2">
-          <xsl:attribute name="class" select="'midle'"/>
-        </xsl:if>
-        <para><xsl:value-of select="$text || ' ' || position()"/></para>
+        <para>
+          <xsl:if test=". eq 2">
+            <xsl:attribute name="class" select="'midle'"/>
+          </xsl:if>
+          <xsl:value-of select="$text || ' ' || position()"/></para>
       </xsl:for-each>
     </section>
   </xsl:template>
