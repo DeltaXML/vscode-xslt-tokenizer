@@ -182,6 +182,12 @@ export class XsltProfileView {
 	.track { flex: 1; height: 10px; position: relative; }
 	.bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--vscode-charts-blue, var(--vscode-progressBar-background)); border-radius: 1px; min-width: 1px; }
 	.pct { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; }
+	/* slim: too narrow for every column without scrolling sideways - just the declaration and its net %, the label cut
+	   short if need be. The other values are in the row's tooltip */
+	@media (max-width: 600px) {
+		.col-module, .col-count, .col-net, .col-gross, .col-avgNet { display: none; }
+		td.col-label { max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; }
+	}
 	details.settings { margin: 0 0 12px; }
 	details.settings summary { cursor: pointer; color: var(--vscode-descriptionForeground); }
 	details.settings summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
@@ -265,7 +271,7 @@ export class XsltProfileView {
 	function renderHead() {
 		head.textContent = '';
 		for (const column of columns) {
-			const th = el('th', column.num ? 'num' : '');
+			const th = el('th', (column.num ? 'num ' : '') + 'col-' + column.key);
 			th.tabIndex = 0;
 			const sorted = state.sortKey === column.key;
 			th.setAttribute('aria-sort', sorted ? (state.descending ? 'descending' : 'ascending') : 'none');
@@ -302,14 +308,18 @@ export class XsltProfileView {
 			const tr = el('tr');
 			tr.tabIndex = 0;
 			tr.dataset.index = String(row.index);
-			tr.title = 'Go to the declaration: ' + row.moduleTitle + ':' + row.line;
-			const component = el('td');
+			// an average over runs - fractional only if a run made a different number of calls
+			const calls = Number.isInteger(row.count) ? String(row.count) : row.count.toFixed(1);
+			// with the times too, for slim mode, which hides their columns
+			tr.title = 'Go to the declaration: ' + row.moduleTitle + ':' + row.line + '\\n' +
+				calls + (row.count === 1 ? ' call' : ' calls') + ' \\u00b7 ' + ms(row.net) + ' ms net \\u00b7 ' + ms(row.gross) + ' ms gross \\u00b7 ' + ms(row.avgNet) + ' ms avg net';
+			const component = el('td', 'col-label');
 			component.append(el('span', 'kind', row.kind), el('span', 'label', row.label));
 			if (row.mode) { component.append(el('span', 'mode', 'mode=' + row.mode)); }
-			const module = el('td');
+			const module = el('td', 'col-module');
 			module.title = row.moduleTitle;
 			module.append(row.module, el('span', 'line', ':' + row.line));
-			const share = el('td', 'share');
+			const share = el('td', 'share col-share');
 			const cell = el('div', 'bar-cell');
 			const track = el('div', 'track');
 			const bar = el('div', 'bar');
@@ -317,9 +327,8 @@ export class XsltProfileView {
 			track.append(bar);
 			cell.append(track, el('span', 'pct', (100 * row.share).toFixed(1) + '%'));
 			share.append(cell);
-			// an average over runs - fractional only if a run made a different number of calls
-			const calls = Number.isInteger(row.count) ? String(row.count) : row.count.toFixed(1);
-			tr.append(component, module, el('td', 'num', calls), el('td', 'num', ms(row.net)), share, el('td', 'num', ms(row.gross)), el('td', 'num', ms(row.avgNet)));
+			tr.append(component, module, el('td', 'num col-count', calls), el('td', 'num col-net', ms(row.net)), share,
+				el('td', 'num col-gross', ms(row.gross)), el('td', 'num col-avgNet', ms(row.avgNet)));
 			tr.addEventListener('click', () => vscode.postMessage({ command: 'reveal', index: row.index }));
 			tr.addEventListener('keydown', (e) => {
 				if (e.key === 'Enter') {
