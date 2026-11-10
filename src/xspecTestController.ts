@@ -74,10 +74,13 @@ export class XSpecTestController {
 		XSpecTimeline.register(context);
 
 		const watcher = vscode.workspace.createFileSystemWatcher('**/*.xspec');
-		context.subscriptions.push(watcher,
+		// a deleted folder's files get no events of their own - just the folder's - so deletes of anything are watched,
+		// e.g. for rm -rf lib, which has lib/currency.xspec in it
+		const deleteWatcher = vscode.workspace.createFileSystemWatcher('**', true, true, false);
+		context.subscriptions.push(watcher, deleteWatcher,
 			watcher.onDidCreate((uri) => this.fileItem(uri)),
 			watcher.onDidChange((uri) => this.updateFile(uri)),
-			watcher.onDidDelete((uri) => this.removeFile(uri)),
+			deleteWatcher.onDidDelete((uri) => this.removeFilesUnder(uri)),
 			vscode.workspace.onDidOpenTextDocument((document) => this.updateDocument(document)),
 			vscode.workspace.onDidChangeTextDocument((event) => this.updateDocument(event.document)));
 		vscode.workspace.textDocuments.forEach((document) => this.updateDocument(document));
@@ -107,6 +110,19 @@ export class XSpecTestController {
 		this.controller.items.delete(uri.toString());
 		this.itemsByFile.delete(uri.fsPath);
 		XSpecTestController.setHasFiles(this.controller.items.size > 0);
+	}
+
+	// removes the items of the XSpec files that were deleted: the file itself, or those in a deleted folder
+	private removeFilesUnder(uri: vscode.Uri) {
+		const deleted = uri.fsPath;
+		const removed: vscode.Uri[] = [];
+		this.controller.items.forEach((item) => {
+			const file = item.uri!.fsPath;
+			if (file === deleted || file.startsWith(deleted + path.sep)) {
+				removed.push(item.uri!);
+			}
+		});
+		removed.forEach((file) => this.removeFile(file));
 	}
 
 	// the context key for the Test Explorer's menu items for XSpec, e.g. XSpec: Delete Generated Files - which is shown
