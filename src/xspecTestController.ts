@@ -82,8 +82,29 @@ export class XSpecTestController {
 			watcher.onDidChange((uri) => this.updateFile(uri)),
 			deleteWatcher.onDidDelete((uri) => this.removeFilesUnder(uri)),
 			vscode.workspace.onDidOpenTextDocument((document) => this.updateDocument(document)),
+			vscode.workspace.onDidOpenTextDocument((document) => XSpecTestController.highlightDiff(document)),
 			vscode.workspace.onDidChangeTextDocument((event) => this.updateDocument(event.document)));
 		vscode.workspace.textDocuments.forEach((document) => this.updateDocument(document));
+		vscode.workspace.textDocuments.forEach((document) => XSpecTestController.highlightDiff(document));
+	}
+
+	// the scheme of the documents of a failed test's diff, in the Test Results view: the expected and actual results
+	public static readonly testDataScheme = 'vscode-test-data';
+
+	// whether the document is one side of the diff of a failed XSpec expectation - its URI's path ends with ExpectedOutput
+	// or ActualOutput, and its query is the test's ID, which starts with the controller's ID
+	public static isDiffDocument(document: vscode.TextDocument) {
+		const uri = document.uri;
+		return uri.scheme === XSpecTestController.testDataScheme && /\/(Expected|Actual)Output$/.test(uri.path) && uri.query.startsWith(`${XSpecTestController.id}\0`);
+	}
+
+	// VS Code shows the diff's results as plain text: as XML, highlighted, when they're XML - one or more elements, so
+	// perhaps with no root element (see XSpecTests.rawContent), so they aren't checked (see XsltSymbolProvider). Red Hat's
+	// XML extension doesn't check them either: it only checks documents with schemes such as file and untitled
+	private static highlightDiff(document: vscode.TextDocument) {
+		if (XSpecTestController.isDiffDocument(document) && document.languageId === 'plaintext' && document.getText().trimStart().startsWith('<')) {
+			vscode.languages.setTextDocumentLanguage(document, 'xml').then(undefined, () => undefined);
+		}
 	}
 
 	public get testController() {

@@ -287,7 +287,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					// not the debugger's view of the output written so far, e.g. [xslt out] result.xml: it's incomplete
 					// while the stylesheet runs, so not well-formed, and it isn't a file to fix
 					const isDebugOutput = document.uri.scheme === XsltDebugOutputs.scheme;
-					if (allDiagnostics.length > 0 && this.showDiagnostics() && !isDebugOutput) {
+					// nor a failed test's expected or actual result, in the Test Results view's diff: XML with perhaps no
+					// root element
+					const isTestData = document.uri.scheme === 'vscode-test-data';
+					if (allDiagnostics.length > 0 && this.showDiagnostics() && !isDebugOutput && !isTestData) {
 						this.collection.set(document.uri, allDiagnostics);
 					} else {
 						// only this document's problems - not those of other documents
