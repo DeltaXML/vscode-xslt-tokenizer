@@ -59,7 +59,7 @@
     <section>
       <xsl:for-each select="1 to $repeats">
         <xsl:if test=". eq 2">
-          <para class="midle">paragraph: 2</para>
+          <xsl:attribute name="class" select="'midle'"/>
         </xsl:if>
         <para><xsl:value-of select="$text || ' ' || position()"/></para>
       </xsl:for-each>
