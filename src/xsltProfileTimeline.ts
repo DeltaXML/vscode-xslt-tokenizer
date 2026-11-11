@@ -79,8 +79,10 @@ export class XsltProfileTimeline {
 			api.registerTimelineProvider(XsltProfileTimeline.id, XsltProfileTimeline.label, 'file', {
 				onDidChangeTimeline: timeline.changed.event,
 				provideTimeline: (uri, options) => {
+					// an empty timeline, not undefined: in VS Code 1.145, when the last provider to answer returns
+					// undefined, the Timeline view can keep showing 'Loading...'
 					if (!/\.xslt?$/i.test(uri.fsPath)) {
-						return undefined;
+						return { items: [] };
 					}
 					const items = timeline.records().filter((r) => r.stylesheet === uri.fsPath).map((r) => timeline.item(r));
 					return timeline.page(items, options);

@@ -89,8 +89,10 @@ export class XSpecTimeline {
 			api.registerTimelineProvider(XSpecTimeline.id, XSpecTimeline.label, 'file', {
 				onDidChangeTimeline: timeline.changed.event,
 				provideTimeline: (uri, options) => {
+					// an empty timeline, not undefined: in VS Code 1.145, when the last provider to answer returns
+					// undefined, the Timeline view can keep showing 'Loading...'
 					if (!uri.fsPath.endsWith('.xspec')) {
-						return undefined;
+						return { items: [] };
 					}
 					const items = timeline.runs().flatMap((run) => {
 						const file = run.files.find((f) => f.file === uri.fsPath);
