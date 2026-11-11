@@ -10,7 +10,7 @@
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
-import { XMLConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
+import { XMLConfiguration, XSLTConfiguration, XSpecConfiguration } from '../../src/languageConfigurations';
 import { XMLDocumentFormattingProvider } from '../../src/xmlDocumentFormattingProvider';
 
 const spaces: vscode.FormattingOptions = { tabSize: 2, insertSpaces: true };
@@ -32,6 +32,22 @@ suite('Formatting', () => {
 	test('elements are indented by nesting level', async () => {
 		const { lines } = await format(stylesheet(['<xsl:template match="/">', '<a>', '<b/>', '</a>', '</xsl:template>']));
 		assert.deepEqual(lines, stylesheet(['  <xsl:template match="/">', '    <a>', '      <b/>', '    </a>', '  </xsl:template>']));
+	});
+
+	test('with another prefix for XSLT, e.g. x, end tags are outdented as with xsl', async () => {
+		const withX = (body: string[]) => ['<x:stylesheet xmlns:x="http://www.w3.org/1999/XSL/Transform" version="3.0">', ...body, '</x:stylesheet>'];
+		const { lines } = await format(withX(['<x:template match="/">', '<x:if test="true()">', '<a/>', '</x:if>', '</x:template>']));
+		assert.deepEqual(lines, withX(['  <x:template match="/">', '    <x:if test="true()">', '      <a/>', '    </x:if>', '  </x:template>']));
+	});
+
+	test('an XSpec file with another prefix for XSpec, e.g. t: end tags are outdented', async () => {
+		const xspec = (body: string[]) => ['<t:description xmlns:t="http://www.jenitennison.com/xslt/xspec" stylesheet="a.xsl">', ...body, '</t:description>'];
+		const document = await vscode.workspace.openTextDocument({ content: xspec(['<t:scenario label="s">', '<t:context>', '<a/>', '</t:context>', '</t:scenario>']).join('\n'), language: 'xspec' });
+		const edits = new XMLDocumentFormattingProvider(XSpecConfiguration.configuration).provideDocumentFormattingEdits(document, spaces, token());
+		const edit = new vscode.WorkspaceEdit();
+		edit.set(document.uri, edits);
+		await vscode.workspace.applyEdit(edit);
+		assert.deepEqual(document.getText().split('\n'), xspec(['  <t:scenario label="s">', '    <t:context>', '      <a/>', '    </t:context>', '  </t:scenario>']));
 	});
 
 	test('blank lines are left empty, and whitespace-only lines are emptied', async () => {

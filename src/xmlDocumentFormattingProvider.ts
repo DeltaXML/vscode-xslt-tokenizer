@@ -360,7 +360,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								// outdent, by the number of elements the close tag closes - one, unless its name is still
 								// being typed:
 								closedElementCount = 1;
-								const endTagName = /^[^\s/>]+/.exec(document.lineAt(lineNumber).text.substring(token.startCharacter + 2))?.[0];
+								const writtenEndTagName = /^[^\s/>]+/.exec(document.lineAt(lineNumber).text.substring(token.startCharacter + 2))?.[0];
+								// with the native prefix, compared as the start tag's name is: e.g. </x:template> as
+								// xsl:template, where the module's prefix for XSLT is x (and an XSpec file's t:scenario as x:scenario)
+								const endTagName = writtenEndTagName?.startsWith(this.xslLexer.nativePrefix + ':') ?
+									XsltTokenDiagnostics.xsltElementName(writtenEndTagName, document) : writtenEndTagName;
 								if (endTagName && openElementNames.length > 0) {
 									const matchIndex = openElementNames.lastIndexOf(endTagName);
 									closedElementCount = matchIndex > -1 ? openElementNames.length - matchIndex : 0;
