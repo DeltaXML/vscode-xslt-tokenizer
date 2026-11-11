@@ -88,7 +88,7 @@ code --user-data-dir /Users/Shared/vscode-demo/data --extensions-dir /Users/Shar
 Install a new build of the extension into it, e.g. after `npx vsce package`:
 
 ```sh
-code --user-data-dir /Users/Shared/vscode-demo/data --extensions-dir /Users/Shared/vscode-demo/extensions --install-extension xslt-xpath-2.1.1.vsix
+code --user-data-dir /Users/Shared/vscode-demo/data --extensions-dir /Users/Shared/vscode-demo/extensions --install-extension xslt-xpath-2.2.0.vsix
 ```
 
 Its settings are in `/Users/Shared/vscode-demo/data/User/settings.json`, e.g. `XSLT.tasks.saxonJar` set to a Saxon jar
