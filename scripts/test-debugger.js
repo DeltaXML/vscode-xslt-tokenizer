@@ -240,7 +240,7 @@ async function testBreakpointVerification(saxonJar) {
     await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
     const requested = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 23, 24, 27, 28, 32, 33, 34];
     const expected = {
-        1: 'x', 2: 'x', 3: 'x', 4: 'x', 5: 'x', 6: 'x', 7: 7, 8: 8, 9: 9, 10: 10, 11: 8, 12: 12, 13: 13, 14: 13,
+        1: 'x', 2: 'x', 3: 'x', 4: 'x', 5: 'x', 6: 7, 7: 7, 8: 8, 9: 9, 10: 10, 11: 8, 12: 12, 13: 13, 14: 13,
         15: 'x', 16: 'x', 17: 'x', 19: 19, 20: 20, 21: 21, 23: 'x', 24: 24, 27: 27, 28: 28, 32: 32, 33: 'x', 34: 34
     };
     const verify = async (file, variant) => {
@@ -269,11 +269,54 @@ async function testBreakpointVerification(saxonJar) {
     const message = (line) => breakpoints[requested.indexOf(line)].message;
     assert.match(message(3), /xsl:output isn't an instruction/);
     assert.match(message(4), /top-level data element/);
-    assert.match(message(6), /No XSLT instruction/);
+    assert.match(message(5), /No XSLT instruction/);
+    assert.match(message(6), /Moved from line 6, in a comment/);
     assert.match(message(17), /isn't executed/);
     // xsl:sort with a select is stopped at as its sort key is computed (see testSort)
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
+}
+
+// a breakpoint in an XML comment is moved to the first instruction after it, within the comment's parent element -
+// keeping its condition - but not out of the parent (a comment at the end of an element or template), not from a
+// comment that isn't executed (in xsl:note), and '<!--' in a CDATA section isn't a comment
+async function testCommentBreakpoints(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    const file = path.join(fixtures, 'comment-breakpoints.xsl');
+    const requested = [2, 3, 4, 7, 11, 12, 13, 16, 19, 21, 25];
+    const { breakpoints } = await dap.request('setBreakpoints', { source: { path: file }, breakpoints: requested.map((line) => ({ line })) });
+    const actual = Object.fromEntries(requested.map((line, i) => [line, breakpoints[i].verified ? breakpoints[i].line : 'x']));
+    assert.deepStrictEqual(actual, { 2: 8, 3: 8, 4: 8, 7: 8, 11: 14, 12: 14, 13: 14, 16: 'x', 19: 'x', 21: 'x', 25: 'x' });
+    const message = (line) => breakpoints[requested.indexOf(line)].message;
+    assert.match(message(3), /Moved from line 3, in a comment, to the next instruction/);
+    assert.match(message(16), /No XSLT instruction/);
+    assert.match(message(19), /No XSLT instruction/);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+
+    // run: a moved breakpoint stops at the instruction, with its condition - one whose condition is false doesn't
+    const stops = async (condition) => {
+        const run = new DapClient(saxonJar);
+        let stopped = run.stopped();
+        const terminated = run.event('terminated');
+        await run.start({ saxonArgs: [`-xsl:${file}`, `-s:${path.join(fixtures, 'basic.xml')}`] }, { 'comment-breakpoints.xsl': [{ line: 12, condition }] });
+        const lines = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            lines.push(stop.frames[0].line);
+            stopped = run.stopped();
+            await run.request('continue', { threadId: 1 });
+        }
+        await run.request('disconnect', {}).catch(() => undefined);
+        await run.exited;
+        return lines;
+    };
+    assert.deepStrictEqual(await stops('$g eq 1'), [14]);
+    assert.deepStrictEqual(await stops('$g eq 2'), []);
 }
 
 // a breakpoint on the first line of a multi-line start tag stops there, at its instruction - Saxon reports it at the
@@ -2787,7 +2830,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
+        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testCommentBreakpoints, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;

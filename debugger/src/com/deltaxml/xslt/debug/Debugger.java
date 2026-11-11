@@ -379,7 +379,12 @@ final class Debugger {
                     }
                 }
             }
-            result.add(Json.obj().with("verified", true).with("line", actualLine));
+            Map<String, Object> verified = Json.obj().with("verified", true).with("line", actualLine);
+            if (resolution != null && resolution.message != null) {
+                // e.g. why it was moved from a comment
+                verified.put("message", resolution.message);
+            }
+            result.add(verified);
         }
         breakpoints.put(normalised, lines);
         return result;
