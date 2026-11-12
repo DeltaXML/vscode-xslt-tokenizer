@@ -41,7 +41,24 @@ export function decodeReferences(text: string): string {
 }
 
 // the outermost element - undefined if there's none
+// the trees of the texts parsed last: a lint of a file parses its text in each of its checks - 13 times for a Schematron
+// schema, 25 for an XSpec file - so they share one tree. A tree is read, never changed, by those using it
+const parsed = new Map<string, XmlElement | undefined>();
+const parsedLimit = 4;
+
 export function parseXml(text: string): XmlElement | undefined {
+	if (parsed.has(text)) {
+		return parsed.get(text);
+	}
+	const root = parse(text);
+	if (parsed.size >= parsedLimit) {
+		parsed.delete(parsed.keys().next().value!);
+	}
+	parsed.set(text, root);
+	return root;
+}
+
+function parse(text: string): XmlElement | undefined {
 	let root: XmlElement | undefined;
 	const stack: XmlElement[] = [];
 	let i = 0;
