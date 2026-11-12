@@ -794,4 +794,54 @@ suite('Schematron', () => {
 			SchematronValidation.chooseSchema = chooser;
 		}
 	});
+
+	test('validate: the rules an SVRL report has fired and suppressed, their failures, and the active patterns', async () => {
+		const coverage = SchematronValidation.coverageOf(`<svrl:schematron-output xmlns:svrl="http://purl.oclc.org/dsdl/svrl">
+<svrl:active-pattern id="p2"/><svrl:active-pattern id="vscode-pattern-1"/>
+<svrl:fired-rule id="vscode-rule-1" context="item[@x]"/><svrl:failed-assert ruleId="vscode-rule-1" test="false()" location="/a"><svrl:text>x</svrl:text></svrl:failed-assert>
+<svrl:fired-rule id="vscode-rule-2" context="item"/><svrl:suppressed-rule id="vscode-rule-2" context="item"/>
+<svrl:fired-rule id="named" context="item"/><svrl:fired-rule id="named" context="item"/><svrl:successful-report ruleId="named" test="1" location="/a"><svrl:text>a</svrl:text></svrl:successful-report>
+</svrl:schematron-output>`);
+		assert.deepEqual([...coverage.activePatterns], ['p2', 'vscode-pattern-1']);
+		assert.deepEqual(Object.fromEntries(coverage.rules), {
+			'vscode-rule-1': { fired: 1, suppressed: 0, failed: 1, reported: 0 },
+			'vscode-rule-2': { fired: 1, suppressed: 1, failed: 0, reported: 0 },
+			'named': { fired: 2, suppressed: 0, failed: 0, reported: 1 }
+		});
+	});
+
+	test('validate: above each rule and pattern, how it was used - fired, suppressed or never - needs a Saxon jar, in XSPEC_SAXON_JAR', async function () {
+		const saxonJar = process.env.XSPEC_SAXON_JAR;
+		if (!saxonJar) {
+			this.skip();
+		}
+		const schema = path.join(dir, 'lenses.sch');
+		fs.writeFileSync(schema, unprefixed(`<pattern>
+<rule context="item[@x]"><assert test="false()">x</assert></rule>
+<rule context="item"><assert test="@n">n</assert></rule>
+<rule context="nothing"><assert test="1">-</assert></rule>
+</pattern>
+<phase id="only2"><active pattern="p2"/></phase>
+<pattern id="p2"><rule context="item" id="named"><report test="@n = 'a'">a</report></rule></pattern>`));
+		const xmlPath = path.join(dir, 'lenses.xml');
+		fs.writeFileSync(xmlPath, '<doc><item n="1"/><item n="a" x="1"/></doc>');
+		await withSaxon(saxonJar!, undefined, async () => {
+			await SchematronValidation.validate(vscode.Uri.file(xmlPath), schema, false);
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(schema));
+			const lenses = SchematronValidation.codeLenses(document).map((l) => `${l.range.start.line}: ${l.command?.title}`).sort();
+			assert.deepEqual(lenses, [
+				'1: 2 of 3 rules fired with lenses.xml',
+				'2: fired for 1 node - 1 failed assertion',
+				'3: fired for 1 node - suppressed for 1 that an earlier rule matched first',
+				'4: never fired with lenses.xml',
+				'7: 1 of 1 rule fired with lenses.xml',
+				'7: fired for 2 nodes - 1 report'
+			].sort());
+			// a phase without the first pattern: it wasn't active, so its rules have no counts
+			fs.writeFileSync(schema, fs.readFileSync(schema, 'utf8').replace('queryBinding="xslt3"', 'queryBinding="xslt3" defaultPhase="only2"'));
+			await SchematronValidation.validate(vscode.Uri.file(xmlPath), schema, false);
+			const inPhase = SchematronValidation.codeLenses(await vscode.workspace.openTextDocument(vscode.Uri.file(schema))).map((l) => `${l.range.start.line}: ${l.command?.title}`).sort();
+			assert.deepEqual(inPhase, ['1: not active when lenses.xml was validated', '7: 1 of 1 rule fired with lenses.xml', '7: fired for 2 nodes - 1 report'].sort());
+		});
+	});
 });

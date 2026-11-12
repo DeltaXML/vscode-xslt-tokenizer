@@ -30,6 +30,15 @@ export interface SchematronResult {
 	diagnostics: string[];
 }
 
+// how a schema's rules were used in a validation, from its SVRL report - by the rule's id, or the one validate.xsl gives
+// it, e.g. vscode-rule-3: the nodes it fired for, and those it was suppressed for, as an earlier rule of its pattern
+// matched them first, and its failed assertions and successful reports - and the patterns and groups that were active
+export interface SchematronCoverage {
+	xml: string;
+	rules: Map<string, { fired: number, suppressed: number, failed: number, reported: number }>;
+	activePatterns: Set<string>;
+}
+
 // Validate with Schematron: an XML file validated with a Schematron schema, as SchXslt2 - the Schematron processor bundled
 // with XSpec - validates it, with the Saxon of the XSLT.tasks.saxonJar setting (see
 // xslt-resources/schematron/validate.xsl). Each failed assertion and successful report is a problem in the XML file, at
@@ -49,6 +58,9 @@ export class SchematronValidation {
 	private static extensionPath: string;
 	// the files validated in this session, by path: the schema each was validated with
 	private static readonly validated = new Map<string, string>();
+	// the last validation with each schema, by its path - for the counts above its rules and patterns (see codeLenses)
+	private static readonly coverage = new Map<string, SchematronCoverage>();
+	private static readonly coverageChanged = new vscode.EventEmitter<void>();
 	// for testing: how the schema is chosen, where none is known
 	public static chooseSchema = (xmlUri: vscode.Uri) => SchematronValidation.pickSchema(xmlUri);
 
@@ -56,7 +68,12 @@ export class SchematronValidation {
 		SchematronValidation.collection = vscode.languages.createDiagnosticCollection('schematron');
 		SchematronValidation.state = context.workspaceState;
 		SchematronValidation.extensionPath = context.extensionUri.fsPath;
-		context.subscriptions.push(SchematronValidation.collection,
+		context.subscriptions.push(SchematronValidation.collection, SchematronValidation.coverageChanged,
+			// above each rule and pattern of a schema: how it was used in the last validation with it
+			vscode.languages.registerCodeLensProvider({ language: 'sch' }, {
+				onDidChangeCodeLenses: SchematronValidation.coverageChanged.event,
+				provideCodeLenses: (document) => SchematronValidation.codeLenses(document)
+			}),
 			vscode.commands.registerCommand(SchematronValidation.validateCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, false)),
 			vscode.commands.registerCommand(SchematronValidation.chooseCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, true)),
 			// a code action on a problem: the assertion that reported it, in the schema
@@ -182,13 +199,18 @@ export class SchematronValidation {
 		channel.append(outcome.output);
 		if (!outcome.ok || !fs.existsSync(svrl)) {
 			SchematronValidation.collection.delete(xmlUri);
+			SchematronValidation.coverage.delete(schema);
+			SchematronValidation.coverageChanged.fire();
 			const action = await vscode.window.showErrorMessage(`Schematron: the validation of ${path.basename(xmlUri.fsPath)} with ${path.basename(schema)} failed - see the Schematron output`, 'Show Output');
 			if (action) {
 				channel.show(true);
 			}
 			return undefined;
 		}
-		const results = SchematronValidation.results(fs.readFileSync(svrl, 'utf8'));
+		const svrlText = fs.readFileSync(svrl, 'utf8');
+		const results = SchematronValidation.results(svrlText);
+		SchematronValidation.coverage.set(schema, { ...SchematronValidation.coverageOf(svrlText), xml: xmlUri.fsPath });
+		SchematronValidation.coverageChanged.fire();
 		fs.rmSync(path.dirname(svrl), { recursive: true, force: true });
 		const xmlText = (await vscode.workspace.openTextDocument(xmlUri)).getText();
 		const schemaDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(schema));
@@ -248,6 +270,96 @@ export class SchematronValidation {
 			severity: e.attributes.get('severity'),
 			diagnostics: e.children.filter((c) => local(c) === 'diagnostic-reference').map((c) => text(c))
 		}));
+	}
+
+	// the rules fired and suppressed, their failed assertions and successful reports, and the active patterns, of an SVRL report
+	public static coverageOf(svrl: string): Omit<SchematronCoverage, 'xml'> {
+		const rules = new Map<string, { fired: number, suppressed: number, failed: number, reported: number }>();
+		const activePatterns = new Set<string>();
+		const root = parseXml(svrl);
+		const count = (id: string | undefined, key: 'fired' | 'suppressed' | 'failed' | 'reported') => {
+			if (id) {
+				const counts = rules.get(id) ?? { fired: 0, suppressed: 0, failed: 0, reported: 0 };
+				counts[key]++;
+				rules.set(id, counts);
+			}
+		};
+		for (const element of root ? descendants(root) : []) {
+			switch (element.name.replace(/^.*:/, '')) {
+				case 'active-pattern':
+				case 'active-group':
+					activePatterns.add(element.attributes.get('id') ?? '');
+					break;
+				case 'fired-rule':
+					count(element.attributes.get('id'), 'fired');
+					break;
+				case 'suppressed-rule':
+					count(element.attributes.get('id'), 'suppressed');
+					break;
+				case 'failed-assert':
+					count(element.attributes.get('ruleId'), 'failed');
+					break;
+				case 'successful-report':
+					count(element.attributes.get('ruleId'), 'reported');
+					break;
+			}
+		}
+		return { rules, activePatterns };
+	}
+
+	// above each rule of the schema last validated with: the nodes it fired for, or was suppressed for, and its failures -
+	// or that it never fired - and above each pattern or group, how many of its rules fired, or that it wasn't active. Not
+	// while the schema has unsaved changes, as its rules may have moved - it's validated again when it's saved
+	public static codeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+		const coverage = SchematronValidation.coverage.get(document.fileName);
+		const root = coverage && !document.isDirty ? parseXml(document.getText()) : undefined;
+		if (!coverage || !root) {
+			return [];
+		}
+		const colon = root.name.indexOf(':');
+		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+		const all = [root, ...descendants(root)];
+		// as validate.xsl gives them ids: by their name and number in the schema
+		const idOf = (element: XmlElement, kind: string) => element.attributes.get('id') ?? `vscode-${kind}-${all.filter((e) => e.name === prefix + kind).indexOf(element) + 1}`;
+		const isAbstract = (element: XmlElement) => element.attributes.get('abstract')?.trim() === 'true';
+		const xmlName = path.basename(coverage.xml);
+		const open: vscode.Command = { title: '', command: 'vscode.open', arguments: [vscode.Uri.file(coverage.xml)] };
+		const lens = (element: XmlElement, title: string, tooltip: string) => {
+			const start = document.positionAt(element.start);
+			return new vscode.CodeLens(new vscode.Range(start, start), { ...open, title, tooltip });
+		};
+		const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+		const lenses: vscode.CodeLens[] = [];
+		for (const pattern of all.filter((e) => (e.name === prefix + 'pattern' || e.name === prefix + 'group') && !isAbstract(e))) {
+			const kind = pattern.name.substring(prefix.length);
+			const rules = pattern.children.filter((c) => c.name === prefix + 'rule' && !isAbstract(c));
+			if (!coverage.activePatterns.has(idOf(pattern, kind)) && !pattern.attributes.has('is-a')) {
+				lenses.push(lens(pattern, `not active when ${xmlName} was validated`, `The ${kind} wasn't in the phase used to validate ${coverage.xml}`));
+			} else if (rules.length > 0) {
+				const fired = rules.filter((r) => (coverage.rules.get(idOf(r, 'rule'))?.fired ?? 0) > 0).length;
+				lenses.push(lens(pattern, `${fired} of ${plural(rules.length, 'rule')} fired with ${xmlName}`, `When ${coverage.xml} was validated`));
+			}
+		}
+		for (const rule of all.filter((e) => e.name === prefix + 'rule' && !isAbstract(e))) {
+			const counts = coverage.rules.get(idOf(rule, 'rule'));
+			const parent = rule.parent;
+			const inactive = parent && !isAbstract(parent) && !parent.attributes.has('is-a') && (parent.name === prefix + 'pattern' || parent.name === prefix + 'group') &&
+				!coverage.activePatterns.has(idOf(parent, parent.name.substring(prefix.length)));
+			if (inactive) {
+				continue;
+			}
+			const results = counts ? [counts.failed > 0 ? plural(counts.failed, 'failed assertion') : '', counts.reported > 0 ? plural(counts.reported, 'report') : ''].filter((r) => r) : [];
+			let title: string;
+			if (!counts || (counts.fired === 0 && counts.suppressed === 0)) {
+				title = `never fired with ${xmlName}`;
+			} else if (counts.fired === 0) {
+				title = `never fired with ${xmlName} - suppressed for ${plural(counts.suppressed, 'node')} that an earlier rule matched first`;
+			} else {
+				title = `fired for ${plural(counts.fired, 'node')}${results.length > 0 ? ` - ${results.join(', ')}` : ''}${counts.suppressed > 0 ? ` - suppressed for ${counts.suppressed} that an earlier rule matched first` : ''}`;
+			}
+			lenses.push(lens(rule, title, `When ${coverage.xml} was validated - in a pattern, a node is handled only by the first rule whose context matches it`));
+		}
+		return lenses;
 	}
 
 	private static diagnostic(result: SchematronResult, xmlText: string, xmlUri: vscode.Uri, schema: string, assertions: { element: XmlElement, location: vscode.Location }[]) {
