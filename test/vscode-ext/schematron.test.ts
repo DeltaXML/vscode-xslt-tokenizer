@@ -915,6 +915,8 @@ suite('Schematron', () => {
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(schema));
 		await vscode.window.showTextDocument(document);
 		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(content.indexOf('|')));
+		// not left open in an editor, for the tests after it
+		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
 		const names = list.items.map((i) => typeof i.label === 'string' ? i.label : i.label.label);
 		assert.includeMembers(names, ['orders', 'order', 'line'], names.join(', '));
 		for (const own of ['rule', 'pattern', 'assert', '@context', '@test']) {
