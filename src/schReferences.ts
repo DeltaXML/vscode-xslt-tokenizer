@@ -179,7 +179,11 @@ export class SchReferences {
 	// the schema's prefix for Schematron, the elements with ids in it and in the files it brings in, and whether all those
 	// files could be read
 	public static schema(document: vscode.TextDocument) {
-		const text = document.getText();
+		return SchReferences.schemaOf(document.getText(), document.fileName, document.uri.scheme === 'file');
+	}
+
+	// a schema, from its text and path - isFile: the files it brings in can be read, relative to its path
+	public static schemaOf(text: string, fileName: string, isFile = true) {
 		const root = parseXml(text);
 		if (!root) {
 			return undefined;
@@ -198,7 +202,7 @@ export class SchReferences {
 			// the files brought in: sch:include, and sch:extends with href
 			elements.filter((e) => (e.name === elementPrefix + 'include' || e.name === elementPrefix + 'extends') && e.attributes.has('href')).forEach((e) => {
 				const href = e.attributes.get('href')!.trim().replace(/#.*$/, '');
-				const filePath = document.uri.scheme === 'file' || file !== document.fileName ? HrefPaths.toPath(href, file) : undefined;
+				const filePath = isFile || file !== fileName ? HrefPaths.toPath(href, file) : undefined;
 				if (!filePath || seen.has(filePath)) {
 					complete = complete && !!filePath;
 					return;
@@ -218,7 +222,7 @@ export class SchReferences {
 				}
 			});
 		};
-		collect(root, document.fileName, text, prefix);
+		collect(root, fileName, text, prefix);
 		return { prefix, declared, complete, files };
 	}
 

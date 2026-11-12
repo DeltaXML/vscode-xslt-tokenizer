@@ -37,6 +37,7 @@ import { XSpecExpectResult } from './xspecExpectResult';
 import { SchXslt2Checks } from './schXslt2Checks';
 import { SchReferences } from './schReferences';
 import { SchRequired } from './schRequired';
+import { XSpecSchematron } from './xspecSchematron';
 import { SchSchema } from './schSchema';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecDuplicateLabels } from './xspecDuplicateLabels';
@@ -3733,6 +3734,8 @@ export class XsltTokenDiagnostics {
 			allDiagnostics.push(...XSpecRequired.problems(document));
 			// an x:expect whose select uses $x:result - a test written in select
 			allDiagnostics.push(...XSpecExpectResult.problems(document));
+			// a Schematron test's expectation for an assertion, report or rule the schema doesn't have
+			allDiagnostics.push(...XSpecSchematron.problems(document));
 			// a focus attribute: every other scenario in the file is pending
 			allDiagnostics.push(...XSpecFocus.problems(document));
 			// scenarios, or expectations, with the same label in one scenario - the report shows the same name for both

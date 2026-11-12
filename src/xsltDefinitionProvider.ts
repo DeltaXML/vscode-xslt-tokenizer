@@ -31,6 +31,7 @@ import { XPathVersion } from './xpathVersion';
 import { XSpecNodeNames } from './xspecNodeNames';
 import { SchReferences } from './schReferences';
 import { SchematronValidation } from './schematronValidation';
+import { XSpecSchematron } from './xspecSchematron';
 
 interface ImportedGlobals {
 	href: string;
@@ -363,6 +364,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		const xspecRoot = this.docType === DocumentTypes.XSPEC ? XSpecScenario.rootCompletions(document, position) : undefined;
 		if (xspecRoot) {
 			return xspecRoot;
+		}
+		// XSpec: in a Schematron test's expectation, the schema's assertion, report or rule ids, roles or contexts
+		const schematronIds = this.docType === DocumentTypes.XSPEC ? XSpecSchematron.completions(document, position) : undefined;
+		if (schematronIds) {
+			return new vscode.CompletionList(schematronIds, false);
 		}
 		// Schematron: in a reference, e.g. is-a or extends' rule, the ids it can refer to (see SchReferences)
 		const schIds = this.docType === DocumentTypes.SCH ? SchReferences.completions(document, position) : undefined;

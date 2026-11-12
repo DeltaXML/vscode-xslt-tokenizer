@@ -21,6 +21,7 @@ import { SchRequired } from './schRequired';
 import { SchHover } from './schHover';
 import { SchVariables } from './schVariables';
 import { SchematronValidation } from './schematronValidation';
+import { XSpecSchematron } from './xspecSchematron';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
@@ -488,6 +489,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xspec' }, xspecDefinitionProvider));
 	// a variable the XSpec file declares: each declaration it may be - one for each x:like using a shared scenario
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xspec' }, { provideDefinition: (document, position) => XSpecVariables.definition(document, position) }));
+	// XSpec tests of a Schematron schema: from an expectation's id to the assertion, report or rule (see XSpecSchematron)
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xspec' }, { provideDefinition: (document, position) => XSpecSchematron.definition(document, position) }));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp' }, dcpDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'sch' }, schDefintiionProvider));
@@ -618,7 +621,7 @@ export function activate(context: vscode.ExtensionContext) {
 			return provider.provideRenameEdits(declarationDocument, definition.range.start, name, token);
 		}
 	}));
-	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecVariables.hover(document, position) ?? XSpecLike.hover(document, position) ?? XSpecLike.scenarioHover(document, position, 'label') ?? XSpecLike.importHover(document, position) ??
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecSchematron.hover(document, position) ?? XSpecVariables.hover(document, position) ?? XSpecLike.hover(document, position) ?? XSpecLike.scenarioHover(document, position, 'label') ?? XSpecLike.importHover(document, position) ??
 		XSpecPackages.hover(document, position, XSLTHoverProvider.componentsMarkdown) }));
 	// x:helper's package-name and package-version
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, { provideCompletionItems: (document, position) => XSpecPackages.completions(document, position) }, '"', '\''));
@@ -1726,19 +1729,38 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 	// Schematron: Find All References and Rename, for ids - patterns, rules, phases, diagnostics and properties - and for
 	// sch:let and sch:param variables (see SchReferences and SchVariables)
+	// - and for an assertion's, report's or rule's id, the XSpec expectations of the tests of the schema (see XSpecSchematron)
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'sch' }, {
-		provideReferences: (document, position, referenceContext) => SchReferences.referenceLocations(document, position, referenceContext.includeDeclaration) ??
-			SchVariables.references(document, position, referenceContext.includeDeclaration)
+		provideReferences: async (document, position, referenceContext) => {
+			const own = SchReferences.referenceLocations(document, position, referenceContext.includeDeclaration) ?? SchVariables.references(document, position, referenceContext.includeDeclaration);
+			const tested = XSpecSchematron.schemaIdAt(document, position);
+			if (!tested) {
+				return own;
+			}
+			const declaration = referenceContext.includeDeclaration && !own ? [new vscode.Location(document.uri, tested.range)] : [];
+			return [...(own ?? declaration), ...await XSpecSchematron.xspecReferences(document.fileName, tested.kind, tested.id)];
+		}
 	}));
 	context.subscriptions.push(vscode.languages.registerRenameProvider({ language: 'sch' }, {
 		prepareRename: (document, position) => {
-			const range = SchReferences.renameRange(document, position) ?? SchVariables.renameRange(document, position);
+			const range = SchReferences.renameRange(document, position) ?? XSpecSchematron.schemaIdAt(document, position)?.range ?? SchVariables.renameRange(document, position);
 			if (!range) {
-				throw new Error('Rename: a pattern, rule, phase, diagnostic or property id, or a variable');
+				throw new Error('Rename: a pattern, rule, assertion, report, phase, diagnostic or property id, or a variable');
 			}
 			return range;
 		},
-		provideRenameEdits: (document, position, newName) => SchReferences.rename(document, position, newName) ?? SchVariables.rename(document, position, newName)
+		provideRenameEdits: async (document, position, newName) => {
+			const tested = XSpecSchematron.schemaIdAt(document, position);
+			const edit = SchReferences.rename(document, position, newName) ?? (tested ? new vscode.WorkspaceEdit() : SchVariables.rename(document, position, newName));
+			if (tested && edit) {
+				// an assertion's or report's own id - a rule's is renamed with its extends - and its XSpec expectations
+				if (tested.kind !== 'rule') {
+					edit.replace(document.uri, tested.range, newName);
+				}
+				(await XSpecSchematron.xspecReferences(document.fileName, tested.kind, tested.id)).forEach((l) => edit.replace(l.uri, l.range, newName));
+			}
+			return edit;
+		}
 	}));
 	// Schematron: quick fixes for the attributes ISO Schematron requires that an element is missing (see SchRequired)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('sch', { provideCodeActions: (document, _range, context) => SchRequired.codeActions(document, context.diagnostics) },

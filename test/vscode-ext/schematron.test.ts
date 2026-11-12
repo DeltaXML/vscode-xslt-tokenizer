@@ -17,6 +17,7 @@ import { SchSnippets } from '../../src/schSnippets';
 import { XSpecRunner } from '../../src/xspecRunner';
 import { SchVariables } from '../../src/schVariables';
 import { SchematronValidation } from '../../src/schematronValidation';
+import { XSpecSchematron } from '../../src/xspecSchematron';
 
 suite('Schematron', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-'));
@@ -940,5 +941,79 @@ suite('Schematron', () => {
 	test('variables: in an abstract pattern, a name that isn\'t a parameter - declared, or supplied with is-a - is a variable reference', async () => {
 		assert.deepEqual(await problems(unprefixed(`<pattern abstract="true" id="ap"><param name="c"/><rule context="$c"><assert test="$supplied and $undeclared">x</assert></rule></pattern>
 <pattern is-a="ap" id="p"><param name="c" value="a"/><param name="supplied" value="1"/></pattern>`)), ['1: XPath: The variable/parameter $undeclared cannot be resolved']);
+	});
+
+	// a schema with assertions, a report and a rule with ids - one assertion in an included file - and an XSpec file testing it
+	const xspecSchematron = async () => {
+		const sub = path.join(dir, `xspec-sch${count++}`);
+		fs.mkdirSync(sub);
+		fs.writeFileSync(path.join(sub, 'included.sch'), `<pattern xmlns="http://purl.oclc.org/dsdl/schematron" id="inc"><rule context="b"><assert test="1" id="inc1">x</assert></rule></pattern>`);
+		const schemaContent = unprefixed(`<include href="included.sch"/>
+<pattern><rule context="item" id="ru1">
+<assert test="@n" id="a1" role="warning">item needs n</assert>
+<assert test="@m" id="a2">item needs m</assert>
+<report test="@x" id="r1">has x</report>
+</rule></pattern>`);
+		const schema = path.join(sub, 'tested.sch');
+		fs.writeFileSync(schema, schemaContent);
+		const xspecContent = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" schematron="tested.sch">
+  <x:scenario label="s">
+    <x:context><item/></x:context>
+    <x:expect-assert id="a1" role=""/>
+    <x:expect-report id=""/>
+    <x:expect-rule id="" context=""/>
+    <x:expect-not-assert id="missing"/>
+    <x:expect-assert id="missing"/>
+    <x:expect-assert id=""/>
+  </x:scenario>
+</x:description>`;
+		const xspecPath = path.join(sub, 'tests.xspec');
+		fs.writeFileSync(xspecPath, xspecContent);
+		const xspec = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		const at = (text: string, after = '') => xspec.positionAt(xspecContent.indexOf(text, xspecContent.indexOf(after)) + text.length);
+		return { schema, schemaContent, xspec, xspecPath, at };
+	};
+
+	test('XSpec: a Schematron test\'s ids, roles and contexts - auto-completion from the schema and the files it includes', async () => {
+		const { xspec, at } = await xspecSchematron();
+		assert.deepEqual(labels(XSpecSchematron.completions(xspec, at('id="', '<x:expect-assert id=""'))), ['a1', 'a2', 'inc1']);
+		assert.deepEqual(labels(XSpecSchematron.completions(xspec, at('<x:expect-report id="'))), ['r1']);
+		assert.deepEqual(labels(XSpecSchematron.completions(xspec, at('<x:expect-rule id="'))), ['ru1']);
+		assert.deepEqual(labels(XSpecSchematron.completions(xspec, at('context="', '<x:expect-rule'))), ['b', 'item']);
+		assert.deepEqual(labels(XSpecSchematron.completions(xspec, at('role="'))), ['warning']);
+		// through VS Code: the XSpec completion and definition providers
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', xspec.uri, at('<x:expect-report id="'));
+		assert.deepEqual(labels(list.items), ['r1']);
+		const definitions = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', xspec.uri, at('id="a'));
+		assert.deepEqual(definitions.map((l) => path.basename(l.uri.fsPath)), ['tested.sch']);
+	});
+
+	test('XSpec: a Schematron test\'s ids - Go to Definition, hover, and a warning for one the schema doesn\'t have', async () => {
+		const { xspec, at } = await xspecSchematron();
+		const definition = XSpecSchematron.definition(xspec, at('id="a'));
+		assert.deepEqual(definition?.map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line}`), ['tested.sch:3']);
+		const hover = XSpecSchematron.hover(xspec, at('id="a'))!.contents.map((c) => typeof c === 'string' ? c : c.value).join('\n');
+		assert.include(hover, 'assert test="@n"');
+		assert.include(hover, 'role: `warning`');
+		assert.deepEqual(XSpecSchematron.problems(xspec).map((d) => `${d.range.start.line}: ${d.message}`), [
+			'6: XSpec: the schema has no assertion with the id missing - this expectation always passes',
+			'7: XSpec: the schema has no assertion with the id missing - this expectation always fails'
+		]);
+	});
+
+	test('XSpec: from the schema, an assertion\'s id - Find All References and Rename include the XSpec tests', async () => {
+		const { schema, schemaContent, xspecPath } = await xspecSchematron();
+		const files = XSpecSchematron.xspecFiles;
+		XSpecSchematron.xspecFiles = async () => [vscode.Uri.file(xspecPath)];
+		try {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(schema));
+			const position = document.positionAt(schemaContent.indexOf('id="a1"') + 5);
+			const references = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, position);
+			assert.deepEqual(references.map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line}`).sort(), ['tested.sch:3', 'tests.xspec:3']);
+			const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', document.uri, position, 'needs-n');
+			assert.deepEqual(edit.entries().map(([uri, edits]) => `${path.basename(uri.fsPath)} ${edits.map((e) => e.newText).join()}`).sort(), ['tested.sch needs-n', 'tests.xspec needs-n']);
+		} finally {
+			XSpecSchematron.xspecFiles = files;
+		}
 	});
 });
