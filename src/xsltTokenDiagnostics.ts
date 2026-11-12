@@ -34,6 +34,7 @@ import { XSpecLike } from './xspecLike';
 import { XSpecRequired } from './xspecRequired';
 import { XSpecCallArity } from './xspecCallArity';
 import { XSpecExpectResult } from './xspecExpectResult';
+import { SchXslt2Checks } from './schXslt2Checks';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecDuplicateLabels } from './xspecDuplicateLabels';
 import { XmlElement, parseXml } from './xspecXml';
@@ -190,7 +191,9 @@ export enum DiagnosticCode {
 	// an abstract component of a used package that isn't overridden - with the fixes in PackageScope.fixes
 	abstractNotOverridden,
 	// another problem with packages, with fixes in PackageScope.fixes
-	packageProblem
+	packageProblem,
+	// Schematron: a prefix not declared with sch:ns - with a quick fix in SchXslt2Checks
+	schNsPrefix
 }
 
 export class XsltTokenDiagnostics {
@@ -3645,6 +3648,28 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		problemTokens = XsltTokenDiagnostics.withoutQuoteCascades(allTokens, problemTokens);
+		if (schNamespaces) {
+			// Schematron: a prefix of a type, function or name that sch:ns doesn't declare - once, e.g. not both as an undeclared
+			// prefix and an invalid type for xs:integer(@n), and saying why, as one declared with xmlns doesn't apply
+			const prefixErrors = [ErrorType.XPathTypeName, ErrorType.XPathFunctionNamespace, ErrorType.XPathPrefix];
+			const reported = new Set<string>();
+			problemTokens = problemTokens.filter((token) => {
+				const value = token.value.replace(/^@/, '');
+				const colon = value.indexOf(':');
+				const prefix = colon > 0 && !value.startsWith('Q{') ? value.substring(0, colon) : undefined;
+				if (!token.error || !prefixErrors.includes(token.error) || !prefix || prefix === 'xml' || schNamespaces.has(prefix)) {
+					return true;
+				}
+				const position = `${token.line}:${token.startCharacter}`;
+				if (reported.has(position)) {
+					return false;
+				}
+				reported.add(position);
+				token.error = ErrorType.SchNsPrefix;
+				token.value = prefix;
+				return true;
+			});
+		}
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && StaticHrefs.hasUnresolved(documentText)) {
 			XsltTokenDiagnostics.allowForUnresolvedImports(allDiagnostics);
@@ -3652,6 +3677,10 @@ export class XsltTokenDiagnostics {
 		if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && !testingAsAttribute) {
 			// template rules whose union patterns' branches have different default priorities: XSLT 4.0 changes the rule chosen
 			allDiagnostics.push(...UnionPatternPriority.problems(document, docType === DocumentTypes.XSLT40 || !!languageConfig.isVersion4));
+		}
+		if (docType === DocumentTypes.SCH) {
+			// the XSLT SchXslt2 ignores, or doesn't run, e.g. xsl:variable in a rule or xsl:value-of in a message
+			allDiagnostics.push(...SchXslt2Checks.problems(document));
 		}
 		if (docType === DocumentTypes.XSPEC) {
 			// the files it refers to that aren't found
@@ -5911,6 +5940,10 @@ export class XsltTokenDiagnostics {
 					const arityNum = parts2[1];
 					const typeName = parts2[0];
 					msg = `XPath Type: Expected number of itemType arguments for '${typeName}()' is ${arityMsg} but found: ${arityNum}`;
+					break;
+				case ErrorType.SchNsPrefix:
+					errCode = DiagnosticCode.schNsPrefix;
+					msg = `XPath: The prefix '${tokenValue}' isn't declared with sch:ns - SchXslt2 declares only the sch:ns prefixes in its validation stylesheet, not those declared with xmlns`;
 					break;
 				case ErrorType.XPathFunctionParseHtml:
 					errCode = DiagnosticCode.parseHtmlRef;

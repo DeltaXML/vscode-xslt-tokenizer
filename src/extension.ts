@@ -15,6 +15,7 @@ import { XSpecCompat } from './xspecCompat';
 import { XSpecRequired } from './xspecRequired';
 import { XSpecVariables } from './xspecVariables';
 import { XSpecExpectResult } from './xspecExpectResult';
+import { SchXslt2Checks } from './schXslt2Checks';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
@@ -1702,6 +1703,9 @@ export function activate(context: vscode.ExtensionContext) {
 		{ providedCodeActionKinds: [vscode.CodeActionKind.Refactor] }));
 	// quick fixes for x:expect elements that XSpec 4 stops the run for (see XSpecCompat)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecCompat.codeActions(document, context.diagnostics) },
+		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
+	// Schematron: quick fixes for the XSLT SchXslt2 ignores or doesn't run, and for a prefix not declared with sch:ns (see SchXslt2Checks)
+	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('sch', { provideCodeActions: (document, _range, context) => SchXslt2Checks.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 	// a quick fix for an x:expect whose select uses $x:result (see XSpecExpectResult)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecExpectResult.codeActions(document, context.diagnostics) },

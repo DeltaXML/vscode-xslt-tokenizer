@@ -10,6 +10,7 @@ import { assert } from 'chai';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { SchConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
+import { SchXslt2Checks } from '../../src/schXslt2Checks';
 
 suite('Schematron', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-'));
@@ -30,6 +31,15 @@ suite('Schematron', () => {
 	};
 	const prefixed = (body: string) => `<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt3">\n${body}\n</sch:schema>`;
 	const unprefixed = (body: string) => `<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt3">\n${body}\n</schema>`;
+
+	// the text of the file, formatted - not applied to the document, which, left with unsaved changes, would be checked again
+	// as other tests run
+	const formatted = async (file: string) => {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const edits = await vscode.commands.executeCommand<vscode.TextEdit[]>('vscode.executeFormatDocumentProvider', document.uri, { tabSize: 2, insertSpaces: true });
+		return (edits ?? []).map((edit) => [document.offsetAt(edit.range.start), document.offsetAt(edit.range.end), edit.newText] as const)
+			.sort((a, b) => b[0] - a[0]).reduce((text, [start, end, newText]) => text.substring(0, start) + newText + text.substring(end), document.getText());
+	};
 
 	const ruleChildren = ['assert', 'report', 'let', 'extends', 'p', 'include'];
 
@@ -69,12 +79,7 @@ suite('Schematron', () => {
 	test('formatting: end tags with no prefix are outdented', async () => {
 		const file = path.join(dir, `format${count++}.sch`);
 		fs.writeFileSync(file, unprefixed('<pattern>\n<rule context="a">\n<assert test="1"/>\n</rule>\n</pattern>'));
-		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-		const edits = await vscode.commands.executeCommand<vscode.TextEdit[]>('vscode.executeFormatDocumentProvider', document.uri, { tabSize: 2, insertSpaces: true });
-		const edit = new vscode.WorkspaceEdit();
-		edit.set(document.uri, edits ?? []);
-		await vscode.workspace.applyEdit(edit);
-		assert.deepEqual(document.getText().split('\n').slice(1, 6), ['  <pattern>', '    <rule context="a">', '      <assert test="1"/>', '    </rule>', '  </pattern>']);
+		assert.deepEqual((await formatted(file)).split('\n').slice(1, 6), ['  <pattern>', '    <rule context="a">', '      <assert test="1"/>', '    </rule>', '  </pattern>']);
 	});
 
 	test('the outline and breadcrumbs: the elements as they\'re written - with no prefix, or the file\'s', async () => {
@@ -140,13 +145,13 @@ suite('Schematron', () => {
 		assert.deepEqual(await problems(unprefixed(`<pattern><rule context="f:a"><assert test="@n castable as xs:integer">x</assert></rule></pattern>
 <ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/><ns prefix="f" uri="urn:f"/>`)), []);
 		assert.deepEqual(await problems(unprefixed('<pattern><rule context="a"><assert test="@n castable as xs:integer and f:x(.)">x</assert></rule></pattern>')),
-			["1: XPath: Invalid type: 'xs:integer'", "1: XPath: Undeclared prefix in function: 'f:x'"]);
+			["1: XPath: The prefix 'xs' isn't declared with sch:ns - SchXslt2 declares only the sch:ns prefixes in its validation stylesheet, not those declared with xmlns", "1: XPath: The prefix 'f' isn't declared with sch:ns - SchXslt2 declares only the sch:ns prefixes in its validation stylesheet, not those declared with xmlns"]);
 	});
 
 	test('prefixes: one declared with xmlns, not sch:ns, is undeclared in the schema\'s XPath - but declared within an XSLT element', async () => {
 		const xmlns = 'xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"';
 		assert.deepEqual(await problems(`<schema xmlns="http://purl.oclc.org/dsdl/schematron" ${xmlns} queryBinding="xslt3">
-<pattern><rule context="a"><assert test="@n castable as xs:integer">x</assert></rule></pattern></schema>`), ["1: XPath: Invalid type: 'xs:integer'"]);
+<pattern><rule context="a"><assert test="@n castable as xs:integer">x</assert></rule></pattern></schema>`), ["1: XPath: The prefix 'xs' isn't declared with sch:ns - SchXslt2 declares only the sch:ns prefixes in its validation stylesheet, not those declared with xmlns"]);
 		assert.deepEqual(await problems(`<schema xmlns="http://purl.oclc.org/dsdl/schematron" ${xmlns} queryBinding="xslt3">
 <xsl:key name="k" match="a" use="xs:integer(@n)"/></schema>`), []);
 	});
@@ -173,18 +178,80 @@ suite('Schematron', () => {
 	});
 
 	test('XSLT: a top-level XSLT declaration that SchXslt2 ignores, e.g. xsl:param, declares nothing', async () => {
-		assert.deepEqual(await problems(unprefixed(`<xsl:param ${xsl} name="OTP" select="false()"/>
-<pattern><rule context="a"><assert test="$OTP">x</assert></rule></pattern>`)), ['2: XPath: The variable/parameter $OTP cannot be resolved']);
+		assert.deepEqual((await problems(unprefixed(`<xsl:param ${xsl} name="OTP" select="false()"/>
+<pattern><rule context="a"><assert test="$OTP">x</assert></rule></pattern>`))).sort(), ['1: SchXslt2: xsl:param is ignored - only xsl:accumulator, xsl:function, xsl:include, xsl:import, xsl:import-schema, xsl:key, xsl:use-package are copied into its validation stylesheet - use sch:param', '2: XPath: The variable/parameter $OTP cannot be resolved']);
 	});
 
 	test('formatting: an XSLT element\'s end tag is outdented', async () => {
 		const file = path.join(dir, `format${count++}.sch`);
 		fs.writeFileSync(file, unprefixed(`<xsl:function ${xsl} name="f:x">\n<xsl:sequence select="1"/>\n</xsl:function>\n<pattern/>`));
+		assert.deepEqual((await formatted(file)).split('\n').slice(2, 5), ['    <xsl:sequence select="1"/>', '  </xsl:function>', '  <pattern/>']);
+	});
+
+	// the problems with the document - and after applying the quick fix for the problem with the message, the text
+	const fixed = async (content: string, message: RegExp) => {
+		const file = path.join(dir, `fix${count++}.sch`);
+		fs.writeFileSync(file, content);
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-		const edits = await vscode.commands.executeCommand<vscode.TextEdit[]>('vscode.executeFormatDocumentProvider', document.uri, { tabSize: 2, insertSpaces: true });
-		const edit = new vscode.WorkspaceEdit();
-		edit.set(document.uri, edits ?? []);
-		await vscode.workspace.applyEdit(edit);
-		assert.deepEqual(document.getText().split('\n').slice(2, 5), ['    <xsl:sequence select="1"/>', '  </xsl:function>', '  <pattern/>']);
+		const diagnostics = await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration);
+		const diagnostic = diagnostics.find((d) => message.test(d.message));
+		assert.isDefined(diagnostic, diagnostics.map((d) => d.message).join('\n'));
+		const actions = SchXslt2Checks.codeActions(document, [diagnostic!]);
+		assert.lengthOf(actions, 1, diagnostic!.message);
+		// applied to the text, not the document - which, left with unsaved changes, would be checked again as other tests run
+		const edits = actions[0].edit!.get(document.uri).map((edit) => [document.offsetAt(edit.range.start), document.offsetAt(edit.range.end), edit.newText] as const);
+		return edits.sort((a, b) => b[0] - a[0]).reduce((text, [start, end, newText]) => text.substring(0, start) + newText + text.substring(end), document.getText());
+	};
+
+	test('SchXslt2: XSLT it ignores - a top-level declaration it doesn\'t copy, or in a rule - or doesn\'t run, in a message', async () => {
+		const messages = (await problems(unprefixed(`<ns prefix="f" uri="urn:f"/>
+<xsl:param ${xsl} name="p" select="1"/>
+<xsl:template ${xsl} match="a"/>
+<xsl:function ${xsl} name="f:x"><xsl:sequence select="1"/></xsl:function>
+<let name="v"><xsl:sequence ${xsl} select="1"/></let>
+<pattern><rule context="a"><xsl:variable ${xsl} name="v2" select="1"/>
+<assert test="true()">at <xsl:value-of ${xsl} select="path()"/></assert></rule></pattern>
+<properties><property id="p1"><xsl:copy-of ${xsl} select="."/></property></properties>`))).map((m) => m.replace(/ - only .* are copied into its validation stylesheet/, ' - only ...'));
+		assert.deepEqual(messages, [
+			'2: SchXslt2: xsl:param is ignored - only ... - use sch:param',
+			'3: SchXslt2: xsl:template is ignored - only ...',
+			'5: SchXslt2: xsl:sequence isn\'t run in the content of sch:let - it\'s copied into the value as it is: use the value attribute for an expression',
+			'6: SchXslt2: xsl:variable is ignored in sch:rule - use sch:let',
+			'7: SchXslt2: xsl:value-of isn\'t run in a message - it\'s copied into the report as it is - use sch:value-of'
+		]);
+	});
+
+	test('SchXslt2: quick fixes - xsl:variable to sch:let, a top-level xsl:param to sch:param, xsl:value-of to sch:value-of', async () => {
+		const rule = (content: string) => unprefixed(`<pattern><rule context="a">${content}<assert test="true()">x</assert></rule></pattern>`);
+		assert.include(await fixed(rule(`<xsl:variable ${xsl} name="v" as="xs:integer" select="count(*) &lt; 2"/>`), /xsl:variable is ignored/),
+			'<let name="v" value="count(*) &lt; 2" as="xs:integer"/>');
+		assert.include(await fixed(prefixed(`<xsl:param ${xsl} name="OTP" select="false()"/>`), /xsl:param is ignored/), '<sch:param name="OTP" value="false()"/>');
+		assert.include(await fixed(unprefixed(`<pattern><rule context="a"><assert test="true()">at <xsl:value-of ${xsl} select="path()"/></assert></rule></pattern>`), /xsl:value-of isn't run/),
+			'at <value-of select="path()"/></assert>');
+	});
+
+	test('SchXslt2: a prefix not declared with sch:ns - one problem, with a quick fix adding the sch:ns', async () => {
+		const content = `<schema xmlns="http://purl.oclc.org/dsdl/schematron" xmlns:f="urn:f" queryBinding="xslt3">
+  <ns prefix="g" uri="urn:g"/>
+  <pattern><rule context="a"><assert test="xs:integer(@n) gt 0 and f:x()">x</assert></rule></pattern>
+</schema>`;
+		assert.deepEqual(await problems(content), [
+			"2: XPath: The prefix 'xs' isn't declared with sch:ns - SchXslt2 declares only the sch:ns prefixes in its validation stylesheet, not those declared with xmlns",
+			"2: XPath: The prefix 'f' isn't declared with sch:ns - SchXslt2 declares only the sch:ns prefixes in its validation stylesheet, not those declared with xmlns"
+		]);
+		// a known namespace, e.g. xs - or the namespace an xmlns declares for the prefix
+		assert.include(await fixed(content, /prefix 'xs'/), '<ns prefix="g" uri="urn:g"/>\n  <ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/>');
+		assert.include(await fixed(content, /prefix 'f'/), '<ns prefix="f" uri="urn:f"/>');
+	});
+
+	test('SchXslt2: an included module that declares the unnamed mode with use-accumulators, or accumulators', async () => {
+		fs.writeFileSync(path.join(dir, 'modes.xsl'), `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+<xsl:mode use-accumulators="#all"/><xsl:accumulator name="acc" initial-value="0"><xsl:accumulator-rule match="a" select="$value + 1"/></xsl:accumulator></xsl:stylesheet>`);
+		const file = path.join(dir, `include${count++}.sch`);
+		fs.writeFileSync(file, unprefixed(`<xsl:include ${xsl} href="modes.xsl"/>`));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const diagnostics = SchXslt2Checks.problems(document);
+		assert.deepEqual(diagnostics.map((d) => [vscode.DiagnosticSeverity[d.severity], /XTSE0545/.test(d.message) || /accumulator acc/.test(d.message)]),
+			[['Error', true], ['Warning', true]]);
 	});
 });
