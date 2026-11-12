@@ -14,6 +14,9 @@ import { XslLexer } from './xslLexer';
 import { HrefPaths } from './hrefPaths';
 import { SCHXSLT2_XSLT_DECLARATIONS } from './schSchema';
 import { DiagnosticCode } from './xsltTokenDiagnostics';
+import { XSpecRunner } from './xspecRunner';
+import { SaxonTaskProvider } from './saxonTaskProvider';
+import * as path from 'path';
 
 // Schematron: the XSLT in a schema that SchXslt2 - the Schematron processor bundled with XSpec - doesn't use as it's
 // written (see xslt-resources/xspec/lib/schxslt2/transpile.xsl):
@@ -30,6 +33,7 @@ export class SchXslt2Checks {
 	public static readonly notRunCode = 'schxslt2-not-run';
 	public static readonly includeCode = 'schxslt2-include';
 	public static readonly namespaceCode = 'schxslt2-namespace';
+	public static readonly noteCode = 'schxslt2-note';
 	private static readonly isoNamespace = 'http://purl.oclc.org/dsdl/schematron';
 	private static readonly xsltNamespace = 'http://www.w3.org/1999/XSL/Transform';
 	// the Schematron elements whose content is a message, copied into the report
@@ -86,7 +90,55 @@ export class SchXslt2Checks {
 				add(element, `SchXslt2: ${xsltName} is ignored in sch:${parentLocal}${instead}`, SchXslt2Checks.ignoredCode);
 			}
 		}
+		// xsl:note, which SchXslt2 copies into its stylesheet with the declaration it's in - for which XSpec turns Saxon's
+		// syntax extensions on - when the Saxon that runs the tests can't
+		const notes = SchXslt2Checks.notesNeedingExtensions(document.getText());
+		const reason = notes.length > 0 ? SchXslt2Checks.noteProblem(document.uri) : undefined;
+		if (reason) {
+			notes.forEach((note) => add(note, `SchXslt2: xsl:note in its stylesheet needs Saxon's syntax extensions, which ${reason} - Saxon reports XTSE0010. Remove it, or add use-when="false()"`,
+				SchXslt2Checks.noteCode, vscode.DiagnosticSeverity.Error));
+		}
 		return diagnostics;
+	}
+
+	// the xsl:note elements that SchXslt2 copies into its stylesheet, with an XSLT declaration it copies, e.g. xsl:function
+	// - not one with use-when="false()", or within an element with it, which Saxon leaves out without its syntax extensions
+	public static notesNeedingExtensions(text: string): XmlElement[] {
+		const schema = SchXslt2Checks.schema(text);
+		if (!schema) {
+			return [];
+		}
+		const excluded = (element: XmlElement) => ['use-when', '_use-when'].some((name) => element.attributes.get(name)?.replace(/\s/g, '') === 'false()');
+		return descendants(schema.root).filter((element) => {
+			if (schema.xsltLocal(element) !== 'note' || excluded(element)) {
+				return false;
+			}
+			let topLevel = element;
+			for (let ancestor = element.parent; ancestor && ancestor !== schema.root; ancestor = ancestor.parent) {
+				if (excluded(ancestor)) {
+					return false;
+				}
+				topLevel = ancestor;
+			}
+			const declaration = schema.xsltLocal(topLevel);
+			return topLevel !== element && declaration !== undefined && SCHXSLT2_XSLT_DECLARATIONS.includes('xsl:' + declaration);
+		});
+	}
+
+	// why the Saxon that runs XSpec's tests can't run xsl:note - undefined if it can, or isn't known
+	private static noteProblem(uri: vscode.Uri): string | undefined {
+		if (vscode.workspace.getConfiguration('XSLT.xspec', uri).get<string>('allowSyntaxExtensions') === 'off') {
+			return 'the XSLT.xspec.allowSyntaxExtensions setting turns off';
+		}
+		const jar = XSpecRunner.saxonJar(uri);
+		if (!jar) {
+			return undefined;
+		}
+		if (SaxonTaskProvider.isSaxonHE(jar)) {
+			return 'Saxon-HE doesn\'t have';
+		}
+		const major = /saxon[\w-]*?(?:pe|ee)[-_]?(\d+)[.-]\d+/i.exec(path.basename(jar))?.[1] ?? /saxon[\w-]*?(?:pe|ee)(\d+)-\d+/i.exec(jar)?.[1];
+		return major !== undefined && Number(major) < 13 ? `Saxon ${major} doesn't have for it - Saxon 13 or later is needed` : undefined;
 	}
 
 	public static codeActions(document: vscode.TextDocument, diagnostics: readonly vscode.Diagnostic[]): vscode.CodeAction[] {
@@ -128,6 +180,17 @@ export class SchXslt2Checks {
 				action.isPreferred = true;
 				action.edit = new vscode.WorkspaceEdit();
 				action.edit.replace(document.uri, new vscode.Range(document.positionAt(element.start), document.positionAt(element.end)), replacement);
+				return [action];
+			} else if (diagnostic.code === SchXslt2Checks.noteCode) {
+				const element = elementAt(diagnostic);
+				if (!element) {
+					return [];
+				}
+				const action = new vscode.CodeAction('Add use-when="false()" - Saxon leaves the note out', vscode.CodeActionKind.QuickFix);
+				action.diagnostics = [diagnostic];
+				action.isPreferred = true;
+				action.edit = new vscode.WorkspaceEdit();
+				action.edit.insert(document.uri, document.positionAt(element.start + 1 + element.name.length), ' use-when="false()"');
 				return [action];
 			} else if (diagnostic.code === DiagnosticCode.schNsPrefix) {
 				const prefix = /'([^']+)'/.exec(diagnostic.message)?.[1];

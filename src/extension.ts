@@ -18,6 +18,7 @@ import { XSpecExpectResult } from './xspecExpectResult';
 import { SchXslt2Checks } from './schXslt2Checks';
 import { SchReferences } from './schReferences';
 import { SchRequired } from './schRequired';
+import { SchHover } from './schHover';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
@@ -508,6 +509,12 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xslt' }, new XSLTHoverProvider(xsltDefintiionProvider, XSLTConfiguration.configuration)));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider(xpathDefinitionProvider, XPathConfiguration.configuration)));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, new XSLTHoverProvider(xspecDefinitionProvider, XSpecConfiguration.configuration)));
+	// Schematron: its own hovers - references, rules, assertions, variables and elements - else those it shares with
+	// stylesheets, e.g. a function's signature (see SchHover)
+	const schHoverProvider = new XSLTHoverProvider(schDefintiionProvider, SchConfiguration.configuration);
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'sch' }, {
+		provideHover: (document, position, token) => SchHover.hover(document, position) ?? schHoverProvider.provideHover(document, position, token)
+	}));
 	// '"', "'" and '<' for the parameters of a named template, in an xsl:call-template
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xslt' }, new XSLTSignatureHelpProvider(XSLTConfiguration.configuration, xsltDefintiionProvider), '(', ',', '"', '\'', '<'));
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xpath' }, new XSLTSignatureHelpProvider(XPathConfiguration.configuration), '(', ','));

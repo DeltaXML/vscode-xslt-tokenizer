@@ -13,7 +13,7 @@ import { XmlElement, parseXml, descendants } from './xspecXml';
 import { HrefPaths } from './hrefPaths';
 
 // a Schematron element with an id, in the schema or a file it includes
-interface Declared {
+export interface Declared {
 	element: XmlElement;
 	local: string;
 	file: string;
@@ -168,7 +168,7 @@ export class SchReferences {
 
 	// the schema's prefix for Schematron, the elements with ids in it and in the files it brings in, and whether all those
 	// files could be read
-	private static schema(document: vscode.TextDocument) {
+	public static schema(document: vscode.TextDocument) {
 		const text = document.getText();
 		const root = parseXml(text);
 		if (!root) {
@@ -237,7 +237,7 @@ export class SchReferences {
 	}
 
 	// an attribute's value as written, with its offsets
-	private static attributeValue(text: string, element: XmlElement, attribute: string) {
+	public static attributeValue(text: string, element: XmlElement, attribute: string) {
 		const startTag = text.substring(element.start, element.contentStart);
 		const match = new RegExp(`\\s${attribute.replace(/[.-]/g, '\\$&')}\\s*=\\s*(["'])([^"']*)\\1`).exec(startTag);
 		if (!match) {

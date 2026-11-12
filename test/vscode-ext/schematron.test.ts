@@ -14,6 +14,7 @@ import { SchXslt2Checks } from '../../src/schXslt2Checks';
 import { SchReferences } from '../../src/schReferences';
 import { SchRequired } from '../../src/schRequired';
 import { SchSnippets } from '../../src/schSnippets';
+import { XSpecRunner } from '../../src/xspecRunner';
 
 suite('Schematron', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-'));
@@ -446,5 +447,144 @@ suite('Schematron', () => {
 		const prefixedForms = await forms(prefixed('<sch:pattern><sch:rule context="a">\n<|\n</sch:rule></sch:pattern>'));
 		assert.strictEqual(prefixedForms.get('sch:assert'), 'sch:assert test="$1">$2</sch:assert>$0');
 		assert.strictEqual(prefixedForms.get('sch:let'), 'sch:let name="$1" value="$2"/>$0');
+	});
+
+	test('hover: references, rules, assertions, variables and elements - and a function\'s signature, as in a stylesheet', async () => {
+		const content = unprefixed(`<let name="max" value="10"/>
+<phase id="ph"><active pattern="p1"/></phase>
+<pattern abstract="true" id="ap"><title>Tables</title><param name="table"/><param name="limit" value="5"/>
+<rule context="$table"><assert test="count(row) le $limit">x</assert></rule></pattern>
+<pattern id="pi" is-a="ap"><param name="table" value="tbl"/></pattern>
+<pattern id="p1"><title>Rows</title>
+<rule abstract="true" id="ar"><let name="n" value="count(*)"/><assert test="$n gt 0">empty</assert></rule>
+<rule context="row[@a]"><assert test="1">x</assert></rule>
+<rule context="row"><extends rule="ar"/><let name="v" value="@v"/><assert test="$v le $max and $n gt 0" diagnostics="d1" severity="warning">Row <value-of select="@id"/> too big</assert></rule>
+</pattern>
+<diagnostics><diagnostic id="d1">See <name/> for details</diagnostic></diagnostics>`);
+		const file = path.join(dir, `hover${count++}.sch`);
+		fs.writeFileSync(file, content);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		// the hover's text at the end of the text found - after the text before it, when given
+		const hover = async (text: string, after = '') => {
+			const offset = content.indexOf(text, content.indexOf(after)) + text.length - 1;
+			const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, document.positionAt(offset));
+			// as shown: without the escapes of Markdown characters in text
+			return hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n').replace(/\\([\\`*_{}[\]()#+\-.!<>|~])/g, '$1');
+		};
+		const isA = await hover('is-a="ap');
+		assert.include(isA, 'abstract pattern ap');
+		assert.include(isA, '`$table`: `tbl`');
+		assert.include(isA, '`$limit`: `5` - the default');
+		assert.include(isA, 'rule `tbl`');
+		assert.include(isA, 'assert `count(row) le 5`');
+		const extendsHover = await hover('rule="ar');
+		assert.include(extendsHover, 'let `$n` := `count(*)`');
+		assert.include(extendsHover, 'assert `$n gt 0`');
+		assert.include(await hover('pattern="p1'), 'Rows');
+		assert.include(await hover('diagnostics="d1'), 'See {name()} for details');
+		const rule = await hover('<rule', '<rule context="row">');
+		assert.include(rule, 'a node is handled by this rule only if it doesn\'t match an earlier rule');
+		assert.include(rule, '`row[@a]`');
+		// not the abstract rule, which has no context
+		assert.notInclude(rule, '- ``');
+		assert.include(rule, 'extends `ar`');
+		const assertion = await hover('<assert', '<rule context="row">');
+		assert.include(assertion, 'Reported when the test is **false**');
+		assert.include(assertion, 'severity: `warning`');
+		assert.include(assertion, 'Row {@id} too big');
+		assert.include(assertion, 'Diagnostic `d1`: See {name()} for details');
+		assert.include(await hover('$max'), 'let $max := 10');
+		assert.include(await hover('$max'), 'the schema - global');
+		assert.include(await hover('$n', 'test="$v'), 'let $n := count(*)');
+		assert.include(await hover('$limit', 'le '), 'Parameter of the abstract pattern `ap`');
+		assert.include(await hover('$limit', 'le '), '`pi`: not supplied');
+		assert.include(await hover('<phase'), 'A phase');
+		// a built-in function, as in a stylesheet
+		assert.include(await hover('count', 'count(row)'), 'count(');
+	});
+
+	test('hover: an abstract pattern in an included file with another prefix, and a function of an included XSLT module', async () => {
+		fs.writeFileSync(path.join(dir, 'hover-included.sch'), `<sch:pattern xmlns:sch="http://purl.oclc.org/dsdl/schematron" abstract="true" id="inc">
+<sch:param name="c"/><sch:rule context="$c"><sch:report test="@x">x</sch:report></sch:rule></sch:pattern>`);
+		fs.writeFileSync(path.join(dir, 'hover-functions.xsl'), `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f">
+<xsl:function name="f:double"><xsl:param name="n"/><xsl:sequence select="$n * 2"/></xsl:function></xsl:stylesheet>`);
+		const content = unprefixed(`<ns prefix="f" uri="urn:f"/><xsl:include ${xsl} href="hover-functions.xsl"/><include href="hover-included.sch"/>
+<pattern id="i" is-a="inc"><param name="c" value="item"/></pattern>
+<pattern><rule context="a"><assert test="f:double(1) eq 2">x</assert></rule></pattern>`);
+		const file = path.join(dir, `hover${count++}.sch`);
+		fs.writeFileSync(file, content);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const hover = async (text: string) => {
+			const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, document.positionAt(content.indexOf(text) + text.length - 1));
+			return hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n');
+		};
+		const isA = await hover('is-a="inc');
+		assert.include(isA, 'rule `item`');
+		assert.include(isA, 'report `@x`');
+		assert.include(await hover('f:double'), 'f:double($n)');
+	});
+
+	// with the Saxon jar setting, and XSpec's setting for syntax extensions, as given - restored afterwards
+	const withSaxon = async <T>(saxonJar: string, allowSyntaxExtensions: string | undefined, run: () => Promise<T>) => {
+		const tasks = vscode.workspace.getConfiguration('XSLT.tasks');
+		const xspec = vscode.workspace.getConfiguration('XSLT.xspec');
+		const savedJar = tasks.inspect<string>('saxonJar')?.globalValue;
+		const savedSetting = xspec.inspect<string>('allowSyntaxExtensions')?.globalValue;
+		await tasks.update('saxonJar', saxonJar, vscode.ConfigurationTarget.Global);
+		await xspec.update('allowSyntaxExtensions', allowSyntaxExtensions, vscode.ConfigurationTarget.Global);
+		try {
+			return await run();
+		} finally {
+			await tasks.update('saxonJar', savedJar, vscode.ConfigurationTarget.Global);
+			await xspec.update('allowSyntaxExtensions', savedSetting, vscode.ConfigurationTarget.Global);
+		}
+	};
+	const noteSchema = (noteAttributes = '', functionAttributes = '') => unprefixed(`<ns prefix="f" uri="urn:f"/>
+<xsl:function ${xsl} name="f:double"${functionAttributes}><xsl:note${noteAttributes}>Doubles a number</xsl:note><xsl:param name="n"/><xsl:sequence select="$n * 2"/></xsl:function>
+<pattern><rule context="a"><assert test="f:double(1) eq 2">x</assert></rule></pattern>`);
+
+	test('xsl:note: in a declaration SchXslt2 copies, it needs Saxon\'s syntax extensions - not with use-when="false()"', async () => {
+		const count = (content: string) => SchXslt2Checks.notesNeedingExtensions(content).length;
+		assert.strictEqual(count(noteSchema()), 1);
+		assert.strictEqual(count(noteSchema(' use-when="false()"')), 0);
+		assert.strictEqual(count(noteSchema(' use-when=" false( ) "')), 0);
+		assert.strictEqual(count(noteSchema('', ' use-when="false()"')), 0);
+		// a top-level note isn't copied - it's reported as ignored
+		assert.strictEqual(count(unprefixed(`<xsl:note ${xsl}>x</xsl:note>`)), 0);
+	});
+
+	test('xsl:note: reported for Saxon-HE, a Saxon before 13 or XSpec\'s setting off - not for Saxon-PE 13, or with use-when="false()"', async () => {
+		const file = path.join(dir, `note${count++}.sch`);
+		fs.writeFileSync(file, noteSchema());
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const noteProblems = () => SchXslt2Checks.problems(document).filter((d) => d.code === SchXslt2Checks.noteCode).map((d) => d.message.replace(/ - Saxon reports.*/, ''));
+		const needs = 'SchXslt2: xsl:note in its stylesheet needs Saxon\'s syntax extensions, which ';
+		assert.deepEqual(await withSaxon('/opt/SaxonHE13-0J/saxon-he-13.0.jar', undefined, async () => noteProblems()), [needs + 'Saxon-HE doesn\'t have']);
+		assert.deepEqual(await withSaxon('/opt/SaxonPE12-8J/saxon-pe-12.8.jar', undefined, async () => noteProblems()), [needs + 'Saxon 12 doesn\'t have for it - Saxon 13 or later is needed']);
+		assert.deepEqual(await withSaxon('/opt/SaxonPE13-1J/saxon-pe-13.1.jar', 'off', async () => noteProblems()), [needs + 'the XSLT.xspec.allowSyntaxExtensions setting turns off']);
+		assert.deepEqual(await withSaxon('/opt/SaxonPE13-1J/saxon-pe-13.1.jar', undefined, async () => noteProblems()), []);
+		// the quick fix adds use-when="false()"
+		await withSaxon('/opt/SaxonHE13-0J/saxon-he-13.0.jar', undefined, async () => {
+			const diagnostic = SchXslt2Checks.problems(document).find((d) => d.code === SchXslt2Checks.noteCode)!;
+			const action = SchXslt2Checks.codeActions(document, [diagnostic])[0];
+			const edit = action.edit!.get(document.uri)[0];
+			assert.strictEqual(edit.newText, ' use-when="false()"');
+			assert.strictEqual(document.getText(new vscode.Range(edit.range.start.translate(0, -8), edit.range.start)), 'xsl:note');
+		});
+	});
+
+	test('xsl:note: XSpec turns Saxon\'s syntax extensions on for a Schematron with one, by "auto" - as for queryBinding="xslt4"', async () => {
+		const xspecFor = (schema: string) => {
+			const sch = path.join(dir, `tested${count++}.sch`);
+			fs.writeFileSync(sch, schema);
+			const xspecPath = path.join(dir, `tests${count++}.xspec`);
+			fs.writeFileSync(xspecPath, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" schematron="${path.basename(sch)}"/>`);
+			return vscode.Uri.file(xspecPath);
+		};
+		await withSaxon('/opt/SaxonPE13-1J/saxon-pe-13.1.jar', undefined, async () => {
+			assert.strictEqual(XSpecRunner.syntaxExtensionsValue(xspecFor(noteSchema())), 'on');
+			assert.strictEqual(XSpecRunner.syntaxExtensionsValue(xspecFor(noteSchema(' use-when="false()"'))), 'off');
+			assert.strictEqual(XSpecRunner.syntaxExtensionsValue(xspecFor('<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt4"/>')), 'on');
+		});
 	});
 });

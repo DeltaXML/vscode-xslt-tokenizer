@@ -16,6 +16,8 @@ import { CatalogSetting } from './catalogSetting';
 import { XsltPackages } from './xsltPackages';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SyntaxExtensions } from './syntaxExtensions';
+import { SchXslt2Checks } from './schXslt2Checks';
+import { XslLexer } from './xslLexer';
 import { HrefPaths } from './hrefPaths';
 import { XSpecTaskSettings, XSpecTaskSettingsFinder } from './xspecTaskSettings';
 
@@ -207,7 +209,27 @@ export class XSpecRunner {
 			const found = XsltPackages.find(XsltPackages.all(), m[2], version);
 			return found ? HrefPaths.settingsPath(found.path, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(xspecPath)) : undefined;
 		}).filter((p): p is string => !!p);
-		return SyntaxExtensions.needed(starts.concat(helperPackages));
+		return SyntaxExtensions.needed(starts.concat(helperPackages)) || XSpecRunner.schematronNeedsSyntaxExtensions(xspecText, xspecPath, read);
+	}
+
+	// the Schematron the XSpec file tests, compiled by SchXslt2 to an XSLT 3.0 stylesheet: it needs them for xsl:note in a
+	// declaration it copies, e.g. xsl:function (not one with use-when="false()"), for XPath 4.0 (queryBinding="xslt4"),
+	// or for a module it includes or imports that needs them
+	private static schematronNeedsSyntaxExtensions(xspecText: string, xspecPath: string, read: (file: string) => string | undefined): boolean {
+		const href = /<(?:[\w.-]+:)?description\b[^>]*?\sschematron\s*=\s*(["'])(.*?)\1/.exec(xspecText)?.[2];
+		const schPath = href ? HrefPaths.toPath(href.trim(), xspecPath) : undefined;
+		const schText = schPath ? read(schPath) : undefined;
+		if (!schPath || schText === undefined) {
+			return false;
+		}
+		const queryBinding = /<(?:[\w.-]+:)?schema\b[^>]*?\squeryBinding\s*=\s*(["'])\s*([^"']*?)\s*\1/.exec(schText)?.[2];
+		if (queryBinding?.toLowerCase() === 'xslt4' || SchXslt2Checks.notesNeedingExtensions(schText).length > 0) {
+			return true;
+		}
+		const xsltPrefix = XslLexer.schXsltPrefix(schText).replace(/[.-]/g, '\\$&');
+		const modules = [...schText.replace(/<!--[\s\S]*?-->/g, '').matchAll(new RegExp(`<${xsltPrefix}:(?:include|import)\\b[^>]*?\\shref\\s*=\\s*(["'])(.*?)\\1`, 'g'))]
+			.map((m) => HrefPaths.toPath(m[2].trim(), schPath)).filter((p): p is string => !!p);
+		return SyntaxExtensions.needed(modules);
 	}
 
 	// with the Saxon settings of the stylesheet's task, if it has one (see XSpecTaskSettings)
