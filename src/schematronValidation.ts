@@ -200,6 +200,18 @@ export class SchematronValidation {
 		return phase === '#DEFAULT' ? SchematronValidation.phasesOf(schemaText).defaultPhase : phase;
 	}
 
+	// the XML file for a schema's element and attribute name completion: the one last validated with it - else one open
+	// whose xml-model associates it with the schema - else undefined
+	public static dataFileFor(schema: string): string | undefined {
+		if (!SchematronValidation.state) {
+			return undefined;
+		}
+		const pairs = SchematronValidation.pairs();
+		const validated = Object.keys(pairs).reverse().find((xml) => pairs[xml] === schema && fs.existsSync(xml));
+		return validated ?? vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'file' && d.languageId !== 'sch' &&
+			d.getText(new vscode.Range(0, 0, 20, 0)).includes('xml-model') && SchematronValidation.xmlModel(d.getText(), d.fileName) === schema)?.fileName;
+	}
+
 	// the schema an xml-model processing instruction associates with the file, if it's a Schematron schema
 	public static xmlModel(text: string, xmlPath: string): string | undefined {
 		for (const pi of text.matchAll(/<\?xml-model\s([\s\S]*?)\?>/g)) {
@@ -249,7 +261,9 @@ export class SchematronValidation {
 		for (const document of vscode.workspace.textDocuments.filter((d) => d.isDirty && (d.fileName === xmlUri.fsPath || d.fileName === schema))) {
 			await document.save();
 		}
-		await SchematronValidation.state.update(SchematronValidation.stateKey, { ...SchematronValidation.pairs(), [xmlUri.fsPath]: schema });
+		// the file last, as the one most recently validated
+		const others = Object.entries(SchematronValidation.pairs()).filter(([xml]) => xml !== xmlUri.fsPath);
+		await SchematronValidation.state.update(SchematronValidation.stateKey, { ...Object.fromEntries(others), [xmlUri.fsPath]: schema });
 		SchematronValidation.validated.set(xmlUri.fsPath, schema);
 		const svrl = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'schematron-')), 'report.svrl');
 		const schemaText = fs.readFileSync(schema, 'utf8');

@@ -894,4 +894,51 @@ suite('Schematron', () => {
 			SchematronValidation.choosePhase = chooser;
 		}
 	});
+
+	test('completion: variables in scope - the schema\'s, the pattern\'s and the rule\'s', async () => {
+		const variables = async (content: string) => (await completions(content)).filter((name) => name.startsWith('$')).sort();
+		assert.deepEqual(await variables(unprefixed(`<let name="max" value="1"/>
+<pattern><let name="pv" value="2"/><rule context="a"><let name="rv" value="3"/><assert test="$|">x</assert></rule></pattern>`)), ['$max', '$pv', '$rv']);
+		// not another pattern's
+		assert.deepEqual(await variables(unprefixed(`<let name="max" value="1"/>
+<pattern><let name="pv" value="2"/></pattern><pattern><rule context="a"><assert test="$|">x</assert></rule></pattern>`)), ['$max']);
+	});
+
+	test('completion: element and attribute names from the data the schema validates - an XML file with an xml-model for it - not the schema\'s own', async () => {
+		const schema = path.join(dir, 'names.sch');
+		const content = unprefixed('<pattern><rule context="|"><assert test="1">x</assert></rule></pattern>');
+		fs.writeFileSync(schema, content.replace('|', ''));
+		const xmlPath = path.join(dir, 'names-data.xml');
+		fs.writeFileSync(xmlPath, '<?xml-model href="names.sch" schematypens="http://purl.oclc.org/dsdl/schematron"?><orders><order id="1"><line/></order></orders>');
+		await vscode.workspace.openTextDocument(vscode.Uri.file(xmlPath));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(schema));
+		await vscode.window.showTextDocument(document);
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(content.indexOf('|')));
+		const names = list.items.map((i) => typeof i.label === 'string' ? i.label : i.label.label);
+		assert.includeMembers(names, ['orders', 'order', 'line'], names.join(', '));
+		for (const own of ['rule', 'pattern', 'assert', '@context', '@test']) {
+			assert.notInclude(names, own);
+		}
+	});
+
+	test('rules that never fire: the same context as an earlier rule of the pattern, or after a rule for every element - not in a group', async () => {
+		assert.deepEqual((await problems(unprefixed(`<pattern>
+<rule context="item"><assert test="1">x</assert></rule>
+<rule context=" item "><assert test="2">x</assert></rule>
+</pattern>
+<pattern>
+<rule context="*"><assert test="1">x</assert></rule>
+<rule context="item/line"><assert test="2">x</assert></rule>
+<rule context="@id"><assert test="3">x</assert></rule>
+</pattern>
+<group><rule context="item"><assert test="1">x</assert></rule><rule context="item"><assert test="2">x</assert></rule></group>`))).filter((m) => m.includes('never fires')), [
+			'3: Schematron: this rule never fires - an earlier rule in the pattern has the same context, and a node is handled only by the first rule whose context matches it',
+			'7: Schematron: this rule never fires - an earlier rule in the pattern has the context *, which matches every element, and a node is handled only by the first rule whose context matches it'
+		]);
+	});
+
+	test('variables: in an abstract pattern, a name that isn\'t a parameter - declared, or supplied with is-a - is a variable reference', async () => {
+		assert.deepEqual(await problems(unprefixed(`<pattern abstract="true" id="ap"><param name="c"/><rule context="$c"><assert test="$supplied and $undeclared">x</assert></rule></pattern>
+<pattern is-a="ap" id="p"><param name="c" value="a"/><param name="supplied" value="1"/></pattern>`)), ['1: XPath: The variable/parameter $undeclared cannot be resolved']);
+	});
 });

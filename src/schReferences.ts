@@ -52,8 +52,10 @@ export class SchReferences {
 		}
 		const { prefix, declared, complete } = schema;
 		const diagnostics: vscode.Diagnostic[] = [];
+		// a message that's SchXslt2's - or with its own prefix, e.g. Schematron:, for what's true of any processor
 		const add = (start: number, end: number, message: string, severity = vscode.DiagnosticSeverity.Error) => {
-			const diagnostic = new vscode.Diagnostic(new vscode.Range(document.positionAt(start), document.positionAt(end)), `SchXslt2: ${message}`, severity);
+			const diagnostic = new vscode.Diagnostic(new vscode.Range(document.positionAt(start), document.positionAt(end)),
+				message.startsWith('Schematron: ') ? message : `SchXslt2: ${message}`, severity);
 			diagnostic.code = SchReferences.code;
 			diagnostics.push(diagnostic);
 		};
@@ -77,6 +79,7 @@ export class SchReferences {
 				add(value.start, value.end, `the id ${value.value.trim()} isn't unique in the schema`, vscode.DiagnosticSeverity.Warning);
 			}
 		});
+		SchReferences.unreachableRules(document.getText(), prefix).forEach(({ start, end, message }) => add(start, end, message, vscode.DiagnosticSeverity.Warning));
 		for (const reference of SchReferences.references(document.getText(), prefix)) {
 			const local = reference.element.name.substring(prefix.length);
 			if (reference.attribute === 'pattern') {
@@ -244,6 +247,36 @@ export class SchReferences {
 			}
 		});
 		return references;
+	}
+
+	// the rules of a pattern that never fire, as a node is handled only by the first rule whose context matches it: one with
+	// the same context as an earlier rule - or after a rule for any element, e.g. context="*", one only for elements. Not in
+	// a group, where every rule whose context matches a node is used
+	private static unreachableRules(text: string, prefix: string): { start: number, end: number, message: string }[] {
+		const root = parseXml(text);
+		if (!root) {
+			return [];
+		}
+		const normalized = (context: string) => context.replace(/\s+/g, '');
+		const anyElement = new Set(['*', 'node()', 'element()', 'element(*)']);
+		// a context for elements only: not the document node, an attribute, text, a comment or a processing instruction
+		const isElementOnly = (context: string) => context !== '/' && !/@|attribute|text\(|comment\(|processing-instruction\(|document-node\(|\|/.test(context) && !anyElement.has(context);
+		const result: { start: number, end: number, message: string }[] = [];
+		for (const pattern of [root, ...descendants(root)].filter((e) => e.name === prefix + 'pattern')) {
+			const rules = pattern.children.filter((c) => c.name === prefix + 'rule' && c.attributes.get('abstract')?.trim() !== 'true' && c.attributes.has('context'));
+			rules.forEach((rule, i) => {
+				const context = normalized(rule.attributes.get('context')!);
+				const earlier = rules.slice(0, i).find((r) => normalized(r.attributes.get('context')!) === context) ??
+					(isElementOnly(context) ? rules.slice(0, i).find((r) => anyElement.has(normalized(r.attributes.get('context')!))) : undefined);
+				const value = earlier ? SchReferences.attributeValue(text, rule, 'context') : undefined;
+				if (earlier && value) {
+					const same = normalized(earlier.attributes.get('context')!) === context;
+					result.push({ start: value.start, end: value.end, message: `Schematron: this rule never fires - ${same ? 'an earlier rule in the pattern has the same context' :
+						`an earlier rule in the pattern has the context ${earlier.attributes.get('context')!.trim()}, which matches every element`}, and a node is handled only by the first rule whose context matches it` });
+				}
+			});
+		}
+		return result;
 	}
 
 	// the id at the position - in a reference, or an element's id attribute - with the kinds of element that declare it

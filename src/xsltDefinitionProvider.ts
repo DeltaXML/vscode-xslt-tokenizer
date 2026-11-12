@@ -30,6 +30,7 @@ import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XPathVersion } from './xpathVersion';
 import { XSpecNodeNames } from './xspecNodeNames';
 import { SchReferences } from './schReferences';
+import { SchematronValidation } from './schematronValidation';
 
 interface ImportedGlobals {
 	href: string;
@@ -471,6 +472,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				if ( DocumentChangeHandler.lastActiveXMLNonXSLUri) {
 					uri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
 				}
+			} else if (this.docType === DocumentTypes.SCH) {
+				// Schematron: the names of the data it validates - the XML file last validated with the schema, else one
+				// whose xml-model associates it with the schema, else the last XML file viewed - not the schema's own
+				const dataFile = document.uri.scheme === 'file' ? SchematronValidation.dataFileFor(document.fileName) : undefined;
+				const lastXml = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+				uri = dataFile ? vscode.Uri.file(dataFile) : lastXml && !/\.sch$/i.test(lastXml.fsPath) ? lastXml : undefined;
 			} else {
 				uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
 			}
@@ -539,7 +546,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
-			let xslVariable = ['xsl:variable', 'xsl:param'];
+			// Schematron: sch:let and sch:param too (see SchConfiguration)
+			let xslVariable = this.docType === DocumentTypes.SCH ? localLanguageConfig.variableElementNames : ['xsl:variable', 'xsl:param'];
 
 			let completions: vscode.CompletionItem[]|undefined;
 			// XSLT 4.0: within a documentation note - an xsl:note with format="xdoc-md" - only its tags and parameter names

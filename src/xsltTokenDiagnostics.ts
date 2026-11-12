@@ -40,7 +40,7 @@ import { SchRequired } from './schRequired';
 import { SchSchema } from './schSchema';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecDuplicateLabels } from './xspecDuplicateLabels';
-import { XmlElement, parseXml } from './xspecXml';
+import { XmlElement, parseXml, descendants } from './xspecXml';
 import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
 import { XSpecSourceMap } from './xspecSourceMap';
@@ -5018,6 +5018,21 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		visit(root);
+		// an abstract pattern's or group's parameters: those it declares, and those a pattern with is-a for it supplies -
+		// SchXslt2 replaces only those, so another name is a variable reference. Any name, where none are known
+		const all = [root, ...descendants(root)];
+		allowances.filter((a) => !a.names).forEach((allowance) => {
+			const pattern = all.find((e) => e.start === allowance.start);
+			if (!pattern || (pattern.name !== prefix + 'pattern' && pattern.name !== prefix + 'group')) {
+				return;
+			}
+			const id = pattern.attributes.get('id')?.trim();
+			const declared = pattern.children.filter((c) => c.name === prefix + 'param').map((p) => p.attributes.get('name')?.trim() ?? '');
+			const supplied = all.filter((e) => e.name === prefix + 'param' && e.parent?.attributes.get('is-a')?.trim() === id).map((p) => p.attributes.get('name')?.trim() ?? '');
+			if (declared.length > 0 || supplied.length > 0) {
+				allowance.names = new Set([...declared, ...supplied]);
+			}
+		});
 		const abstractRules = new Map(rules.filter(isAbstract).map((rule) => [rule.attributes.get('id')?.trim() ?? '', rule]));
 		const extended = (rule: XmlElement) => rule.children.filter((child) => child.name === prefix + 'extends').map((child) => child.attributes.get('rule')?.trim() ?? '');
 		// the sch:let names of an abstract rule, and of those it extends
