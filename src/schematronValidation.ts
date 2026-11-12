@@ -1,0 +1,342 @@
+/**
+ *  Copyright (c) 2026 DeltaXignia Ltd. and others.
+ *  All rights reserved. This program and the accompanying materials
+ *  are made available under the terms of the MIT license
+ *  which accompanies this distribution.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd.
+ */
+import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { spawn } from 'child_process';
+import { XmlElement, parseXml, descendants } from './xspecXml';
+import { XSpecRunner } from './xspecRunner';
+import { CatalogSetting } from './catalogSetting';
+import { HrefPaths } from './hrefPaths';
+import { SchReferences } from './schReferences';
+
+// a failed assertion or successful report, from the SVRL report
+export interface SchematronResult {
+	kind: 'assert' | 'report';
+	text: string;
+	location: string;
+	id?: string;
+	test?: string;
+	role?: string;
+	severity?: string;
+	diagnostics: string[];
+}
+
+// Validate with Schematron: an XML file validated with a Schematron schema, as SchXslt2 - the Schematron processor bundled
+// with XSpec - validates it, with the Saxon of the XSLT.tasks.saxonJar setting (see
+// xslt-resources/schematron/validate.xsl). Each failed assertion and successful report is a problem in the XML file, at
+// the node it's about, with a link to the assertion in the schema.
+// The schema: the one an xml-model processing instruction associates with the file, else the one last used for it, else
+// one chosen from the workspace's - 'Choose Schema' chooses again. From a schema, the XML file last validated with it.
+// Once validated, the file is validated again when it, or the schema, is saved
+export class SchematronValidation {
+	public static readonly validateCommand = 'xslt-xpath.validateWithSchematron';
+	public static readonly chooseCommand = 'xslt-xpath.validateWithSchematronChoose';
+	private static readonly stateKey = 'xslt-xpath.schematronForXml';
+	private static readonly schematronNamespace = 'http://purl.oclc.org/dsdl/schematron';
+	private static collection: vscode.DiagnosticCollection;
+	private static channel: vscode.OutputChannel | undefined;
+	private static state: vscode.Memento;
+	private static extensionPath: string;
+	// the files validated in this session, by path: the schema each was validated with
+	private static readonly validated = new Map<string, string>();
+	// for testing: how the schema is chosen, where none is known
+	public static chooseSchema = (xmlUri: vscode.Uri) => SchematronValidation.pickSchema(xmlUri);
+
+	public static register(context: vscode.ExtensionContext) {
+		SchematronValidation.collection = vscode.languages.createDiagnosticCollection('schematron');
+		SchematronValidation.state = context.workspaceState;
+		SchematronValidation.extensionPath = context.extensionUri.fsPath;
+		context.subscriptions.push(SchematronValidation.collection,
+			vscode.commands.registerCommand(SchematronValidation.validateCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, false)),
+			vscode.commands.registerCommand(SchematronValidation.chooseCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, true)),
+			// validated again when the file, or its schema, is saved
+			vscode.workspace.onDidSaveTextDocument((document) => {
+				if (document.uri.scheme !== 'file') {
+					return;
+				}
+				SchematronValidation.validated.forEach((schema, xml) => {
+					if (xml === document.fileName || schema === document.fileName) {
+						SchematronValidation.validate(vscode.Uri.file(xml), schema, false);
+					}
+				});
+			}),
+			vscode.workspace.onDidCloseTextDocument((document) => {
+				if (SchematronValidation.validated.has(document.fileName)) {
+					SchematronValidation.validated.delete(document.fileName);
+					SchematronValidation.collection.delete(document.uri);
+				}
+			}));
+	}
+
+	// the file to validate, and the schema - from the command's file, or the active editor's
+	private static async run(uri: vscode.Uri | undefined, choose: boolean) {
+		const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+		if (!target || target.scheme !== 'file') {
+			vscode.window.showInformationMessage('Validate with Schematron: open an XML file, or a Schematron schema, first.');
+			return;
+		}
+		const pairs = SchematronValidation.pairs();
+		if (/\.sch$/i.test(target.fsPath)) {
+			// a schema: the file last validated with it - else one to choose
+			const xml = Object.keys(pairs).reverse().find((file) => pairs[file] === target.fsPath && fs.existsSync(file)) ?? await SchematronValidation.pickXml();
+			if (xml) {
+				await SchematronValidation.validate(vscode.Uri.file(xml), target.fsPath, true);
+			}
+			return;
+		}
+		const text = (await vscode.workspace.openTextDocument(target)).getText();
+		const schema = choose ? await SchematronValidation.chooseSchema(target) :
+			SchematronValidation.xmlModel(text, target.fsPath) ?? (pairs[target.fsPath] && fs.existsSync(pairs[target.fsPath]) ? pairs[target.fsPath] : await SchematronValidation.chooseSchema(target));
+		if (schema) {
+			await SchematronValidation.validate(target, schema, true);
+		}
+	}
+
+	// the schema an xml-model processing instruction associates with the file, if it's a Schematron schema
+	public static xmlModel(text: string, xmlPath: string): string | undefined {
+		for (const pi of text.matchAll(/<\?xml-model\s([\s\S]*?)\?>/g)) {
+			const pseudo = (name: string) => new RegExp(`\\b${name}\\s*=\\s*(["'])([^"']*)\\1`).exec(pi[1])?.[2];
+			const href = pseudo('href');
+			const isSchematron = pseudo('schematypens') === SchematronValidation.schematronNamespace || (!pseudo('schematypens') && !!href && /\.sch$/i.test(href));
+			const schema = isSchematron && href ? HrefPaths.toPath(href, xmlPath) : undefined;
+			if (schema) {
+				return schema;
+			}
+		}
+		return undefined;
+	}
+
+	private static pairs(): { [xml: string]: string } {
+		return SchematronValidation.state.get<{ [xml: string]: string }>(SchematronValidation.stateKey, {});
+	}
+
+	private static async pickSchema(xmlUri: vscode.Uri): Promise<string | undefined> {
+		const files = await vscode.workspace.findFiles('**/*.sch', '**/node_modules/**', 500);
+		const last = SchematronValidation.pairs()[xmlUri.fsPath];
+		const items = files.map((f) => f.fsPath).sort((a, b) => (a === last ? -1 : b === last ? 1 : a.localeCompare(b)))
+			.map((file) => ({ label: path.basename(file), description: vscode.workspace.asRelativePath(path.dirname(file)), file }));
+		const browse = { label: '$(folder-opened) Browse...', description: '', file: '' };
+		const picked = await vscode.window.showQuickPick([...items, browse], { placeHolder: `The Schematron schema to validate ${path.basename(xmlUri.fsPath)} with` });
+		if (picked === browse) {
+			const chosen = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'Schematron': ['sch'] }, defaultUri: vscode.Uri.file(path.dirname(xmlUri.fsPath)) });
+			return chosen?.[0]?.fsPath;
+		}
+		return picked?.file;
+	}
+
+	private static async pickXml(): Promise<string | undefined> {
+		const chosen = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'XML': ['xml'], 'All files': ['*'] }, openLabel: 'Validate' });
+		return chosen?.[0]?.fsPath;
+	}
+
+	// the file validated with the schema - its problems, in the Problems view - after saving either if it has changes
+	public static async validate(xmlUri: vscode.Uri, schema: string, interactive: boolean): Promise<SchematronResult[] | undefined> {
+		const problem = SchematronValidation.problem(xmlUri, schema);
+		if (problem) {
+			if (interactive) {
+				vscode.window.showErrorMessage(problem);
+			}
+			return undefined;
+		}
+		for (const document of vscode.workspace.textDocuments.filter((d) => d.isDirty && (d.fileName === xmlUri.fsPath || d.fileName === schema))) {
+			await document.save();
+		}
+		await SchematronValidation.state.update(SchematronValidation.stateKey, { ...SchematronValidation.pairs(), [xmlUri.fsPath]: schema });
+		SchematronValidation.validated.set(xmlUri.fsPath, schema);
+		const svrl = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'schematron-')), 'report.svrl');
+		const schemaText = fs.readFileSync(schema, 'utf8');
+		const extensions = XSpecRunner.schematronSyntaxExtensions(xmlUri, schema, schemaText);
+		const catalog = CatalogSetting.taskOption({});
+		const transpiler = path.join(XSpecRunner.home(xmlUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
+		const args = ['-cp', XSpecRunner.saxonJar(xmlUri)!, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
+			'-s:' + xmlUri.fsPath, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'validate.xsl'), '-o:' + svrl,
+			'schema=' + vscode.Uri.file(schema).toString(), 'transpiler=' + vscode.Uri.file(transpiler).toString()];
+		const channel = SchematronValidation.output();
+		channel.appendLine(`Validating ${xmlUri.fsPath} with ${schema}:`);
+		channel.appendLine('java ' + args.map((arg) => /[\s"]/.test(arg) ? `"${arg}"` : arg).join(' '));
+		const outcome = await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: `Schematron: validating ${path.basename(xmlUri.fsPath)}` },
+			() => SchematronValidation.java(args, path.dirname(xmlUri.fsPath)));
+		channel.append(outcome.output);
+		if (!outcome.ok || !fs.existsSync(svrl)) {
+			SchematronValidation.collection.delete(xmlUri);
+			const action = await vscode.window.showErrorMessage(`Schematron: the validation of ${path.basename(xmlUri.fsPath)} with ${path.basename(schema)} failed - see the Schematron output`, 'Show Output');
+			if (action) {
+				channel.show(true);
+			}
+			return undefined;
+		}
+		const results = SchematronValidation.results(fs.readFileSync(svrl, 'utf8'));
+		fs.rmSync(path.dirname(svrl), { recursive: true, force: true });
+		const xmlText = (await vscode.workspace.openTextDocument(xmlUri)).getText();
+		const schemaDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(schema));
+		const assertions = SchematronValidation.assertions(schemaDocument);
+		SchematronValidation.collection.set(xmlUri, results.map((result) => SchematronValidation.diagnostic(result, xmlText, xmlUri, schema, assertions)));
+		const summary = results.length === 0 ? `Schematron: ${path.basename(xmlUri.fsPath)} is valid with ${path.basename(schema)}` :
+			`Schematron: ${results.length} problem${results.length === 1 ? '' : 's'} in ${path.basename(xmlUri.fsPath)} with ${path.basename(schema)}`;
+		channel.appendLine(summary);
+		vscode.window.setStatusBarMessage(`$(${results.length === 0 ? 'pass' : 'warning'}) ${summary}`, 6000);
+		return results;
+	}
+
+	// why it can't be validated, if it can't
+	private static problem(xmlUri: vscode.Uri, schema: string) {
+		const saxonJar = XSpecRunner.saxonJar(xmlUri);
+		if (!saxonJar) {
+			return 'Validate with Schematron: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.';
+		} else if (!fs.existsSync(saxonJar)) {
+			return `Validate with Schematron: the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting.`;
+		} else if (!fs.existsSync(schema)) {
+			return `Validate with Schematron: the schema '${schema}' doesn't exist.`;
+		}
+		return undefined;
+	}
+
+	private static java(args: string[], cwd: string): Promise<{ ok: boolean, output: string }> {
+		return new Promise((resolve) => {
+			let output = '';
+			const child = spawn('java', args, { cwd });
+			child.stdout.on('data', (data: Buffer) => output += data.toString());
+			child.stderr.on('data', (data: Buffer) => output += data.toString());
+			child.on('error', (error) => resolve({ ok: false, output: output + `Java couldn't be run: ${error.message}\n` }));
+			child.on('close', (code) => resolve({ ok: code === 0, output }));
+		});
+	}
+
+	private static output() {
+		SchematronValidation.channel = SchematronValidation.channel ?? vscode.window.createOutputChannel('Schematron');
+		return SchematronValidation.channel;
+	}
+
+	// the failed assertions and successful reports of an SVRL report
+	public static results(svrl: string): SchematronResult[] {
+		const root = parseXml(svrl);
+		if (!root) {
+			return [];
+		}
+		const local = (e: XmlElement) => e.name.replace(/^.*:/, '');
+		const text = (e: XmlElement | undefined) => (e ? [e.text, ...descendants(e).map((d) => d.text)].join(' ') : '').replace(/\s+/g, ' ').trim();
+		return descendants(root).filter((e) => local(e) === 'failed-assert' || local(e) === 'successful-report').map((e) => ({
+			kind: local(e) === 'failed-assert' ? 'assert' : 'report',
+			text: text(e.children.find((c) => local(c) === 'text')),
+			location: e.attributes.get('location') ?? '',
+			id: e.attributes.get('id'),
+			test: e.attributes.get('test'),
+			role: e.attributes.get('role'),
+			severity: e.attributes.get('severity'),
+			diagnostics: e.children.filter((c) => local(c) === 'diagnostic-reference').map((c) => text(c))
+		}));
+	}
+
+	private static diagnostic(result: SchematronResult, xmlText: string, xmlUri: vscode.Uri, schema: string, assertions: { element: XmlElement, location: vscode.Location }[]) {
+		const lines = xmlText.split('\n');
+		const position = (offset: number) => {
+			const before = xmlText.substring(0, offset).split('\n');
+			return new vscode.Position(before.length - 1, before[before.length - 1].length);
+		};
+		const span = SchematronValidation.locate(xmlText, result.location);
+		const range = span ? new vscode.Range(position(span.start), position(span.end)) : new vscode.Range(0, 0, 0, lines[0]?.length ?? 0);
+		const message = [result.text || `${result.kind === 'assert' ? 'Assertion failed' : 'Report'}: ${result.test ?? ''}`, ...result.diagnostics].join('\n');
+		const diagnostic = new vscode.Diagnostic(range, message, SchematronValidation.severity(result));
+		diagnostic.source = `Schematron: ${path.basename(schema)}`;
+		if (result.id) {
+			diagnostic.code = result.id;
+		}
+		// the assertion in the schema: by its id, else its test
+		const normalized = (value: string | undefined) => value?.replace(/\s+/g, ' ').trim();
+		const assertion = assertions.find((a) => result.id !== undefined && a.element.attributes.get('id')?.trim() === result.id) ??
+			assertions.find((a) => normalized(a.element.attributes.get('test')) === normalized(result.test));
+		if (assertion) {
+			diagnostic.relatedInformation = [new vscode.DiagnosticRelatedInformation(assertion.location,
+				`the ${result.kind === 'assert' ? 'assertion that failed' : 'report'}${result.test ? `: ${normalized(result.test)}` : ''}`)];
+		}
+		return diagnostic;
+	}
+
+	// from the assertion's severity - or its role - e.g. warning or info: an error by default
+	private static severity(result: SchematronResult): vscode.DiagnosticSeverity {
+		const value = (result.severity ?? result.role ?? '').trim().toLowerCase();
+		return value === 'warning' || value === 'warn' ? vscode.DiagnosticSeverity.Warning :
+			value === 'info' || value === 'information' || value === 'informational' ? vscode.DiagnosticSeverity.Information : vscode.DiagnosticSeverity.Error;
+	}
+
+	// the assertions and reports of the schema - and the files it includes - with their locations
+	private static assertions(schemaDocument: vscode.TextDocument): { element: XmlElement, location: vscode.Location }[] {
+		const schema = SchReferences.schema(schemaDocument);
+		return (schema?.files ?? []).flatMap((file) => {
+			const root = parseXml(file.text);
+			return root ? [root, ...descendants(root)].filter((e) => e.name === file.prefix + 'assert' || e.name === file.prefix + 'report').map((element) => {
+				const before = file.text.substring(0, element.start).split('\n');
+				const start = new vscode.Position(before.length - 1, before[before.length - 1].length);
+				return { element, location: new vscode.Location(vscode.Uri.file(file.file), new vscode.Range(start, start.translate(0, element.name.length + 1))) };
+			}) : [];
+		});
+	}
+
+	// the offsets of the node an SVRL location is for - its path, as fn:path() gives it, e.g. /Q{}doc[1]/Q{urn:a}item[2]/@n:
+	// an element's name in its start tag, or an attribute - for a text node, comment or processing instruction, its parent
+	public static locate(text: string, location: string): { start: number, end: number } | undefined {
+		const root = parseXml(text);
+		if (!root || !location.startsWith('/')) {
+			return undefined;
+		}
+		const steps = [...location.matchAll(/\/(@?(?:Q\{[^}]*\})?[^/\[{]+(?:\[\d+\])?|(?:text|comment|processing-instruction)\([^)]*\)(?:\[\d+\])?)/g)].map((m) => m[1]);
+		const nameRange = (element: XmlElement) => ({ start: element.start + 1, end: element.start + 1 + element.name.length });
+		const bindings = (element: XmlElement, inherited: Map<string, string>) => {
+			const scope = new Map(inherited);
+			element.attributes.forEach((value, name) => {
+				if (name === 'xmlns') {
+					scope.set('', value);
+				} else if (name.startsWith('xmlns:')) {
+					scope.set(name.substring(6), value);
+				}
+			});
+			return scope;
+		};
+		const expanded = (name: string, scope: Map<string, string>, isAttribute: boolean) => {
+			const colon = name.indexOf(':');
+			const uri = colon > 0 ? scope.get(name.substring(0, colon)) ?? '' : isAttribute ? '' : scope.get('') ?? '';
+			return `Q{${uri}}${name.substring(colon + 1)}`;
+		};
+		// the document node's child: the outermost element
+		let current: XmlElement | undefined;
+		let scope = new Map<string, string>();
+		for (const step of steps) {
+			const match = /^(@)?(Q\{[^}]*\})?([^\[]+)(?:\[(\d+)\])?$/.exec(step);
+			if (!match || /\(/.test(step)) {
+				// a text node, comment or processing instruction: its parent
+				break;
+			}
+			const [, attribute, namespace, localName, index] = match;
+			const name = (namespace ?? 'Q{}') + localName;
+			if (attribute) {
+				const element = current;
+				if (!element) {
+					return undefined;
+				}
+				const writtenName = [...element.attributes.keys()].find((written) => !written.startsWith('xmlns') && expanded(written, scope, true) === name);
+				const startTag = text.substring(element.start, element.contentStart);
+				const found = writtenName ? new RegExp(`\\s(${writtenName.replace(/[.-]/g, '\\$&')}\\s*=\\s*(["'])[\\s\\S]*?\\2)`).exec(startTag) : undefined;
+				return found ? { start: element.start + found.index + 1, end: element.start + found.index + 1 + found[1].length } : nameRange(element);
+			}
+			const candidates = current ? current.children : [root];
+			const parentScope = scope;
+			const matching = candidates.filter((child) => expanded(child.name, bindings(child, parentScope), false) === name);
+			const next = matching[(index ? Number(index) : 1) - 1];
+			if (!next) {
+				break;
+			}
+			current = next;
+			scope = bindings(next, parentScope);
+		}
+		return current ? nameRange(current) : nameRange(root);
+	}
+}

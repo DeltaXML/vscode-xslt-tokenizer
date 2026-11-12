@@ -16,6 +16,7 @@ import { SchRequired } from '../../src/schRequired';
 import { SchSnippets } from '../../src/schSnippets';
 import { XSpecRunner } from '../../src/xspecRunner';
 import { SchVariables } from '../../src/schVariables';
+import { SchematronValidation } from '../../src/schematronValidation';
 
 suite('Schematron', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-'));
@@ -676,5 +677,109 @@ suite('Schematron', () => {
 		assert.deepEqual(references.map((l) => l.range.start.line).sort(), [2, 3]);
 		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', document.uri, at('$m'), 'limit');
 		assert.deepEqual(edit.get(document.uri).map((e) => e.newText), ['limit', 'limit']);
+	});
+
+	test('validate: the node of an SVRL location - an element\'s name, or an attribute - with namespaces as they\'re declared', async () => {
+		const xml = `<doc xmlns:f="urn:f">
+  <item n="1"/>
+  <item n="a" x="1"/>
+  <f:item><g xmlns="urn:g"><h/></g>text</f:item>
+</doc>`;
+		const at = (location: string) => {
+			const span = SchematronValidation.locate(xml, location);
+			return span ? xml.substring(span.start, span.end) : undefined;
+		};
+		const offset = (location: string) => SchematronValidation.locate(xml, location)!.start;
+		assert.strictEqual(at('/Q{}doc[1]'), 'doc');
+		assert.strictEqual(offset('/Q{}doc[1]/Q{}item[2]'), xml.indexOf('item n="a"'));
+		assert.strictEqual(at('/Q{}doc[1]/Q{}item[2]/@x'), 'x="1"');
+		assert.strictEqual(at('/Q{}doc[1]/Q{urn:f}item[1]'), 'f:item');
+		assert.strictEqual(offset('/Q{}doc[1]/Q{urn:f}item[1]/Q{urn:g}g[1]/Q{urn:g}h[1]'), xml.indexOf('h/>'));
+		// a text node: its parent
+		assert.strictEqual(at('/Q{}doc[1]/Q{urn:f}item[1]/text()[1]'), 'f:item');
+	});
+
+	test('validate: an SVRL report\'s failed assertions and successful reports, and the schema an xml-model associates', async () => {
+		const results = SchematronValidation.results(`<svrl:schematron-output xmlns:svrl="http://purl.oclc.org/dsdl/svrl">
+<svrl:fired-rule context="item"/>
+<svrl:failed-assert id="int" role="warning" test="@n castable as xs:integer" location="/Q{}doc[1]/Q{}item[2]"><svrl:text>item a isn't an integer</svrl:text></svrl:failed-assert>
+<svrl:successful-report test="@x" location="/Q{}doc[1]/Q{}item[2]"><svrl:diagnostic-reference diagnostic="d"><svrl:text>remove @x</svrl:text></svrl:diagnostic-reference><svrl:text>has x</svrl:text></svrl:successful-report>
+</svrl:schematron-output>`);
+		assert.deepEqual(results.map((r) => [r.kind, r.text, r.id, r.role, r.diagnostics]), [
+			['assert', 'item a isn\'t an integer', 'int', 'warning', []],
+			['report', 'has x', undefined, undefined, ['remove @x']]
+		]);
+		const xmlPath = path.join(dir, 'model.xml');
+		assert.strictEqual(SchematronValidation.xmlModel('<?xml-model href="rules.sch" type="application/xml" schematypens="http://purl.oclc.org/dsdl/schematron"?><a/>', xmlPath), path.join(dir, 'rules.sch'));
+		assert.isUndefined(SchematronValidation.xmlModel('<?xml-model href="rules.rng" schematypens="http://relaxng.org/ns/structure/1.0"?><a/>', xmlPath));
+	});
+
+	test('validate: an XML file with a schema - problems at the nodes, with a link to each assertion - needs a Saxon jar, in XSPEC_SAXON_JAR', async function () {
+		const saxonJar = process.env.XSPEC_SAXON_JAR;
+		if (!saxonJar) {
+			this.skip();
+		}
+		fs.mkdirSync(path.join(dir, 'validate-lib'), { recursive: true });
+		fs.writeFileSync(path.join(dir, 'validate-lib', 'lib.xsl'), `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f">
+<xsl:function name="f:ok"><xsl:param name="n"/><xsl:sequence select="$n castable as Q{http://www.w3.org/2001/XMLSchema}integer"/></xsl:function></xsl:stylesheet>`);
+		const schema = path.join(dir, 'validate.sch');
+		fs.writeFileSync(schema, unprefixed(`<ns prefix="f" uri="urn:f"/><xsl:include ${xsl} href="validate-lib/lib.xsl"/>
+<pattern id="p"><rule context="item">
+<assert test="f:ok(@n)" id="int" role="warning">item <value-of select="@n"/> isn't an integer</assert>
+<report test="@x" id="x" diagnostics="d">has x</report>
+</rule></pattern>
+<diagnostics><diagnostic id="d">remove @x from <name/></diagnostic></diagnostics>`));
+		const xmlPath = path.join(dir, 'validate.xml');
+		const xml = '<doc>\n  <item n="1"/>\n  <item n="a" x="1"/>\n</doc>\n';
+		fs.writeFileSync(xmlPath, xml);
+		await withSaxon(saxonJar!, undefined, async () => {
+			const results = await SchematronValidation.validate(vscode.Uri.file(xmlPath), schema, false);
+			assert.lengthOf(results!, 2);
+			const diagnostics = vscode.languages.getDiagnostics(vscode.Uri.file(xmlPath)).filter((d) => d.source?.startsWith('Schematron'));
+			assert.deepEqual(diagnostics.map((d) => [d.range.start.line, d.range.start.character, vscode.DiagnosticSeverity[d.severity], d.message, d.code]), [
+				[2, 3, 'Warning', 'item a isn\'t an integer', 'int'],
+				[2, 3, 'Error', 'has x\nremove @x from item', 'x']
+			]);
+			const related = diagnostics[0].relatedInformation![0].location;
+			assert.strictEqual(path.basename(related.uri.fsPath), 'validate.sch');
+			assert.strictEqual(related.range.start.line, 3);
+			// valid: no problems
+			fs.writeFileSync(xmlPath, '<doc><item n="2"/></doc>');
+			assert.lengthOf((await SchematronValidation.validate(vscode.Uri.file(xmlPath), schema, false))!, 0);
+			assert.lengthOf(vscode.languages.getDiagnostics(vscode.Uri.file(xmlPath)).filter((d) => d.source?.startsWith('Schematron')), 0);
+		});
+	});
+
+	test('validate: the command - with the schema an xml-model associates, else the one last used, else one chosen', async function () {
+		const saxonJar = process.env.XSPEC_SAXON_JAR;
+		if (!saxonJar) {
+			this.skip();
+		}
+		const schema = path.join(dir, 'command.sch');
+		fs.writeFileSync(schema, unprefixed('<pattern><rule context="item"><assert test="@n" id="has-n">no n</assert></rule></pattern>'));
+		const other = path.join(dir, 'command-other.sch');
+		fs.writeFileSync(other, unprefixed('<pattern><rule context="item"><report test="true()" id="item">an item</report></rule></pattern>'));
+		const withModel = path.join(dir, 'command-model.xml');
+		fs.writeFileSync(withModel, '<?xml-model href="command.sch" schematypens="http://purl.oclc.org/dsdl/schematron"?>\n<doc><item/></doc>');
+		const plain = path.join(dir, 'command-plain.xml');
+		fs.writeFileSync(plain, '<doc><item n="1"/></doc>');
+		const codes = (file: string) => vscode.languages.getDiagnostics(vscode.Uri.file(file)).filter((d) => d.source?.startsWith('Schematron')).map((d) => d.code);
+		const chooser = SchematronValidation.chooseSchema;
+		let chosen = 0;
+		SchematronValidation.chooseSchema = async () => (chosen++, other);
+		try {
+			await withSaxon(saxonJar!, undefined, async () => {
+				await vscode.commands.executeCommand(SchematronValidation.validateCommand, vscode.Uri.file(withModel));
+				assert.deepEqual(codes(withModel), ['has-n']);
+				assert.strictEqual(chosen, 0);
+				// no xml-model: chosen, then remembered
+				await vscode.commands.executeCommand(SchematronValidation.validateCommand, vscode.Uri.file(plain));
+				await vscode.commands.executeCommand(SchematronValidation.validateCommand, vscode.Uri.file(plain));
+				assert.deepEqual(codes(plain), ['item']);
+				assert.strictEqual(chosen, 1);
+			});
+		} finally {
+			SchematronValidation.chooseSchema = chooser;
+		}
 	});
 });

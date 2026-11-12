@@ -342,6 +342,17 @@
 				"icon": "$(pulse)"
 			},
 			{
+				"command": "xslt-xpath.validateWithSchematron",
+				"title": "Validate with Schematron",
+				"category": "XSLT",
+				"icon": "$(checklist)"
+			},
+			{
+				"command": "xslt-xpath.validateWithSchematronChoose",
+				"title": "Validate with Schematron (Choose Schema)...",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.clearTimelineFile",
 				"title": "Clear Profiles and XSpec Runs from Timeline (Current File)",
 				"category": "XSLT"
@@ -621,6 +632,11 @@
 					"group": "1_xslt@2"
 				},
 				{
+					"command": "xslt-xpath.validateWithSchematron",
+					"when": "resourceLangId == xml || resourceLangId == sch",
+					"group": "1_xslt@3"
+				},
+				{
 					"command": "xslt-xpath.xspecRunFile",
 					"when": "editorLangId == xspec",
 					"group": "navigation"
@@ -702,6 +718,14 @@
 				{
 					"command": "xslt-xpath.profileXslt",
 					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.validateWithSchematron",
+					"when": "editorLangId == xml || editorLangId == sch"
+				},
+				{
+					"command": "xslt-xpath.validateWithSchematronChoose",
+					"when": "editorLangId == xml"
 				},
 				{
 					"command": "xslt-xpath.clearTimelineFile",

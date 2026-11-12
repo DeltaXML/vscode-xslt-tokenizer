@@ -219,9 +219,17 @@ export class XSpecRunner {
 		const href = /<(?:[\w.-]+:)?description\b[^>]*?\sschematron\s*=\s*(["'])(.*?)\1/.exec(xspecText)?.[2];
 		const schPath = href ? HrefPaths.toPath(href.trim(), xspecPath) : undefined;
 		const schText = schPath ? read(schPath) : undefined;
-		if (!schPath || schText === undefined) {
-			return false;
-		}
+		return !!schPath && schText !== undefined && XSpecRunner.schemaNeedsSyntaxExtensions(schPath, schText);
+	}
+
+	// a Schematron schema, compiled by SchXslt2, needs them - see schematronNeedsSyntaxExtensions - and with 'auto', they're
+	// on for its validation only then, and never with Saxon-HE
+	public static schematronSyntaxExtensions(uri: vscode.Uri, schPath: string, schText: string): boolean {
+		const setting = vscode.workspace.getConfiguration('XSLT.xspec', uri).get<string>('allowSyntaxExtensions');
+		return setting === 'on' || (setting !== 'off' && !SaxonTaskProvider.isSaxonHE(XSpecRunner.saxonJar(uri)) && XSpecRunner.schemaNeedsSyntaxExtensions(schPath, schText));
+	}
+
+	private static schemaNeedsSyntaxExtensions(schPath: string, schText: string): boolean {
 		const queryBinding = /<(?:[\w.-]+:)?schema\b[^>]*?\squeryBinding\s*=\s*(["'])\s*([^"']*?)\s*\1/.exec(schText)?.[2];
 		if (queryBinding?.toLowerCase() === 'xslt4' || SchXslt2Checks.notesNeedingExtensions(schText).length > 0) {
 			return true;
