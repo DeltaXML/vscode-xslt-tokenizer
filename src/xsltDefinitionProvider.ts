@@ -365,9 +365,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let result = await this.completionItems(document, position, token, context);
 		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix - or in an XSpec file, the items
 		// with its prefix for XSpec, e.g. t (see XsltTokenDiagnostics.xsltElementName)
+		// - or in a Schematron file, with its prefix for Schematron, or none (see SchSchema)
 		const isXSpec = this.docType === DocumentTypes.XSPEC;
-		const fromPrefix = isXSpec ? 'x' : 'xsl';
-		const prefix = isXSpec ? XsltDefinitionProvider.xspecPrefixOf(document) : this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
+		const isSch = this.docType === DocumentTypes.SCH;
+		const fromPrefix = isXSpec ? 'x' : isSch ? 'sch' : 'xsl';
+		const prefix = isXSpec ? XsltDefinitionProvider.xspecPrefixOf(document) : isSch ? XsltTokenDiagnostics.schPrefixOf(document.getText()) :
+			this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
 		if (result && prefix !== fromPrefix) {
 			result = Array.isArray(result) ? XsltDefinitionProvider.withXsltPrefix(result, prefix, fromPrefix) :
 				new vscode.CompletionList(XsltDefinitionProvider.withXsltPrefix(result.items, prefix, fromPrefix), result.isIncomplete);
@@ -384,9 +387,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	// copies of the items - which may be shared - with each name with the prefix xsl, in the label and the text inserted,
-	// with the prefix (see RecordTypes.withXsltPrefix)
+	// with the prefix (see RecordTypes.withXsltPrefix) - no prefix where it's '', e.g. for a Schematron file
 	private static withXsltPrefix(items: vscode.CompletionItem[], prefix: string, fromPrefix = 'xsl'): vscode.CompletionItem[] {
-		const text = (value: string) => fromPrefix === 'xsl' ? RecordTypes.withXsltPrefix(value, prefix) : value.replace(new RegExp(`(?<![\\w.:-])${fromPrefix}:`, 'g'), prefix + ':');
+		const text = (value: string) => fromPrefix === 'xsl' ? RecordTypes.withXsltPrefix(value, prefix) :
+			value.replace(new RegExp(`(?<![\\w.:-])${fromPrefix}:`, 'g'), prefix ? prefix + ':' : '');
 		return items.map((item) => {
 			const copy: vscode.CompletionItem = Object.assign(new vscode.CompletionItem(''), item);
 			copy.label = typeof item.label === 'string' ? text(item.label) : { ...item.label, label: text(item.label.label) };

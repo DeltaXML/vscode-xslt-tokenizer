@@ -598,6 +598,10 @@ export class XsltTokenDiagnostics {
 		// XPath 4.0 record types: xsl:item-type declarations, and the 'as' of global variables and parameters
 		let itemTypeDeclarations = new Map<string, string>();
 		const documentText = document.getText();
+		// Schematron: an element is compared as sch:rule (see xsltElementName), but shown in the outline as it's written,
+		// e.g. rule, with no prefix
+		const schPrefix = docType === DocumentTypes.SCH ? XsltTokenDiagnostics.schPrefixOf(documentText) : undefined;
+		const symbolName = (name: string) => schPrefix !== undefined && name.startsWith('sch:') ? (schPrefix ? schPrefix + ':' : '') + name.substring(4) : name;
 		// an abstract function or template, in an XSLT package: it has no body, and its parameters aren't used
 		const isAbstract = (startTag: BaseToken | undefined) => !!startTag &&
 			RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(startTag.line, startTag.startCharacter)) + 1, 'visibility')?.trim() === 'abstract';
@@ -942,7 +946,7 @@ export class XsltTokenDiagnostics {
 				XsltTokenDiagnostics.addCallTemplateProbIfMissingContext(true, poppedData.identifierToken, elementName, elementStack, xpathStack, problemTokens);
 			}
 			inheritedPrefixes = poppedData.namespacePrefixes.slice();
-			let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, endToken);
+			let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(symbolName(poppedData.symbolName), poppedData.symbolID, poppedData.identifierToken, endToken);
 			if (symbol !== null) {
 				symbol.children = poppedData.childSymbols;
 				// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
@@ -1415,7 +1419,7 @@ export class XsltTokenDiagnostics {
 										}
 									}
 									if (startTagToken) {
-										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(tagElementName, tagIdentifierName, startTagToken, token);
+										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(symbolName(tagElementName), tagIdentifierName, startTagToken, token);
 										if (symbol !== null) {
 											const childSymbols: vscode.DocumentSymbol[] = XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
 											symbol.children = childSymbols;
@@ -3503,7 +3507,7 @@ export class XsltTokenDiagnostics {
 								usedtoken = true;
 							}
 							addUnclosedElementProblem(poppedData);
-							let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, endToken);
+							let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(symbolName(poppedData.symbolName), poppedData.symbolID, poppedData.identifierToken, endToken);
 							if (symbol !== null) {
 								if (elementStack.length > 0) {
 									elementStack[elementStack.length - 1].childSymbols.push(symbol);
@@ -4838,7 +4842,17 @@ export class XsltTokenDiagnostics {
 			// an XSpec element, e.g. t:scenario, is compared as x:scenario
 			return 'x' + name.substring(colon);
 		}
+		if (document.languageId === 'sch') {
+			// a Schematron element - with the prefix of sch:schema, or none - is compared as sch:rule (see SchSchema)
+			return 'sch:' + name.substring(colon + 1);
+		}
 		return colon > 0 && document.languageId === 'xslt' && !name.startsWith('xsl:') ? 'xsl' + name.substring(colon) : name;
+	}
+
+	// the prefix of a Schematron file's sch:schema (or sch:library), e.g. iso for iso:schema - '' when it has none, with
+	// the Schematron namespace as the default, and for a file with no outermost element yet
+	public static schPrefixOf(text: string) {
+		return /^(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>]*>)*<(?:([\w.-]+):)?(?:schema|library)\b/.exec(text)?.[1] ?? '';
 	}
 
 	// the name of an attribute, as it's compared: an XSLT attribute with the prefix xsl, e.g. xsl:use-attribute-sets for

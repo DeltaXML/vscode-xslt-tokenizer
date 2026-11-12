@@ -363,8 +363,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								const writtenEndTagName = /^[^\s/>]+/.exec(document.lineAt(lineNumber).text.substring(token.startCharacter + 2))?.[0];
 								// with the native prefix, compared as the start tag's name is: e.g. </x:template> as
 								// xsl:template, where the module's prefix for XSLT is x (and an XSpec file's t:scenario as x:scenario)
-								const endTagName = writtenEndTagName?.startsWith(this.xslLexer.nativePrefix + ':') ?
-									XsltTokenDiagnostics.xsltElementName(writtenEndTagName, document) : writtenEndTagName;
+								// - and with none, e.g. a Schematron file's </rule> as sch:rule
+								const nativePrefix = this.xslLexer.nativePrefix;
+								const isNativeEndTag = !!writtenEndTagName && (nativePrefix ? writtenEndTagName.startsWith(nativePrefix + ':') : !writtenEndTagName.includes(':'));
+								const endTagName = isNativeEndTag ? XsltTokenDiagnostics.xsltElementName(writtenEndTagName!, document) : writtenEndTagName;
 								if (endTagName && openElementNames.length > 0) {
 									const matchIndex = openElementNames.lastIndexOf(endTagName);
 									closedElementCount = matchIndex > -1 ? openElementNames.length - matchIndex : 0;

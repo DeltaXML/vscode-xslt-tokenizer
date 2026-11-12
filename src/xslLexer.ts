@@ -302,6 +302,10 @@ export class XslLexer {
             // XSpec: the prefix of x:description, e.g. t:description
             const root = /^([^:]+):description$/.exec(rootName);
             this.setNativePrefix(root ? root[1] : this.languageConfiguration.nativePrefix);
+        } else if (this.languageConfiguration.docType === DocumentTypes.SCH) {
+            // Schematron: the prefix of sch:schema - often none, with the Schematron namespace as the default
+            const root = /^(?:([^:]+):)?(?:schema|library)$/.exec(rootName);
+            this.setNativePrefix(root?.[1] ?? '');
         }
     }
 
@@ -329,6 +333,9 @@ export class XslLexer {
 
     public isExpressionAtt(name: string, parentElement: string) {
         if (name === 'use' && (parentElement === 'context-item' || parentElement === 'global-context-item')) {
+            return false;
+        } else if (this.docType === DocumentTypes.SCH && name === 'value' && parentElement === 'dir') {
+            // Schematron: sch:dir's value is ltr or rtl - unlike that of sch:let and sch:param
             return false;
         } else if (parentElement === 'record') {
             // xsl:record: each no-namespace attribute is a map entry expression
@@ -1750,6 +1757,12 @@ export class XslLexer {
             }
             if (instructionType === GlobalInstructionType.Unknown && this.languageConfiguration.linkElementAttrNames && this.languageConfiguration.linkElementAttrNames[0] === elementName) {
                 instructionType = GlobalInstructionType.Import;
+            }
+        } else if (isNative && this.languageConfiguration.docType === DocumentTypes.SCH) {
+            // Schematron: not XSLT's declarations - e.g. sch:include is replaced by a Schematron element, not imported
+            nativeName = elementName.substring(this.nativePrefixLength);
+            if (isRootChild && nativeName === 'param') {
+                instructionType = GlobalInstructionType.Parameter;
             }
         } else if (isNative && this.languageConfiguration.docType === DocumentTypes.XSPEC) {
             nativeName = elementName.substring(this.nativePrefixLength);

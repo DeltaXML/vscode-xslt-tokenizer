@@ -87,7 +87,11 @@ export class DCPConfiguration {
 export class SchConfiguration {
 	// initial configuration is for basic Schematron support only
 	public static configuration: LanguageConfiguration = {
-		expressionAtts: ['context', 'test', 'subject', 'path', 'select', 'value'],
+		// with ISO Schematron 2025's visit-each (rule), documents (pattern) and from and when (phase)
+		expressionAtts: ['context', 'test', 'subject', 'path', 'select', 'value', 'visit-each', 'documents', 'from', 'when'],
+		// SchXslt2 copies role, flag and severity into the SVRL report as attribute value templates, e.g. role="{$level}"
+		// (a variable on its own, e.g. severity="$level", also works)
+		avtAtts: ['role', 'flag', 'severity'],
 		variableElementNames: ['stringParameter', 'booleanParameter'],
 		linkElementAttrNames: ['file', 'path'],
 		nativePrefix: '',
