@@ -3,8 +3,10 @@
   Validate with Schematron: the source document validated with a Schematron schema, as SchXslt2 - the Schematron
   processor bundled with XSpec - validates it, with one run of Saxon: the schema compiled to an XSLT 3.0 stylesheet by
   SchXslt2's transpiler, which is then run on the source document. The result is SchXslt2's SVRL report.
-  The phase: SchXslt2's phase parameter isn't passed, as Saxon 13.1 fails with an internal error (a NullPointerException)
-  for transform()'s 'stylesheet-params' - it's the defaultPhase of the annotated copy of the schema instead.
+  The phase: SchXslt2's phase parameter isn't passed, as Saxon 13 fails with an internal error (a NullPointerException)
+  for transform()'s 'stylesheet-params' with a 'stylesheet-location' known only at run time, as $transpiler is
+  (https://saxonica.plan.io/issues/7323 - Saxon 12.9 doesn't) - it's the defaultPhase of the annotated copy of the
+  schema instead.
 -->
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema"
   xmlns:sch="http://purl.oclc.org/dsdl/schematron" exclude-result-prefixes="#all">
