@@ -844,4 +844,54 @@ suite('Schematron', () => {
 			assert.deepEqual(inPhase, ['1: not active when lenses.xml was validated', '7: 1 of 1 rule fired with lenses.xml', '7: fired for 2 nodes - 1 report'].sort());
 		});
 	});
+
+	const phasedSchema = unprefixed(`<phase id="one"><title>The first checks</title><active pattern="p1"/></phase>
+<phase id="two"><p>The second checks</p><active pattern="p2"/></phase>
+<pattern id="p1"><rule context="item"><report test="true()" id="r1">p1</report></rule></pattern>
+<pattern id="p2"><rule context="item"><report test="true()" id="r2">p2</report></rule></pattern>`).replace('queryBinding="xslt3"', 'queryBinding="xslt3" defaultPhase="one"');
+
+	test('validate: a schema\'s phases - each with its title or first paragraph - and its default phase', async () => {
+		assert.deepEqual(SchematronValidation.phasesOf(phasedSchema), {
+			phases: [{ id: 'one', description: 'The first checks' }, { id: 'two', description: 'The second checks' }], defaultPhase: 'one'
+		});
+		assert.deepEqual(SchematronValidation.phasesOf(unprefixed('<pattern/>')), { phases: [], defaultPhase: undefined });
+	});
+
+	test('validate: with a phase chosen - remembered for the file and schema - needs a Saxon jar, in XSPEC_SAXON_JAR', async function () {
+		const saxonJar = process.env.XSPEC_SAXON_JAR;
+		if (!saxonJar) {
+			this.skip();
+		}
+		const schema = path.join(dir, 'phased.sch');
+		fs.writeFileSync(schema, phasedSchema);
+		const other = path.join(dir, 'phased-other.sch');
+		fs.writeFileSync(other, phasedSchema);
+		const xmlPath = path.join(dir, 'phased.xml');
+		fs.writeFileSync(xmlPath, '<?xml-model href="phased.sch" schematypens="http://purl.oclc.org/dsdl/schematron"?><doc><item/></doc>');
+		const codes = () => vscode.languages.getDiagnostics(vscode.Uri.file(xmlPath)).filter((d) => d.source?.startsWith('Schematron'))
+			.map((d) => typeof d.code === 'object' ? d.code.value : d.code).sort();
+		const chooser = SchematronValidation.choosePhase;
+		const offered: string[][] = [];
+		let current = '';
+		SchematronValidation.choosePhase = async (items, selected) => (offered.push(items.map((i) => i.phase)), current = selected, 'two');
+		try {
+			await withSaxon(saxonJar!, undefined, async () => {
+				// the default phase: one
+				await vscode.commands.executeCommand(SchematronValidation.validateCommand, vscode.Uri.file(xmlPath));
+				assert.deepEqual(codes(), ['r1']);
+				// phase two chosen, from the default, then remembered
+				await vscode.commands.executeCommand(SchematronValidation.choosePhaseCommand, vscode.Uri.file(xmlPath));
+				assert.deepEqual(offered[0], ['#DEFAULT', '#ALL', 'one', 'two']);
+				assert.strictEqual(current, '#DEFAULT');
+				assert.deepEqual(codes(), ['r2']);
+				await vscode.commands.executeCommand(SchematronValidation.validateCommand, vscode.Uri.file(xmlPath));
+				assert.deepEqual(codes(), ['r2']);
+				assert.strictEqual(SchematronValidation.phaseFor(xmlPath, schema), 'two');
+				// for another schema, its default phase
+				assert.strictEqual(SchematronValidation.phaseFor(xmlPath, other), '#DEFAULT');
+			});
+		} finally {
+			SchematronValidation.choosePhase = chooser;
+		}
+	});
 });

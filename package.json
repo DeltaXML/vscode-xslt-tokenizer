@@ -353,6 +353,11 @@
 				"category": "XSLT"
 			},
 			{
+				"command": "xslt-xpath.validateWithSchematronPhase",
+				"title": "Validate with Schematron (Choose Phase)...",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.clearTimelineFile",
 				"title": "Clear Profiles and XSpec Runs from Timeline (Current File)",
 				"category": "XSLT"
@@ -726,6 +731,10 @@
 				{
 					"command": "xslt-xpath.validateWithSchematronChoose",
 					"when": "editorLangId == xml"
+				},
+				{
+					"command": "xslt-xpath.validateWithSchematronPhase",
+					"when": "editorLangId == xml || editorLangId == sch"
 				},
 				{
 					"command": "xslt-xpath.clearTimelineFile",

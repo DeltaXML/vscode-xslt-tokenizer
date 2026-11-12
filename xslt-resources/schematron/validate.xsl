@@ -3,9 +3,8 @@
   Validate with Schematron: the source document validated with a Schematron schema, as SchXslt2 - the Schematron
   processor bundled with XSpec - validates it, with one run of Saxon: the schema compiled to an XSLT 3.0 stylesheet by
   SchXslt2's transpiler, which is then run on the source document. The result is SchXslt2's SVRL report.
-  With the schema's default phase: SchXslt2's phase parameter isn't passed, as Saxon 13.1 fails with an internal error
-  (a NullPointerException) for transform()'s 'stylesheet-params' - another phase could be set as the defaultPhase of the
-  annotated copy of the schema instead.
+  The phase: SchXslt2's phase parameter isn't passed, as Saxon 13.1 fails with an internal error (a NullPointerException)
+  for transform()'s 'stylesheet-params' - it's the defaultPhase of the annotated copy of the schema instead.
 -->
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema"
   xmlns:sch="http://purl.oclc.org/dsdl/schematron" exclude-result-prefixes="#all">
@@ -13,6 +12,8 @@
   <!-- the schema's URI, and SchXslt2's transpile.xsl's -->
   <xsl:param name="schema" as="xs:string" required="yes"/>
   <xsl:param name="transpiler" as="xs:string" required="yes"/>
+  <!-- the phase: a phase's id, or #ALL for every pattern - or #DEFAULT, the schema's defaultPhase, else #ALL -->
+  <xsl:param name="phase" as="xs:string" select="'#DEFAULT'"/>
 
   <xsl:template match="/">
     <!-- each rule, pattern and group with an id, for the report's fired, suppressed and failed rules to be matched with
@@ -23,7 +24,11 @@
         <xsl:for-each select="doc($schema)/*">
           <xsl:copy>
             <xsl:attribute name="xml:base" select="$schema"/>
-            <xsl:apply-templates select="@* except @xml:base, node()" mode="annotate"/>
+            <xsl:apply-templates select="@* except (@xml:base, @defaultPhase[$phase ne '#DEFAULT'])" mode="annotate"/>
+            <xsl:if test="$phase ne '#DEFAULT'">
+              <xsl:attribute name="defaultPhase" select="$phase"/>
+            </xsl:if>
+            <xsl:apply-templates select="node()" mode="annotate"/>
           </xsl:copy>
         </xsl:for-each>
       </xsl:document>

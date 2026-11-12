@@ -35,6 +35,8 @@ export interface SchematronResult {
 // matched them first, and its failed assertions and successful reports - and the patterns and groups that were active
 export interface SchematronCoverage {
 	xml: string;
+	// the phase it was validated with: '#DEFAULT' for the schema's default phase
+	phase: string;
 	rules: Map<string, { fired: number, suppressed: number, failed: number, reported: number }>;
 	activePatterns: Set<string>;
 }
@@ -50,6 +52,9 @@ export class SchematronValidation {
 	public static readonly validateCommand = 'xslt-xpath.validateWithSchematron';
 	public static readonly chooseCommand = 'xslt-xpath.validateWithSchematronChoose';
 	public static readonly showAssertionCommand = 'xslt-xpath.showSchematronAssertion';
+	public static readonly choosePhaseCommand = 'xslt-xpath.validateWithSchematronPhase';
+	// the phase chosen for an XML file and schema - '#DEFAULT' for the schema's default phase - by their paths
+	private static readonly phaseStateKey = 'xslt-xpath.schematronPhase';
 	private static readonly stateKey = 'xslt-xpath.schematronForXml';
 	private static readonly schematronNamespace = 'http://purl.oclc.org/dsdl/schematron';
 	private static collection: vscode.DiagnosticCollection;
@@ -76,6 +81,7 @@ export class SchematronValidation {
 			}),
 			vscode.commands.registerCommand(SchematronValidation.validateCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, false)),
 			vscode.commands.registerCommand(SchematronValidation.chooseCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, true)),
+			vscode.commands.registerCommand(SchematronValidation.choosePhaseCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, false, true)),
 			// a code action on a problem: the assertion that reported it, in the schema
 			vscode.commands.registerCommand(SchematronValidation.showAssertionCommand, (location: vscode.Location) =>
 				vscode.window.showTextDocument(location.uri, { selection: location.range })),
@@ -109,7 +115,7 @@ export class SchematronValidation {
 	}
 
 	// the file to validate, and the schema - from the command's file, or the active editor's
-	private static async run(uri: vscode.Uri | undefined, choose: boolean) {
+	private static async run(uri: vscode.Uri | undefined, choose: boolean, choosePhase = false) {
 		const target = uri ?? vscode.window.activeTextEditor?.document.uri;
 		if (!target || target.scheme !== 'file') {
 			vscode.window.showInformationMessage('Validate with Schematron: open an XML file, or a Schematron schema, first.');
@@ -119,7 +125,7 @@ export class SchematronValidation {
 		if (/\.sch$/i.test(target.fsPath)) {
 			// a schema: the file last validated with it - else one to choose
 			const xml = Object.keys(pairs).reverse().find((file) => pairs[file] === target.fsPath && fs.existsSync(file)) ?? await SchematronValidation.pickXml();
-			if (xml) {
+			if (xml && (!choosePhase || await SchematronValidation.setPhase(xml, target.fsPath))) {
 				await SchematronValidation.validate(vscode.Uri.file(xml), target.fsPath, true);
 			}
 			return;
@@ -127,9 +133,71 @@ export class SchematronValidation {
 		const text = (await vscode.workspace.openTextDocument(target)).getText();
 		const schema = choose ? await SchematronValidation.chooseSchema(target) :
 			SchematronValidation.xmlModel(text, target.fsPath) ?? (pairs[target.fsPath] && fs.existsSync(pairs[target.fsPath]) ? pairs[target.fsPath] : await SchematronValidation.chooseSchema(target));
-		if (schema) {
+		if (!schema) {
+			return;
+		}
+		if (choose && schema !== pairs[target.fsPath]) {
+			// another schema: its default phase, until one is chosen
+			await SchematronValidation.storePhase(target.fsPath, schema, '#DEFAULT');
+		}
+		if (!choosePhase || await SchematronValidation.setPhase(target.fsPath, schema)) {
 			await SchematronValidation.validate(target, schema, true);
 		}
+	}
+
+	// the phases of a schema: the id of each, with its title or first paragraph - and its defaultPhase
+	public static phasesOf(schemaText: string): { phases: { id: string, description: string }[], defaultPhase?: string } {
+		const root = parseXml(schemaText);
+		if (!root) {
+			return { phases: [] };
+		}
+		const colon = root.name.indexOf(':');
+		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+		const text = (e: XmlElement | undefined) => (e ? [e.text, ...descendants(e).map((d) => d.text)].join(' ') : '').replace(/\s+/g, ' ').trim();
+		const phases = root.children.filter((c) => c.name === prefix + 'phase' && c.attributes.get('id')?.trim()).map((phase) => ({
+			id: phase.attributes.get('id')!.trim(),
+			description: text(phase.children.find((c) => c.name === prefix + 'title') ?? phase.children.find((c) => c.name === prefix + 'p'))
+		}));
+		return { phases, defaultPhase: root.attributes.get('defaultPhase')?.trim() || undefined };
+	}
+
+	// the phase for the file and schema: '#DEFAULT' unless one was chosen
+	public static phaseFor(xml: string, schema: string): string {
+		return SchematronValidation.state.get<{ [key: string]: string }>(SchematronValidation.phaseStateKey, {})[`${xml}\u0000${schema}`] ?? '#DEFAULT';
+	}
+
+	private static async storePhase(xml: string, schema: string, phase: string) {
+		const phases = SchematronValidation.state.get<{ [key: string]: string }>(SchematronValidation.phaseStateKey, {});
+		await SchematronValidation.state.update(SchematronValidation.phaseStateKey, { ...phases, [`${xml}\u0000${schema}`]: phase });
+	}
+
+	// for testing: how the phase is chosen
+	public static choosePhase = async (items: { label: string, description?: string, phase: string }[], current: string, schemaName: string) =>
+		(await vscode.window.showQuickPick(items.map((item) => ({ ...item, picked: item.phase === current })), { placeHolder: `The phase of ${schemaName} to validate with` }))?.phase;
+
+	// a phase chosen for the file and schema - false if none is chosen, or the schema has no phases
+	private static async setPhase(xml: string, schema: string): Promise<boolean> {
+		const { phases, defaultPhase } = SchematronValidation.phasesOf(fs.existsSync(schema) ? fs.readFileSync(schema, 'utf8') : '');
+		if (phases.length === 0) {
+			vscode.window.showInformationMessage(`Validate with Schematron: ${path.basename(schema)} has no phases - all its patterns are used.`);
+			return false;
+		}
+		const items = [
+			{ label: 'Default phase', description: defaultPhase ? `${defaultPhase} - the schema's defaultPhase` : 'all patterns - the schema has no defaultPhase', phase: '#DEFAULT' },
+			{ label: '#ALL', description: 'all patterns', phase: '#ALL' },
+			...phases.map((p) => ({ label: p.id, description: p.description, phase: p.id }))
+		];
+		const phase = await SchematronValidation.choosePhase(items, SchematronValidation.phaseFor(xml, schema), path.basename(schema));
+		if (phase === undefined) {
+			return false;
+		}
+		await SchematronValidation.storePhase(xml, schema, phase);
+		return true;
+	}
+
+	// a phase as shown: the one the schema's defaultPhase names, for '#DEFAULT'
+	private static phaseName(phase: string, schemaText: string) {
+		return phase === '#DEFAULT' ? SchematronValidation.phasesOf(schemaText).defaultPhase : phase;
 	}
 
 	// the schema an xml-model processing instruction associates with the file, if it's a Schematron schema
@@ -185,12 +253,16 @@ export class SchematronValidation {
 		SchematronValidation.validated.set(xmlUri.fsPath, schema);
 		const svrl = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'schematron-')), 'report.svrl');
 		const schemaText = fs.readFileSync(schema, 'utf8');
+		const chosen = SchematronValidation.phaseFor(xmlUri.fsPath, schema);
+		const phase = chosen === '#DEFAULT' || chosen === '#ALL' || SchematronValidation.phasesOf(schemaText).phases.some((p) => p.id === chosen) ? chosen : '#DEFAULT';
 		const extensions = XSpecRunner.schematronSyntaxExtensions(xmlUri, schema, schemaText);
 		const catalog = CatalogSetting.taskOption({});
 		const transpiler = path.join(XSpecRunner.home(xmlUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
 		const args = ['-cp', XSpecRunner.saxonJar(xmlUri)!, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
 			'-s:' + xmlUri.fsPath, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'validate.xsl'), '-o:' + svrl,
-			'schema=' + vscode.Uri.file(schema).toString(), 'transpiler=' + vscode.Uri.file(transpiler).toString()];
+			'schema=' + vscode.Uri.file(schema).toString(), 'transpiler=' + vscode.Uri.file(transpiler).toString(),
+			// a phase that was chosen: not the schema's default phase - if it still has the phase
+			...(phase !== '#DEFAULT' ? ['phase=' + phase] : [])];
 		const channel = SchematronValidation.output();
 		channel.appendLine(`Validating ${xmlUri.fsPath} with ${schema}:`);
 		channel.appendLine('java ' + args.map((arg) => /[\s"]/.test(arg) ? `"${arg}"` : arg).join(' '));
@@ -209,15 +281,17 @@ export class SchematronValidation {
 		}
 		const svrlText = fs.readFileSync(svrl, 'utf8');
 		const results = SchematronValidation.results(svrlText);
-		SchematronValidation.coverage.set(schema, { ...SchematronValidation.coverageOf(svrlText), xml: xmlUri.fsPath });
+		SchematronValidation.coverage.set(schema, { ...SchematronValidation.coverageOf(svrlText), xml: xmlUri.fsPath, phase });
 		SchematronValidation.coverageChanged.fire();
 		fs.rmSync(path.dirname(svrl), { recursive: true, force: true });
 		const xmlText = (await vscode.workspace.openTextDocument(xmlUri)).getText();
 		const schemaDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(schema));
 		const assertions = SchematronValidation.assertions(schemaDocument);
 		SchematronValidation.collection.set(xmlUri, results.map((result) => SchematronValidation.diagnostic(result, xmlText, xmlUri, schema, assertions)));
-		const summary = results.length === 0 ? `Schematron: ${path.basename(xmlUri.fsPath)} is valid with ${path.basename(schema)}` :
-			`Schematron: ${results.length} problem${results.length === 1 ? '' : 's'} in ${path.basename(xmlUri.fsPath)} with ${path.basename(schema)}`;
+		const phaseName = SchematronValidation.phaseName(phase, schemaText);
+		const withSchema = `${path.basename(schema)}${phaseName ? `, phase ${phaseName}` : ''}`;
+		const summary = results.length === 0 ? `Schematron: ${path.basename(xmlUri.fsPath)} is valid with ${withSchema}` :
+			`Schematron: ${results.length} problem${results.length === 1 ? '' : 's'} in ${path.basename(xmlUri.fsPath)} with ${withSchema}`;
 		channel.appendLine(summary);
 		vscode.window.setStatusBarMessage(`$(${results.length === 0 ? 'pass' : 'warning'}) ${summary}`, 6000);
 		return results;
@@ -273,7 +347,7 @@ export class SchematronValidation {
 	}
 
 	// the rules fired and suppressed, their failed assertions and successful reports, and the active patterns, of an SVRL report
-	public static coverageOf(svrl: string): Omit<SchematronCoverage, 'xml'> {
+	public static coverageOf(svrl: string): Omit<SchematronCoverage, 'xml' | 'phase'> {
 		const rules = new Map<string, { fired: number, suppressed: number, failed: number, reported: number }>();
 		const activePatterns = new Set<string>();
 		const root = parseXml(svrl);
@@ -334,7 +408,8 @@ export class SchematronValidation {
 			const kind = pattern.name.substring(prefix.length);
 			const rules = pattern.children.filter((c) => c.name === prefix + 'rule' && !isAbstract(c));
 			if (!coverage.activePatterns.has(idOf(pattern, kind)) && !pattern.attributes.has('is-a')) {
-				lenses.push(lens(pattern, `not active when ${xmlName} was validated`, `The ${kind} wasn't in the phase used to validate ${coverage.xml}`));
+				const phaseName = SchematronValidation.phaseName(coverage.phase, document.getText());
+				lenses.push(lens(pattern, `not active when ${xmlName} was validated${phaseName ? ` - phase ${phaseName}` : ''}`, `The ${kind} wasn't in the phase used to validate ${coverage.xml}`));
 			} else if (rules.length > 0) {
 				const fired = rules.filter((r) => (coverage.rules.get(idOf(r, 'rule'))?.fired ?? 0) > 0).length;
 				lenses.push(lens(pattern, `${fired} of ${plural(rules.length, 'rule')} fired with ${xmlName}`, `When ${coverage.xml} was validated`));
