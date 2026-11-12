@@ -352,4 +352,22 @@ suite('Schematron', () => {
 		assert.deepEqual(target('rule="ar'), [`${path.basename(file)}:4:16`]);
 		assert.deepEqual(target('diagnostics="d1'), [`${path.basename(file)}:5:13`]);
 	});
+
+	test('links: the files of sch:include, sch:extends href and xsl:include - and one that isn\'t found is reported', async () => {
+		fs.writeFileSync(path.join(dir, 'linked-pattern.sch'), `<pattern xmlns="http://purl.oclc.org/dsdl/schematron" id="lp"/>`);
+		fs.writeFileSync(path.join(dir, 'linked-library.sch'), `<library xmlns="http://purl.oclc.org/dsdl/schematron"><rules><rule abstract="true" id="lr"/></rules></library>`);
+		fs.writeFileSync(path.join(dir, 'linked.xsl'), `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"/>`);
+		const content = unprefixed(`<include href="linked-pattern.sch"/>
+<extends href="linked-library.sch#lr"/>
+<xsl:include ${xsl} href="linked.xsl"/>
+<include href="missing.sch"/>`);
+		const file = path.join(dir, `links${count++}.sch`);
+		fs.writeFileSync(file, content);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const links = await vscode.commands.executeCommand<vscode.DocumentLink[]>('vscode.executeLinkProvider', document.uri);
+		// not VS Code's own links for URIs, e.g. the namespaces' - and an xsl:include's link includes the quotes
+		assert.deepEqual(links.filter((l) => l.target?.scheme === 'file').map((l) => `${document.getText(l.range).replace(/"/g, '')} ${path.basename(l.target!.fsPath)}`).sort(),
+			['linked-library.sch linked-library.sch', 'linked-pattern.sch linked-pattern.sch', 'linked.xsl linked.xsl', 'missing.sch missing.sch']);
+		assert.include(await problems(content), "4: SchXslt2: the file missing.sch isn't found");
+	});
 });

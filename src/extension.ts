@@ -496,7 +496,10 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xpath' }, xpathDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));
-	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'sch' }, schLinkProvider));
+	// Schematron: the XSLT modules xsl:include and xsl:import bring in, and the files of sch:include and sch:extends href
+	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'sch' }, {
+		provideDocumentLinks: (document, token) => schLinkProvider.provideDocumentLinks(document, token).concat(SchReferences.links(document))
+	}));
 	// each file an XSpec file refers to, e.g. x:context's href, resolved as XSpec resolves it (see XSpecHrefs)
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xspec' }, { provideDocumentLinks: (document) => XSpecHrefs.links(document) }));
 	// scenario labels in bold and expectation labels in italic

@@ -53,6 +53,15 @@ export class SchReferences {
 			diagnostic.code = SchReferences.code;
 			diagnostics.push(diagnostic);
 		};
+		// a file brought in that isn't found - SchXslt2 stops
+		if (document.uri.scheme === 'file') {
+			SchReferences.hrefs(document).forEach(({ href, start, end }) => {
+				const filePath = HrefPaths.toPath(href, document.fileName);
+				if (filePath && !fs.existsSync(filePath)) {
+					add(start, end, `the file ${href} isn't found`);
+				}
+			});
+		}
 		const byId = (id: string, locals: string[]) => declared.filter((d) => d.element.attributes.get('id')?.trim() === id && locals.includes(d.local));
 		const isAbstract = (element: XmlElement) => element.attributes.get('abstract')?.trim() === 'true';
 		// ids that aren't unique - those in this file
@@ -102,6 +111,39 @@ export class SchReferences {
 			}
 		}
 		return diagnostics;
+	}
+
+	// the files sch:include and sch:extends href bring in: a link to each - the file, without any fragment, e.g. #p1
+	public static links(document: vscode.TextDocument): vscode.DocumentLink[] {
+		return SchReferences.hrefs(document).flatMap(({ href, start, end }) => {
+			const target = HrefPaths.linkTarget(href, document.fileName);
+			if (target === undefined) {
+				return [];
+			}
+			const link = new vscode.DocumentLink(new vscode.Range(document.positionAt(start), document.positionAt(end)), vscode.Uri.parse(target));
+			link.tooltip = HrefPaths.linkTooltip(href, document.fileName);
+			return [link];
+		});
+	}
+
+	// the hrefs of sch:include and sch:extends, as written - without any fragment - with their offsets
+	private static hrefs(document: vscode.TextDocument): { href: string, start: number, end: number }[] {
+		const text = document.getText();
+		const root = parseXml(text);
+		if (!root) {
+			return [];
+		}
+		const colon = root.name.indexOf(':');
+		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+		return [root, ...descendants(root)].filter((e) => e.name === prefix + 'include' || e.name === prefix + 'extends').flatMap((element) => {
+			const value = SchReferences.attributeValue(text, element, 'href');
+			const href = value?.value.trim().replace(/#.*$/, '');
+			if (!value || !href) {
+				return [];
+			}
+			const leading = value.value.length - value.value.trimStart().length;
+			return [{ href, start: value.start + leading, end: value.start + leading + href.length }];
+		});
 	}
 
 	// Go to Definition: from a reference to the element with its id
