@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="order-rules.sch" schematypens="http://purl.oclc.org/dsdl/schematron"?>
+<orders>
+  <order id="A1" date="2026-11-02">
+    <customer name="Ada Lovelace" email="ada@example.com"/>
+    <line product="Pens" quantity="3" price="1.20"/>
+    <line product="Paper" quantity="10" price="4.00"/>
+  </order>
+  <order id="B2" date="2026-11-31">
+    <customer name="Grace Hopper"/>
+    <line product="Stapler" quantity="0" price="8.50"/>
+  </order>
+  <order id="A1" date="2026-11-05">
+    <customer name="" email="alan@example"/>
+    <line product="Ink" quantity="2" price="n/a"/>
+    <line product="Desk" quantity="1" price="180.00"/>
+  </order>
+</orders>

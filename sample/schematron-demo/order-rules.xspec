@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tests of order-rules.sch: each x:context is a document to validate, and each expectation an assertion or report
+  the schema should - or shouldn't - give for it, by its id.
+
+  Things to try:
+  - auto-completion in an expectation's id: the schema's assertion ids for x:expect-assert, its report ids for
+    x:expect-report
+  - hover over an id, or Go to Definition (F12), to see the assertion in order-rules.sch
+  - change an id to one the schema doesn't have: it's reported, as the expectation would always fail
+  - run the tests from the Test Explorer
+-->
+<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec"
+               schematron="order-rules.sch">
+
+   <x:scenario label="a valid order">
+      <x:context>
+         <orders>
+            <order id="A1" date="2026-11-02">
+               <customer name="Ada Lovelace" email="ada@example.com"/>
+               <line product="Pens" quantity="3" price="1.20"/>
+            </order>
+         </orders>
+      </x:context>
+      <x:expect-valid/>
+   </x:scenario>
+
+   <x:scenario label="a line with no quantity">
+      <x:context>
+         <orders>
+            <order id="B2" date="2026-11-03">
+               <customer name="Grace Hopper" email="grace@example.com"/>
+               <line product="Stapler" quantity="0" price="8.50"/>
+            </order>
+         </orders>
+      </x:context>
+      <x:expect-assert id="positive-quantity" label="the quantity must be above 0"/>
+      <x:expect-not-assert id="decimal-price" label="the price is a number"/>
+   </x:scenario>
+
+   <x:scenario label="a large line">
+      <x:context>
+         <orders>
+            <order id="C3" date="2026-11-04">
+               <customer name="Alan Turing" email="alan@example.com"/>
+               <line product="Desk" quantity="1" price="120.00"/>
+            </order>
+         </orders>
+      </x:context>
+      <x:expect-report id="large-line" label="is reported as a large line"/>
+      <x:expect-not-assert id="order-limit" label="is within the order limit"/>
+   </x:scenario>
+
+   <x:scenario label="a customer without an email address">
+      <x:context>
+         <orders>
+            <order id="D4" date="2026-11-05">
+               <customer name="Grace Hopper"/>
+               <line product="Pens" quantity="1" price="1.20"/>
+            </order>
+         </orders>
+      </x:context>
+      <x:expect-assert id="has-email" label="is told it has no email address"/>
+   </x:scenario>
+
+</x:description>
