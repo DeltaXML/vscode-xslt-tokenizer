@@ -283,8 +283,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			if (!XsltSymbolProvider.isOpenInEditor(document) || document.version !== version) {
 
 			} else {
-				// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully
-				if (this.collection && this.docType !== DocumentTypes.SCH) {
+				if (this.collection) {
 					// not the debugger's view of the output written so far, e.g. [xslt out] result.xml: it's incomplete
 					// while the stylesheet runs, so not well-formed, and it isn't a file to fix
 					const isDebugOutput = document.uri.scheme === XsltDebugOutputs.scheme;

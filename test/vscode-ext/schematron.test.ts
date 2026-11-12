@@ -254,4 +254,44 @@ suite('Schematron', () => {
 		assert.deepEqual(diagnostics.map((d) => [vscode.DiagnosticSeverity[d.severity], /XTSE0545/.test(d.message) || /accumulator acc/.test(d.message)]),
 			[['Error', true], ['Warning', true]]);
 	});
+
+	test('not reported: foreign elements, e.g. Schematron QuickFix\'s, with their attributes - and Schematron elements within them', async () => {
+		assert.deepEqual(await problems(`<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" xmlns:sqf="http://www.schematron-quickfix.com/validator/process" queryBinding="xslt3">
+<sch:pattern><sch:rule context="a"><sch:assert test="@id" sqf:fix="add-id">x</sch:assert>
+<sqf:fix id="add-id"><sqf:description><sqf:title>Add <sch:value-of select="name()"/></sqf:title></sqf:description><sqf:add node-type="attribute" target="id" select="'1'"/></sqf:fix>
+</sch:rule></sch:pattern>
+<sch:properties><sch:property id="p"><user-data><elem1 id="i">x</elem1></user-data></sch:property></sch:properties>
+<sch:pattern><sch:rule context="b"><sch:let name="v"><function xmlns="http://www.w3.org/2012/xquery">x</function></sch:let><sch:assert test="$v">x</sch:assert></sch:rule></sch:pattern></sch:schema>`), []);
+	});
+
+	test('not reported: a file sch:include includes, whose outermost element is, e.g., sch:pattern', async () => {
+		assert.deepEqual(await problems(`<sch:pattern xmlns:sch="http://purl.oclc.org/dsdl/schematron"><sch:rule context="a"><sch:report test="b">x</sch:report></sch:rule></sch:pattern>`), []);
+	});
+
+	test('not reported: SchXslt2\'s $schxslt:phase, severity as a variable or another value, and other query bindings', async () => {
+		assert.deepEqual(await problems(`<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt4"><ns prefix="schxslt" uri="http://dmaus.name/ns/2023/schxslt"/>
+<let name="sev" value="'info'"/>
+<pattern><rule context="a"><report test="$schxslt:phase eq 'A' and identity(1)" severity="$sev">x</report><assert test="1" severity="custom">x</assert></rule></pattern></schema>`), []);
+		// XQuery's functions, e.g. local:add, declared in XQuery
+		assert.deepEqual(await problems(`<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xquery31"><pattern><rule context="a"><report test="local:add(0, 1)">x</report></rule></pattern></schema>`), []);
+	});
+
+	test('Schematron 1.5: not ISO Schematron, which SchXslt2 validates with - and its pattern names aren\'t QNames', async () => {
+		assert.deepEqual(await problems(`<s:schema xmlns:s="http://www.ascc.net/xml/schematron"><s:pattern name="A 'quoted' constraint"><s:rule context="a"><s:assert test="b">x</s:assert></s:rule></s:pattern></s:schema>`),
+			["0: SchXslt2: this isn't ISO Schematron, whose namespace is http://purl.oclc.org/dsdl/schematron - SchXslt2 doesn't validate with it"]);
+	});
+
+	test('the problems are in the Problems view for a Schematron file open in an editor', async () => {
+		const file = path.join(dir, `published${count++}.sch`);
+		fs.writeFileSync(file, unprefixed('<pattern><rule context="a"><assert test="$undeclared">x</assert></rule></pattern>'));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		await vscode.window.showTextDocument(document);
+		let messages: string[] = [];
+		for (let i = 0; i < 50 && messages.length === 0; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			messages = vscode.languages.getDiagnostics(document.uri).map((d) => d.message);
+		}
+		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+		assert.deepEqual(messages, ['XPath: The variable/parameter $undeclared cannot be resolved']);
+	});
 });

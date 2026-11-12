@@ -316,8 +316,9 @@ export class XslLexer {
             const root = /^([^:]+):description$/.exec(rootName);
             this.setNativePrefix(root ? root[1] : this.languageConfiguration.nativePrefix);
         } else if (this.languageConfiguration.docType === DocumentTypes.SCH) {
-            // Schematron: the prefix of sch:schema - often none, with the Schematron namespace as the default
-            const root = /^(?:([^:]+):)?(?:schema|library)$/.exec(rootName);
+            // Schematron: the prefix of sch:schema - often none, with the Schematron namespace as the default - or of the
+            // outermost element of a file sch:include includes, e.g. sch:pattern
+            const root = /^(?:([^:]+):)?[^:]+$/.exec(rootName);
             this.setNativePrefix(root?.[1] ?? '');
         }
     }

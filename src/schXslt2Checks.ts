@@ -29,6 +29,8 @@ export class SchXslt2Checks {
 	public static readonly ignoredCode = 'schxslt2-ignored';
 	public static readonly notRunCode = 'schxslt2-not-run';
 	public static readonly includeCode = 'schxslt2-include';
+	public static readonly namespaceCode = 'schxslt2-namespace';
+	private static readonly isoNamespace = 'http://purl.oclc.org/dsdl/schematron';
 	private static readonly xsltNamespace = 'http://www.w3.org/1999/XSL/Transform';
 	// the Schematron elements whose content is a message, copied into the report
 	private static readonly messages = ['assert', 'report', 'diagnostic', 'property', 'name', 'emph', 'dir', 'span', 'p', 'title', 'active'];
@@ -51,6 +53,12 @@ export class SchXslt2Checks {
 			diagnostic.code = code;
 			diagnostics.push(diagnostic);
 		};
+		const rootPrefix = schema.prefix ? schema.prefix.slice(0, -1) : '';
+		const rootNamespace = schema.root.attributes.get(rootPrefix ? `xmlns:${rootPrefix}` : 'xmlns');
+		if (rootNamespace !== undefined && rootNamespace !== SchXslt2Checks.isoNamespace && /schematron/i.test(rootNamespace)) {
+			// e.g. Schematron 1.5's http://www.ascc.net/xml/schematron
+			add(schema.root, `SchXslt2: this isn't ISO Schematron, whose namespace is ${SchXslt2Checks.isoNamespace} - SchXslt2 doesn't validate with it`, SchXslt2Checks.namespaceCode);
+		}
 		for (const element of descendants(schema.root)) {
 			const local = schema.xsltLocal(element);
 			const parent = element.parent!;

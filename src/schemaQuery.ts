@@ -41,6 +41,11 @@ export class SchemaQuery {
         return this._lastEnumSimpleType;
     }
 
+    // whether a simple type's values are only suggestions, e.g. Schematron's severity (see SimpleType.open)
+    public isOpenType(typeName: string) {
+        return !!this.schema.simpleTypes[typeName]?.open;
+    }
+
     public getExpected(name: string, attributeName?: string) {
         this._lastEnumSimpleType = '';
         let result: Expected = new Expected();

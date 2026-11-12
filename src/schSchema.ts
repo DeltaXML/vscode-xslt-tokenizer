@@ -49,14 +49,14 @@ export class SchSchema implements SchemaData {
         "PATH": { base: ['xs:string'] },
         "EXPR": { base: ['xs:string'] },
         "FPI": { base: ['xs:string'] },
-        // SchXslt2 transpiles to XSLT 3.0 whatever the query binding is
+        // SchXslt2 transpiles to XSLT 3.0 whatever the query binding is - others, e.g. xslt4 or xquery31, are allowed
         "QB": {
-            base: ['xs:string'], enum: ['xslt3', 'xslt2'],
+            base: ['xs:string'], enum: ['xslt3', 'xslt2'], open: true,
             detail: { 'xslt3': 'XSLT 3.0 and XPath 3.1', 'xslt2': 'XSLT 2.0 and XPath 2.0 - run as XSLT 3.0 by SchXslt2' }
         },
-        // SchXslt2 also allows a variable reference, e.g. $level, or an expression in braces
+        // SchXslt2 also allows a variable reference, e.g. $level, an expression in braces, or another value - as fatal
         "SEVERITY": {
-            base: ['xs:string'], enum: ['info', 'warning', 'error', 'fatal'],
+            base: ['xs:string'], enum: ['info', 'warning', 'error', 'fatal'], open: true,
             detail: { 'info': 'information', 'warning': 'a warning', 'error': 'an error', 'fatal': 'a fatal error - the default' }
         },
         "SPACE": { base: ['xs:string'], enum: ['default', 'preserve'] },
