@@ -11,6 +11,7 @@ import { XSpecScenario } from './xspecScenario';
 import { XSpecLike } from './xspecLike';
 import { XSpecSourceMap } from './xspecSourceMap';
 import { XSpecSnippets } from './xspecSnippets';
+import { SchSnippets } from './schSnippets';
 import { XslLexerLight } from './xslLexerLight';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, Data } from './xpLexer';
@@ -3399,6 +3400,19 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString('subtreeProcessingMode defaultMode="${1:text}">\n\t<subtrees>\n\t\t<subtree elemXpath="${3:/container}" mode="${4:data}"/>$0\n\t</subtrees>\n</subtreeProcessingMode>');
 					completionItems.push(newItem);
+				}
+			} else if (docType === DocumentTypes.SCH) {
+				// each form a Schematron element is written in, with the attributes it needs (see SchSnippets)
+				const parent = XsltTokenCompletions.parentInText(document, pos)?.replace(/^.*:/, '');
+				const snippets = SchSnippets.forElement(tagName, parent);
+				if (snippets) {
+					useCurrent = false;
+					snippets.forEach((snippet) => {
+						const item = new vscode.CompletionItem(snippet.label, vscode.CompletionItemKind.Struct);
+						item.documentation = tagDetail.length > 0 ? tagDetail : undefined;
+						item.insertText = new vscode.SnippetString(snippet.body);
+						completionItems.push(item);
+					});
 				}
 			} else if (docType === DocumentTypes.XSPEC) {
 				// each form an XSpec element is written in, with the attributes it needs (see XSpecSnippets)

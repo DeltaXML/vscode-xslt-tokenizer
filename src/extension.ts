@@ -17,6 +17,7 @@ import { XSpecVariables } from './xspecVariables';
 import { XSpecExpectResult } from './xspecExpectResult';
 import { SchXslt2Checks } from './schXslt2Checks';
 import { SchReferences } from './schReferences';
+import { SchRequired } from './schRequired';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
@@ -1710,6 +1711,9 @@ export function activate(context: vscode.ExtensionContext) {
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 	// Schematron: Go to Definition from is-a, extends' rule, active's pattern, and diagnostics and properties (see SchReferences)
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'sch' }, { provideDefinition: (document, position) => SchReferences.definition(document, position) }));
+	// Schematron: quick fixes for the attributes ISO Schematron requires that an element is missing (see SchRequired)
+	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('sch', { provideCodeActions: (document, _range, context) => SchRequired.codeActions(document, context.diagnostics) },
+		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 	// Schematron: quick fixes for the XSLT SchXslt2 ignores or doesn't run, and for a prefix not declared with sch:ns (see SchXslt2Checks)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('sch', { provideCodeActions: (document, _range, context) => SchXslt2Checks.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));

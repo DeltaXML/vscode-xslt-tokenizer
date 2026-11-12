@@ -36,6 +36,7 @@ import { XSpecCallArity } from './xspecCallArity';
 import { XSpecExpectResult } from './xspecExpectResult';
 import { SchXslt2Checks } from './schXslt2Checks';
 import { SchReferences } from './schReferences';
+import { SchRequired } from './schRequired';
 import { SchSchema } from './schSchema';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecDuplicateLabels } from './xspecDuplicateLabels';
@@ -3708,6 +3709,8 @@ export class XsltTokenDiagnostics {
 			allDiagnostics.push(...SchXslt2Checks.problems(document));
 			// references to patterns, rules, diagnostics and properties that aren't declared, or aren't of the right kind
 			allDiagnostics.push(...SchReferences.problems(document));
+			// the attributes ISO Schematron requires that elements are missing, e.g. a rule's context
+			allDiagnostics.push(...SchRequired.problems(document));
 		}
 		if (docType === DocumentTypes.XSPEC) {
 			// the files it refers to that aren't found

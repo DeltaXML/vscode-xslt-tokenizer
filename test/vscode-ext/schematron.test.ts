@@ -12,6 +12,8 @@ import { SchConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
 import { SchXslt2Checks } from '../../src/schXslt2Checks';
 import { SchReferences } from '../../src/schReferences';
+import { SchRequired } from '../../src/schRequired';
+import { SchSnippets } from '../../src/schSnippets';
 
 suite('Schematron', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-'));
@@ -369,5 +371,80 @@ suite('Schematron', () => {
 		assert.deepEqual(links.filter((l) => l.target?.scheme === 'file').map((l) => `${document.getText(l.range).replace(/"/g, '')} ${path.basename(l.target!.fsPath)}`).sort(),
 			['linked-library.sch linked-library.sch', 'linked-pattern.sch linked-pattern.sch', 'linked.xsl linked.xsl', 'missing.sch missing.sch']);
 		assert.include(await problems(content), "4: SchXslt2: the file missing.sch isn't found");
+	});
+
+	test('required attributes: an error where SchXslt2 fails without it, else a warning - not within a foreign element', async () => {
+		const messages = await problems(unprefixed(`<ns prefix="f"/>
+<param name="p"/>
+<phase><active/></phase>
+<pattern abstract="true"><param name="c"/><rule context="$c"><assert test="1">x</assert></rule></pattern>
+<pattern is-a="x" id="i"><param name="c"/></pattern>
+<pattern id="p1"><rule><let value="1"/><assert>x <value-of/><span>s</span></assert><report test="1">y</report></rule>
+<rule abstract="true"><extends/></rule></pattern>
+<include/>
+<diagnostics><diagnostic>d</diagnostic></diagnostics>
+<properties><property>p<user-data xmlns="urn:data"><span/></user-data></property></properties>`));
+		const required = messages.filter((m) => m.includes('must have'));
+		assert.deepEqual(required, [
+			"1: Schematron: ns must have a 'uri' attribute - SchXslt2 fails without it",
+			"2: Schematron: param must have a 'value' attribute - ISO Schematron requires it",
+			"3: Schematron: phase must have a 'id' attribute - ISO Schematron requires it",
+			"3: Schematron: active must have a 'pattern' attribute - ISO Schematron requires it",
+			"4: Schematron: pattern must have a 'id' attribute - ISO Schematron requires it",
+			"5: Schematron: param must have a 'value' attribute - SchXslt2 fails without it",
+			"6: Schematron: rule must have a 'context' attribute - SchXslt2 fails without it",
+			"6: Schematron: let must have a 'name' attribute - SchXslt2 fails without it",
+			"6: Schematron: assert must have a 'test' attribute - SchXslt2 fails without it",
+			"6: Schematron: value-of must have a 'select' attribute - SchXslt2 fails without it",
+			"6: Schematron: span must have a 'class' attribute - ISO Schematron requires it",
+			"7: Schematron: rule must have a 'id' attribute - ISO Schematron requires it",
+			"7: Schematron: extends must have one of the attributes 'rule', 'href' - ISO Schematron requires it",
+			"8: Schematron: include must have a 'href' attribute - SchXslt2 fails without it",
+			"9: Schematron: diagnostic must have a 'id' attribute - ISO Schematron requires it",
+			"10: Schematron: property must have a 'id' attribute - ISO Schematron requires it"
+		]);
+		// the quick fix adds the attribute
+		const file = path.join(dir, `required${count++}.sch`);
+		fs.writeFileSync(file, unprefixed('<pattern><rule><assert test="1">x</assert></rule></pattern>'));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const diagnostic = SchRequired.problems(document)[0];
+		const action = SchRequired.codeActions(document, [diagnostic])[0];
+		assert.strictEqual(action.title, "Add a 'context' attribute");
+	});
+
+	test('element completion: each form of an element has the attributes it requires', async () => {
+		const placed: [string, string][] = [['ns', 'schema'], ['param', 'schema'], ['param', 'pattern'], ['let', 'schema'], ['let', 'rule'], ['phase', 'schema'],
+			['active', 'phase'], ['pattern', 'schema'], ['group', 'schema'], ['rule', 'pattern'], ['assert', 'rule'], ['report', 'rule'], ['extends', 'rule'],
+			['extends', 'schema'], ['include', 'schema'], ['value-of', 'assert'], ['name', 'assert'], ['span', 'assert'], ['diagnostic', 'diagnostics'],
+			['property', 'properties'], ['dir', 'p'], ['title', 'schema']];
+		for (const [element, parent] of placed) {
+			const snippets = SchSnippets.forElement(`sch:${element}`, parent);
+			assert.isNotEmpty(snippets, element);
+			for (const snippet of snippets!) {
+				const attribute = (name: string) => new RegExp(`\\s${name}="([^"]*)"`).exec(snippet.body)?.[1];
+				// a parameter in a pattern: one with is-a, which requires a value
+				const requirements = SchRequired.ruleFor(element, parent, attribute, (name) => name === 'is-a' ? 'p' : undefined);
+				for (const requirement of requirements) {
+					assert.isTrue(requirement.oneOf.some((name) => attribute(name) !== undefined), `${snippet.label}: ${snippet.body}`);
+				}
+			}
+		}
+	});
+
+	test('element completion: the forms of an element, with the file\'s prefix for Schematron - or none', async () => {
+		const forms = async (content: string) => {
+			const offset = content.indexOf('|');
+			const file = path.join(dir, `forms${count++}.sch`);
+			fs.writeFileSync(file, content.replace('|', ''));
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+			const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(offset));
+			return new Map(list.items.map((item) => [typeof item.label === 'string' ? item.label : item.label.label, (item.insertText as vscode.SnippetString | undefined)?.value]));
+		};
+		const unprefixedForms = await forms(unprefixed('<pattern>\n<|\n</pattern>'));
+		assert.strictEqual(unprefixedForms.get('rule'), 'rule context="$1">\n\t$0\n</rule>');
+		assert.strictEqual(unprefixedForms.get('rule (abstract)'), 'rule abstract="true" id="$1">\n\t$0\n</rule>');
+		const prefixedForms = await forms(prefixed('<sch:pattern><sch:rule context="a">\n<|\n</sch:rule></sch:pattern>'));
+		assert.strictEqual(prefixedForms.get('sch:assert'), 'sch:assert test="$1">$2</sch:assert>$0');
+		assert.strictEqual(prefixedForms.get('sch:let'), 'sch:let name="$1" value="$2"/>$0');
 	});
 });
