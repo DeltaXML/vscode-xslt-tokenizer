@@ -28,6 +28,7 @@ import { RecordTypes } from './recordTypes';
 import { XPathQuery } from './xpathQuery';
 import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XPathVersion } from './xpathVersion';
+import { XSpecNodeNames } from './xspecNodeNames';
 
 interface ImportedGlobals {
 	href: string;
@@ -472,7 +473,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			localLanguageConfig = { ...this.languageConfig };
 		}
 
-		if (uri) {
+		if (this.docType === DocumentTypes.XSPEC) {
+			// the names of the test data and the documents its hrefs refer to - not XSpec's own (see XSpecNodeNames)
+			symbolsForXPath = await XSpecNodeNames.symbols(document, (fileUri) => XsltDefinitionProvider.contextFileSymbols(fileUri));
+		} else if (uri) {
 			const lastSymbols = await XsltDefinitionProvider.contextFileSymbols(uri);
 			if (lastSymbols) {
 				symbolsForXPath = lastSymbols;

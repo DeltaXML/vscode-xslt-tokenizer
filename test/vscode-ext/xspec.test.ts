@@ -144,6 +144,39 @@ suite('XSpec', () => {
 		return list.items.map((item) => typeof item.label === 'string' ? item.label : item.label.label);
 	};
 
+	test('completion: node names in XPath are those of the test data and of the documents its hrefs refer to - not XSpec\'s own elements or attributes', async () => {
+		file('orders-data.xml', '<orders><order id="1"><line product="p"/></order></orders>');
+		const scenario = (test: string, prefix = 'x') => xspec(`<${prefix}:scenario label="s">
+  <${prefix}:context><invoice number="1"><item/></invoice></${prefix}:context>
+  <${prefix}:expect label="e" href="orders-data.xml" test="${test}"/>
+</${prefix}:scenario>`, ' stylesheet="sut.xsl"', prefix);
+		const names = await completions(scenario('$x:result/|'));
+		assert.includeMembers(names, ['invoice', 'item', 'orders', 'order', 'line'], names.join(', '));
+		for (const name of ['x:scenario', 'x:context', 'x:expect', 'x:description', 'scenario', '@label', '@href', '@stylesheet']) {
+			assert.notInclude(names, name, names.join(', '));
+		}
+		// a path from the root: the root of each part of the test data, then its children
+		assert.includeMembers(await completions(scenario('/|')), ['invoice', 'orders']);
+		const children = await completions(scenario('/orders/|'));
+		assert.include(children, 'order', children.join(', '));
+		assert.notInclude(children, 'invoice', children.join(', '));
+		// after a step: only the children of the elements it selects - from a variable, or a relative path
+		for (const path of ['$x:result/order/|', 'order/|', '$x:result/invoice/|']) {
+			const stepped = await completions(scenario(path));
+			const [expected, notExpected] = path.includes('invoice') ? ['item', 'line'] : ['line', 'item'];
+			assert.include(stepped, expected, `${path}: ${stepped.join(', ')}`);
+			assert.notInclude(stepped, notExpected, `${path}: ${stepped.join(', ')}`);
+			assert.notInclude(stepped, 'order', `${path}: ${stepped.join(', ')}`);
+		}
+		// an attribute step: the attributes of the elements selected
+		const attributes = await completions(scenario('$x:result/order/@|'));
+		assert.deepEqual(attributes, ['@id']);
+		// with another prefix for XSpec
+		const withT = await completions(scenario('$t:result/|', 't'));
+		assert.includeMembers(withT, ['invoice', 'orders'], withT.join(', '));
+		assert.notInclude(withT, 't:scenario', withT.join(', '));
+	});
+
 	test('completion: the elements and attributes the XSpec schema allows', async () => {
 		const elements = await completions(xspec(`<x:scenario label="s">\n  <|\n</x:scenario>`));
 		for (const name of ['x:call', 'x:context', 'x:expect', 'x:scenario', 'x:variable']) {

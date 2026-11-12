@@ -19,6 +19,7 @@ import * as fs from 'fs';
 import { HrefPaths, ImportProblem } from './hrefPaths';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XsltDebugOutputs } from './xsltDebug';
+import { XSpecNodeNames } from './xspecNodeNames';
 
 interface ImportedGlobals {
 	href: string;
@@ -1007,8 +1008,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				case TokenLevelState.nodeNameTest:
 					if (isDocumentNode) {
 						isDocumentNode = false;
-						// starting point: assume root element
-						if (xpathNameMatchesSymbol(token.value, currentSymbols[0].name)) {
+						// starting point: assume root element - or for an XSpec file, any root of its test data
+						if (XSpecNodeNames.isRoot(currentSymbols[0])) {
+							nextSymbols = currentSymbols[0].children.filter((child) => child.kind !== vscode.SymbolKind.Array && xpathNameMatchesSymbol(token.value, child.name));
+						} else if (xpathNameMatchesSymbol(token.value, currentSymbols[0].name)) {
 							nextSymbols = currentSymbols;
 						}
 					} else if (token.union) {
@@ -1153,8 +1156,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					}
 					if (['*','node','element','item'].indexOf(token.value) !== -1) {
 						if (isDocumentNode) {
-							isDocumentNode = false;								
-							nextSymbols = currentSymbols;
+							isDocumentNode = false;
+							nextSymbols = XSpecNodeNames.isRoot(currentSymbols[0]) ? currentSymbols[0].children.filter((child) => child.kind !== vscode.SymbolKind.Array) : currentSymbols;
 						} else if (currentAxis !== AxisType.Child && currentAxis !== AxisType.Parent) {
 							nextSymbols = currentSymbols;
 						} else {
@@ -1200,7 +1203,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				let elementNames = new Set<string>();
 				let attrNames = new Set<string>();
 
-				if (isDocumentNode) {
+				if (isDocumentNode && XSpecNodeNames.isRoot(currentSymbols[0])) {
+					// an XSpec file's test data: the root of each part of it
+					currentSymbols[0].children.forEach((child) => {
+						if (child.kind !== vscode.SymbolKind.Array) {
+							elementNames.add(child.name);
+						}
+					});
+				} else if (isDocumentNode) {
 					elementNames.add(currentSymbols[0].name);
 				} else if (nextAxis === AxisType.Attribute) {
 					currentSymbols.forEach(current => {
@@ -1211,8 +1221,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					currentSymbols.forEach(current => {
 						if (current.isAttr) {
 							attrNames.add(current.name);
-						} else {
-						elementNames.add(current.name);}
+						} else if (!XSpecNodeNames.isRoot(current)) {
+							elementNames.add(current.name);
+						}
 					});
 				} else {
 					for (let x = 0; x < currentSymbols.length; x++) {

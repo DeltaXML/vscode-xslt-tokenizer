@@ -174,7 +174,9 @@ suite('XSLT debugger: from the output to its source', () => {
 	// a menu id VS Code doesn't know is ignored, without a warning - e.g. 'debug/toolbar' for 'debug/toolBar'
 	test('the menus: the debug toolbar button, and the output view\'s context menu item', () => {
 		const contributes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8')).contributes;
-		const knownMenus = ['editor/context', 'editor/title', 'editor/title/run', 'view/title', 'view/item/context', 'commandPalette', 'debug/toolBar', 'debug/variables/context'];
+		const knownMenus = ['editor/context', 'editor/title', 'editor/title/run', 'view/title', 'view/item/context', 'commandPalette', 'debug/toolBar', 'debug/variables/context',
+			// the clear-timeline commands (see TimelineCommands)
+			'timeline/title', 'timeline/item/context'];
 		const submenus = (contributes.submenus ?? []).map((s: { id: string }) => s.id);
 		assert.deepEqual(Object.keys(contributes.menus).filter((id) => !knownMenus.includes(id) && !submenus.includes(id)), []);
 		assert.deepEqual(contributes.menus['debug/toolBar'], [{ command: 'xslt-xpath.showDebugOutput', when: 'debugType == \'xslt-saxon\'' }]);
