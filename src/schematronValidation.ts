@@ -40,6 +40,7 @@ export interface SchematronResult {
 export class SchematronValidation {
 	public static readonly validateCommand = 'xslt-xpath.validateWithSchematron';
 	public static readonly chooseCommand = 'xslt-xpath.validateWithSchematronChoose';
+	public static readonly showAssertionCommand = 'xslt-xpath.showSchematronAssertion';
 	private static readonly stateKey = 'xslt-xpath.schematronForXml';
 	private static readonly schematronNamespace = 'http://purl.oclc.org/dsdl/schematron';
 	private static collection: vscode.DiagnosticCollection;
@@ -58,6 +59,19 @@ export class SchematronValidation {
 		context.subscriptions.push(SchematronValidation.collection,
 			vscode.commands.registerCommand(SchematronValidation.validateCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, false)),
 			vscode.commands.registerCommand(SchematronValidation.chooseCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, true)),
+			// a code action on a problem: the assertion that reported it, in the schema
+			vscode.commands.registerCommand(SchematronValidation.showAssertionCommand, (location: vscode.Location) =>
+				vscode.window.showTextDocument(location.uri, { selection: location.range })),
+			vscode.languages.registerCodeActionsProvider({ scheme: 'file' }, {
+				provideCodeActions: (_document, _range, context) => context.diagnostics.filter((d) => d.source?.startsWith('Schematron: ') && d.relatedInformation?.length)
+					.map((d) => {
+						const location = d.relatedInformation![0].location;
+						const action = new vscode.CodeAction(`Show the ${/^the report/.test(d.relatedInformation![0].message) ? 'report' : 'assertion'} in ${path.basename(location.uri.fsPath)}`, vscode.CodeActionKind.QuickFix);
+						action.diagnostics = [d];
+						action.command = { command: SchematronValidation.showAssertionCommand, title: action.title, arguments: [location] };
+						return action;
+					})
+			}),
 			// validated again when the file, or its schema, is saved
 			vscode.workspace.onDidSaveTextDocument((document) => {
 				if (document.uri.scheme !== 'file') {
@@ -257,6 +271,10 @@ export class SchematronValidation {
 		if (assertion) {
 			diagnostic.relatedInformation = [new vscode.DiagnosticRelatedInformation(assertion.location,
 				`the ${result.kind === 'assert' ? 'assertion that failed' : 'report'}${result.test ? `: ${normalized(result.test)}` : ''}`)];
+			// the code - its id, or else assert or report - is a link to it, in the problem's hover and the Problems view:
+			// VS Code opens a file URI at the line and column of its fragment, e.g. #L12,5
+			const start = assertion.location.range.start;
+			diagnostic.code = { value: result.id ?? result.kind, target: assertion.location.uri.with({ fragment: `L${start.line + 1},${start.character + 1}` }) };
 		}
 		return diagnostic;
 	}

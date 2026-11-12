@@ -736,13 +736,24 @@ suite('Schematron', () => {
 			const results = await SchematronValidation.validate(vscode.Uri.file(xmlPath), schema, false);
 			assert.lengthOf(results!, 2);
 			const diagnostics = vscode.languages.getDiagnostics(vscode.Uri.file(xmlPath)).filter((d) => d.source?.startsWith('Schematron'));
-			assert.deepEqual(diagnostics.map((d) => [d.range.start.line, d.range.start.character, vscode.DiagnosticSeverity[d.severity], d.message, d.code]), [
+			const code = (d: vscode.Diagnostic) => typeof d.code === 'object' ? d.code.value : d.code;
+			assert.deepEqual(diagnostics.map((d) => [d.range.start.line, d.range.start.character, vscode.DiagnosticSeverity[d.severity], d.message, code(d)]), [
 				[2, 3, 'Warning', 'item a isn\'t an integer', 'int'],
 				[2, 3, 'Error', 'has x\nremove @x from item', 'x']
 			]);
 			const related = diagnostics[0].relatedInformation![0].location;
 			assert.strictEqual(path.basename(related.uri.fsPath), 'validate.sch');
 			assert.strictEqual(related.range.start.line, 3);
+			// the code is a link to the assertion - VS Code opens the file at the line and column of the fragment
+			const target = (diagnostics[0].code as { target: vscode.Uri }).target;
+			assert.strictEqual(path.basename(target.fsPath), 'validate.sch');
+			assert.strictEqual(target.fragment, 'L4,1');
+			// and a code action shows it
+			const xmlDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(xmlPath));
+			const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>('vscode.executeCodeActionProvider', xmlDocument.uri, diagnostics[0].range);
+			const show = actions.find((a) => a.title === 'Show the assertion in validate.sch');
+			assert.isDefined(show);
+			assert.strictEqual(show!.command?.command, SchematronValidation.showAssertionCommand);
 			// valid: no problems
 			fs.writeFileSync(xmlPath, '<doc><item n="2"/></doc>');
 			assert.lengthOf((await SchematronValidation.validate(vscode.Uri.file(xmlPath), schema, false))!, 0);
@@ -763,7 +774,8 @@ suite('Schematron', () => {
 		fs.writeFileSync(withModel, '<?xml-model href="command.sch" schematypens="http://purl.oclc.org/dsdl/schematron"?>\n<doc><item/></doc>');
 		const plain = path.join(dir, 'command-plain.xml');
 		fs.writeFileSync(plain, '<doc><item n="1"/></doc>');
-		const codes = (file: string) => vscode.languages.getDiagnostics(vscode.Uri.file(file)).filter((d) => d.source?.startsWith('Schematron')).map((d) => d.code);
+		const codes = (file: string) => vscode.languages.getDiagnostics(vscode.Uri.file(file)).filter((d) => d.source?.startsWith('Schematron'))
+			.map((d) => typeof d.code === 'object' ? d.code.value : d.code);
 		const chooser = SchematronValidation.chooseSchema;
 		let chosen = 0;
 		SchematronValidation.chooseSchema = async () => (chosen++, other);
