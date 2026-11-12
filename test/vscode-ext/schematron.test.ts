@@ -135,4 +135,19 @@ suite('Schematron', () => {
 		const names = await completions('<|');
 		assert.include(names, 'Schematron schema', names.join(', '));
 	});
+
+	test('prefixes: those of sch:ns, wherever it is - the only ones SchXslt2 declares in its validation stylesheet', async () => {
+		assert.deepEqual(await problems(unprefixed(`<pattern><rule context="f:a"><assert test="@n castable as xs:integer">x</assert></rule></pattern>
+<ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/><ns prefix="f" uri="urn:f"/>`)), []);
+		assert.deepEqual(await problems(unprefixed('<pattern><rule context="a"><assert test="@n castable as xs:integer and f:x(.)">x</assert></rule></pattern>')),
+			["1: XPath: Invalid type: 'xs:integer'", "1: XPath: Undeclared prefix in function: 'f:x'"]);
+	});
+
+	test('prefixes: one declared with xmlns, not sch:ns, is undeclared in the schema\'s XPath - but declared within an XSLT element', async () => {
+		const xmlns = 'xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"';
+		assert.deepEqual(await problems(`<schema xmlns="http://purl.oclc.org/dsdl/schematron" ${xmlns} queryBinding="xslt3">
+<pattern><rule context="a"><assert test="@n castable as xs:integer">x</assert></rule></pattern></schema>`), ["1: XPath: Invalid type: 'xs:integer'"]);
+		assert.deepEqual(await problems(`<schema xmlns="http://purl.oclc.org/dsdl/schematron" ${xmlns} queryBinding="xslt3">
+<xsl:key name="k" match="a" use="xs:integer(@n)"/></schema>`), []);
+	});
 });

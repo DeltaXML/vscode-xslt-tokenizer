@@ -668,8 +668,14 @@ export class XsltTokenDiagnostics {
 		// XPath expressions, patterns and attributes with QNames - the in-scope namespaces still apply to element names
 		const fixedNamespaces = docType === DocumentTypes.XSLT40 ? FixedNamespaces.forModule(documentText, document.uri.scheme === 'file' ? document.fileName : undefined) : undefined;
 		const fixedPrefixes = fixedNamespaces ? [...fixedNamespaces.bindings.keys()].concat(['xml']) : undefined;
+		// Schematron: SchXslt2 declares only the sch:ns prefixes in its validation stylesheet - so they're the prefixes for the
+		// schema's XPath, wherever sch:ns is, and an xmlns declaration doesn't apply. An XSLT element, e.g. xsl:function, is
+		// copied as it is, so within one its in-scope namespaces apply too
+		const schNamespaces = docType === DocumentTypes.SCH ? XsltTokenDiagnostics.schNamespaces(documentText) : undefined;
+		const schPrefixes = schNamespaces ? [...schNamespaces.keys(), 'xml'] : undefined;
+		const withinSchXslt = () => tagElementName.startsWith('xsl:') || elementStack.some((element) => element.symbolName.startsWith('xsl:'));
 		// the namespace prefixes for XPath and QNames: the fixed ones, or else the in-scope ones
-		const xpathPrefixes = () => fixedPrefixes ?? inheritedPrefixes;
+		const xpathPrefixes = () => fixedPrefixes ?? (schPrefixes ? (withinSchXslt() ? schPrefixes.concat(inheritedPrefixes) : schPrefixes) : inheritedPrefixes);
 		fixedNamespaces?.problems.forEach((problem) => {
 			const position = document.positionAt(fixedNamespaces.valueOffset + problem.offset);
 			problemTokens.push({ line: position.line, startCharacter: position.character, length: problem.token.length, value: problem.token + RecordTypes.valueSeparator + problem.reason, tokenType: 0, error: ErrorType.FixedNamespacesToken });
@@ -1158,6 +1164,16 @@ export class XsltTokenDiagnostics {
 										} else if (xsltType === undefined && !xspecScope?.testsStylesheet) {
 											// the functions of an XQuery module, or a Schematron's, which aren't known
 											XsltTokenDiagnostics.externalFunctionPrefixes.push(pfx);
+										}
+									});
+								}
+								if (docType === DocumentTypes.SCH && onRootStartTag) {
+									// the known namespaces, e.g. xs for xs:integer: those of sch:ns, and those declared on the
+									// schema for its XSLT elements - whether a prefix applies is checked separately (see xpathPrefixes)
+									[...rootXmlnsBindings, ...schNamespaces!].forEach(([pfx, namespaceURI]) => {
+										const xsltType = FunctionData.namespaceType(namespaceURI);
+										if (xsltType !== undefined) {
+											xsltPrefixesToURIs.set(pfx, xsltType);
 										}
 									});
 								}
@@ -3384,7 +3400,8 @@ export class XsltTokenDiagnostics {
 								}
 							}
 						} else if (tParts.length === 2) {
-							let nsType = xsltPrefixesToURIs.get(tParts[0]);
+							// Schematron: a prefix that's known, but doesn't apply here, e.g. xs declared with xmlns, not sch:ns
+							let nsType = schPrefixes && !xpathPrefixes().includes(tParts[0]) ? undefined : xsltPrefixesToURIs.get(tParts[0]);
 							if (nsType !== undefined) {
 								if (nsType === XSLTnamespaces.XMLSchema) {
 									const part2 = tParts[1];
@@ -4856,6 +4873,26 @@ export class XsltTokenDiagnostics {
 			return 'sch:' + name.substring(colon + 1);
 		}
 		return colon > 0 && document.languageId === 'xslt' && !name.startsWith('xsl:') ? 'xsl' + name.substring(colon) : name;
+	}
+
+	// the namespace bindings of a Schematron file's sch:ns elements: prefix to URI
+	public static schNamespaces(text: string): Map<string, string> {
+		const root = parseXml(text);
+		const bindings = new Map<string, string>();
+		if (!root) {
+			return bindings;
+		}
+		const colon = root.name.indexOf(':');
+		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+		const visit = (element: XmlElement) => element.children.forEach((child) => {
+			const ns = child.name === prefix + 'ns' ? [child.attributes.get('prefix')?.trim(), child.attributes.get('uri')?.trim()] : undefined;
+			if (ns && ns[0] && ns[1] !== undefined) {
+				bindings.set(ns[0], ns[1]);
+			}
+			visit(child);
+		});
+		visit(root);
+		return bindings;
 	}
 
 	// the offsets of a Schematron file's abstract patterns and groups (abstract="true"): from the '<' of each to its end
