@@ -146,6 +146,15 @@ suite('Schematron', () => {
 		assert.deepEqual(await problems(unprefixed(`
 <pattern abstract="true" id="ap"><rule context="$ctx"><assert test="$param1">y</assert></rule></pattern>
 <pattern is-a="ap" id="p"><param name="ctx" value="a"/><param name="param1" value="true()"/></pattern>`)), []);
+		// the sch:param of a pattern with is-a give the parameters values - they aren't unused variables
+		const file = path.join(dir, `problems${count++}.sch`);
+		fs.writeFileSync(file, unprefixed(`
+<pattern abstract="true" id="ap"><param name="ctx"/><rule context="$ctx"><assert test="true()">y</assert></rule></pattern>
+<pattern is-a="ap" id="p"><param name="ctx" value="a"/></pattern>
+<pattern id="q"><rule context="b"><let name="unused" value="1"/><assert test="true()">y</assert></rule></pattern>`));
+		const hints = (await moduleDiagnostics.call(XsltSymbolProvider, await vscode.workspace.openTextDocument(vscode.Uri.file(file)), false, SchConfiguration.configuration))
+			.filter((d) => d.severity === vscode.DiagnosticSeverity.Hint).map((d) => `${d.range.start.line}: ${d.message}`);
+		assert.deepEqual(hints, ['4: variable is unused']);
 		assert.deepEqual(await problems(prefixed(`
 <sch:group abstract="true" id="ag"><sch:rule context="$ctx"><sch:assert test="$p">y</sch:assert></sch:rule></sch:group>`)), []);
 	});

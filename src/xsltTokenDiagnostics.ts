@@ -617,9 +617,15 @@ export class XsltTokenDiagnostics {
 		const schPrefix = docType === DocumentTypes.SCH ? XsltTokenDiagnostics.schPrefixOf(documentText) : undefined;
 		const symbolName = (name: string) => schPrefix !== undefined && name.startsWith('sch:') ? (schPrefix ? schPrefix + ':' : '') + name.substring(4) : name;
 		// an abstract function or template, in an XSLT package: it has no body, and its parameters aren't used
-		const isAbstract = (startTag: BaseToken | undefined) => !!startTag &&
-			RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(startTag.line, startTag.startCharacter)) + 1, 'visibility')?.trim() === 'abstract';
-		const isAbstractParam = (elementName: string) => elementName === 'xsl:param' && elementStack.length > 0 && isAbstract(elementStack[elementStack.length - 1].identifierToken);
+		const attributeOf = (startTag: BaseToken | undefined, attributeName: string) => startTag ?
+			RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(startTag.line, startTag.startCharacter)) + 1, attributeName) : undefined;
+		const isAbstract = (startTag: BaseToken | undefined) => attributeOf(startTag, 'visibility')?.trim() === 'abstract';
+		// an attribute of the parent element - the top of the element stack
+		const parentAttribute = (attributeName: string) => attributeOf(elementStack[elementStack.length - 1]?.identifierToken, attributeName);
+		const isAbstractParam = (elementName: string) => elementName === 'xsl:param' && parentAttribute('visibility')?.trim() === 'abstract';
+		// Schematron: a parameter of a pattern with is-a gives a value to one of the abstract pattern's - it isn't a variable,
+		// so it isn't unused
+		const isInstanceParam = (elementName: string) => elementName === 'sch:param' && parentAttribute('is-a') !== undefined;
 		// in a package, a global parameter, or a public, final or abstract global variable, is for the stylesheets that
 		// use it - so it isn't unused when the package doesn't use it
 		const isPackage = ImportIndex.packageDeclaration(documentText) !== undefined;
@@ -1429,7 +1435,7 @@ export class XsltTokenDiagnostics {
 									const childSymbols: vscode.DocumentSymbol[] = XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
 
 									if (variableData !== null) {
-										if (elementStack.length > 1 && !isAbstractParam(tagElementName)) {
+										if (elementStack.length > 1 && !isAbstractParam(tagElementName) && !isInstanceParam(tagElementName)) {
 											xsltVariableDeclarations.push(variableData.token);
 										}
 										if (startTagToken) {
@@ -1460,7 +1466,7 @@ export class XsltTokenDiagnostics {
 											} else {
 												inScopeVariablesList.push(variableData);
 											}
-											if (!isAbstractParam(tagElementName)) {
+											if (!isAbstractParam(tagElementName) && !isInstanceParam(tagElementName)) {
 												xsltVariableDeclarations.push(variableData.token);
 											}
 										} else {
