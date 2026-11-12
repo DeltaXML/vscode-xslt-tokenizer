@@ -11,6 +11,7 @@ import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { SchConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
 import { SchXslt2Checks } from '../../src/schXslt2Checks';
+import { SchReferences } from '../../src/schReferences';
 
 suite('Schematron', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-'));
@@ -293,5 +294,62 @@ suite('Schematron', () => {
 		}
 		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
 		assert.deepEqual(messages, ['XPath: The variable/parameter $undeclared cannot be resolved']);
+	});
+
+	test('variables: an abstract rule and the rules extending it share their sch:let - as SchXslt2 copies its content into them', async () => {
+		assert.deepEqual(await problems(unprefixed(`<pattern>
+<rule abstract="true" id="base"><let name="fromBase" value="1"/></rule>
+<rule abstract="true" id="ar"><extends rule="base"/><let name="fromAbstract" value="1"/><assert test="$fromExtender + $fromBase gt 0">x</assert></rule>
+<rule context="a"><let name="fromExtender" value="1"/><extends rule="ar"/><assert test="$fromAbstract + $fromBase + $undeclared gt 0">x</assert></rule>
+<rule context="b"><assert test="$fromAbstract">x</assert></rule></pattern>`)),
+		['4: XPath: The variable/parameter $undeclared cannot be resolved', '5: XPath: The variable/parameter $fromAbstract cannot be resolved']);
+	});
+
+	test('references: errors where SchXslt2 stops, and warnings where it ignores the reference - with the ids of included files', async () => {
+		fs.writeFileSync(path.join(dir, 'included-pattern.sch'), `<pattern xmlns="http://purl.oclc.org/dsdl/schematron" abstract="true" id="inc"><rule context="$c"><assert test="1">x</assert></rule></pattern>`);
+		const messages = await problems(unprefixed(`<phase id="ph"><active pattern="p"/><active pattern="nope"/><active pattern="ap"/></phase>
+<pattern abstract="true" id="ap"><param name="needed"/><param name="optional" value="1"/><rule context="$needed"><assert test="$optional">x</assert></rule></pattern>
+<include href="included-pattern.sch"/>
+<pattern id="p" is-a="ap"><param name="needed" value="a"/><param name="old-style" value="1"/></pattern>
+<pattern id="p2" is-a="ap"/>
+<pattern id="p3" is-a="inc"><param name="c" value="b"/></pattern>
+<pattern id="p4" is-a="p"/>
+<group id="g" is-a="ap"/>
+<pattern id="p5" is-a="missing"/>
+<pattern id="p6"><rule abstract="true" id="ar"><assert test="1" diagnostics="d1 dx" properties="px">x</assert></rule>
+<rule context="a" id="r"><extends rule="ar"/><extends rule="r"/><extends rule="gone"/><assert test="1" id="p6">x</assert></rule></pattern>
+<diagnostics><diagnostic id="d1">d</diagnostic></diagnostics>`));
+		assert.deepEqual(messages.filter((m) => m.includes('SchXslt2:')).sort(), [
+			'1: SchXslt2: no pattern or group has the id nope - the phase has no pattern with it',
+			'1: SchXslt2: the pattern ap is abstract - only the patterns with is-a for it are run',
+			'5: SchXslt2: the abstract pattern ap declares the parameter needed, with no value - supply it with sch:param',
+			'7: SchXslt2: the pattern p isn\'t an abstract pattern - is-a must be the id of one',
+			'8: SchXslt2: the pattern ap isn\'t an abstract group - is-a must be the id of one',
+			'9: SchXslt2: no abstract pattern has the id missing',
+			'10: SchXslt2: the id p6 isn\'t unique in the schema',
+			'10: SchXslt2: no diagnostic has the id dx - it\'s left out of the report',
+			'10: SchXslt2: no property has the id px - it\'s left out of the report',
+			'11: SchXslt2: the rule r isn\'t abstract - extends must be the id of an abstract rule',
+			'11: SchXslt2: no abstract rule has the id gone',
+			'11: SchXslt2: the id p6 isn\'t unique in the schema'
+		].sort());
+	});
+
+	test('references: Go to Definition from is-a, extends\' rule, active\'s pattern and diagnostics - also into an included file', async () => {
+		fs.writeFileSync(path.join(dir, 'included-pattern2.sch'), `<pattern xmlns="http://purl.oclc.org/dsdl/schematron" abstract="true" id="inc2"/>`);
+		const content = unprefixed(`<phase id="ph"><active pattern="p"/></phase>
+<include href="included-pattern2.sch"/>
+<pattern id="p" is-a="inc2"/>
+<pattern id="q"><rule abstract="true" id="ar"/><rule context="a"><extends rule="ar"/><assert test="1" diagnostics="d1">x</assert></rule></pattern>
+<diagnostics><diagnostic id="d1">d</diagnostic></diagnostics>`);
+		const file = path.join(dir, `definition${count++}.sch`);
+		fs.writeFileSync(file, content);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const at = (text: string) => document.positionAt(content.indexOf(text) + text.length - 1);
+		const target = (text: string) => SchReferences.definition(document, at(text))?.map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line}:${l.range.start.character}`);
+		assert.deepEqual(target('pattern="p'), [`${path.basename(file)}:3:0`]);
+		assert.deepEqual(target('is-a="inc2'), ['included-pattern2.sch:0:0']);
+		assert.deepEqual(target('rule="ar'), [`${path.basename(file)}:4:16`]);
+		assert.deepEqual(target('diagnostics="d1'), [`${path.basename(file)}:5:13`]);
 	});
 });

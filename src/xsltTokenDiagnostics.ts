@@ -35,6 +35,7 @@ import { XSpecRequired } from './xspecRequired';
 import { XSpecCallArity } from './xspecCallArity';
 import { XSpecExpectResult } from './xspecExpectResult';
 import { SchXslt2Checks } from './schXslt2Checks';
+import { SchReferences } from './schReferences';
 import { SchSchema } from './schSchema';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecDuplicateLabels } from './xspecDuplicateLabels';
@@ -3585,14 +3586,15 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}
 		if (docType === DocumentTypes.SCH && unresolvedXsltVariableReferences.length > 0) {
-			// Schematron: in an abstract pattern or group, a parameter, e.g. $ctx, is replaced by its value in each pattern
-			// with is-a - as text, so it isn't a variable reference
-			const abstract = XsltTokenDiagnostics.schAbstractPatternRanges(documentText);
+			// Schematron: an abstract pattern's parameters, e.g. $ctx, and the variables abstract rules and the rules extending
+			// them share (see schVariableAllowances)
+			const allowances = XsltTokenDiagnostics.schVariableAllowances(documentText);
 			// and SchXslt2's own variable $schxslt:phase - the phase it validates with - with the prefix sch:ns declares
 			const schxsltPrefixes = [...schNamespaces!].filter(([, uri]) => uri === 'http://dmaus.name/ns/2023/schxslt').map(([prefix]) => `$${prefix}:phase`);
 			unresolvedXsltVariableReferences = unresolvedXsltVariableReferences.filter((token) => {
 				const offset = document.offsetAt(new vscode.Position(token.line, token.startCharacter));
-				return !abstract.some(([start, end]) => offset > start && offset < end) && !schxsltPrefixes.includes(token.value);
+				const name = token.value.replace(/^\$/, '');
+				return !allowances.some(({ start, end, names }) => offset > start && offset < end && (!names || names.has(name))) && !schxsltPrefixes.includes(token.value);
 			});
 		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
@@ -3704,6 +3706,8 @@ export class XsltTokenDiagnostics {
 		if (docType === DocumentTypes.SCH) {
 			// the XSLT SchXslt2 ignores, or doesn't run, e.g. xsl:variable in a rule or xsl:value-of in a message
 			allDiagnostics.push(...SchXslt2Checks.problems(document));
+			// references to patterns, rules, diagnostics and properties that aren't declared, or aren't of the right kind
+			allDiagnostics.push(...SchReferences.problems(document));
 		}
 		if (docType === DocumentTypes.XSPEC) {
 			// the files it refers to that aren't found
@@ -4975,24 +4979,54 @@ export class XsltTokenDiagnostics {
 		return colon > 0 && document.languageId === 'xslt' && !name.startsWith('xsl:') ? 'xsl' + name.substring(colon) : name;
 	}
 
-	// the offsets of a Schematron file's abstract patterns and groups (abstract="true"): from the '<' of each to its end
-	public static schAbstractPatternRanges(text: string): [number, number][] {
+	// Schematron: where a variable reference that isn't resolved is allowed - from each start to its end, the names allowed,
+	// or all of them:
+	// - in an abstract pattern or group, its parameters, e.g. $ctx, replaced by their values as text in each pattern with
+	//   is-a - and in an abstract rule, any: its content is copied into each rule that extends it, with that rule's sch:let
+	// - in a rule that extends an abstract rule, the sch:let of that rule - and of those it extends, in turn
+	public static schVariableAllowances(text: string): { start: number, end: number, names?: Set<string> }[] {
 		const root = parseXml(text);
 		if (!root) {
 			return [];
 		}
 		const colon = root.name.indexOf(':');
 		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
-		const ranges: [number, number][] = [];
+		const isAbstract = (element: XmlElement) => element.attributes.get('abstract')?.trim() === 'true';
+		const allowances: { start: number, end: number, names?: Set<string> }[] = [];
+		const rules: XmlElement[] = [];
 		const visit = (element: XmlElement) => element.children.forEach((child) => {
-			if ((child.name === prefix + 'pattern' || child.name === prefix + 'group') && child.attributes.get('abstract')?.trim() === 'true') {
-				ranges.push([child.start, child.end]);
+			if ((child.name === prefix + 'pattern' || child.name === prefix + 'group') && isAbstract(child)) {
+				allowances.push({ start: child.start, end: child.end });
+			} else if (child.name === prefix + 'rule' && isAbstract(child)) {
+				allowances.push({ start: child.start, end: child.end });
+				rules.push(child);
 			} else {
+				if (child.name === prefix + 'rule') {
+					rules.push(child);
+				}
 				visit(child);
 			}
 		});
 		visit(root);
-		return ranges;
+		const abstractRules = new Map(rules.filter(isAbstract).map((rule) => [rule.attributes.get('id')?.trim() ?? '', rule]));
+		const extended = (rule: XmlElement) => rule.children.filter((child) => child.name === prefix + 'extends').map((child) => child.attributes.get('rule')?.trim() ?? '');
+		// the sch:let names of an abstract rule, and of those it extends
+		const lets = (id: string, seen: Set<string>): string[] => {
+			const rule = abstractRules.get(id);
+			if (!rule || seen.has(id)) {
+				return [];
+			}
+			seen.add(id);
+			return rule.children.filter((child) => child.name === prefix + 'let').map((child) => child.attributes.get('name')?.trim() ?? '')
+				.concat(extended(rule).flatMap((other) => lets(other, seen)));
+		};
+		rules.filter((rule) => !isAbstract(rule)).forEach((rule) => {
+			const names = extended(rule).flatMap((id) => lets(id, new Set()));
+			if (names.length > 0) {
+				allowances.push({ start: rule.start, end: rule.end, names: new Set(names) });
+			}
+		});
+		return allowances;
 	}
 
 	// the prefix of a Schematron file's XSLT elements (see XslLexer.schXsltPrefix) - for the document's version
