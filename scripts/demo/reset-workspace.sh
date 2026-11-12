@@ -8,6 +8,7 @@
 #   scripts/demo/reset-workspace.sh 2    # step-through debugging       (the same files)
 #   scripts/demo/reset-workspace.sh 3    # XSpec testing                (sample/xspec-demo)
 #   scripts/demo/reset-workspace.sh 4    # XSLT packages                (sample/packages-demo)
+#   scripts/demo/reset-workspace.sh 5    # Schematron                   (sample/schematron-demo)
 #
 # Open the workspace with the 'Demo: Record Videos' launch configuration. Before running this, close the editors in that
 # window (Cmd+K W); afterwards, run 'Debug: Remove All Breakpoints' there if breakpoints are left from the last take.
@@ -27,8 +28,9 @@ case "$video" in
 	1|2) source="$SAMPLES/debugger-demo"; files=(debug-xpath.xsl orders.xml) ;;
 	3) source="$SAMPLES/xspec-demo"; files=() ;;
 	4) source="$SAMPLES/packages-demo"; files=() ;;
+	5) source="$SAMPLES/schematron-demo"; files=() ;;
 	*)
-		echo "usage: $0 <video: 1, 2, 3 or 4>" >&2
+		echo "usage: $0 <video: 1, 2, 3, 4 or 5>" >&2
 		exit 1
 		;;
 esac
