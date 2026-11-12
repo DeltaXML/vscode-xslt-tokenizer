@@ -15,6 +15,7 @@ import { SchReferences } from '../../src/schReferences';
 import { SchRequired } from '../../src/schRequired';
 import { SchSnippets } from '../../src/schSnippets';
 import { XSpecRunner } from '../../src/xspecRunner';
+import { SchVariables } from '../../src/schVariables';
 
 suite('Schematron', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-'));
@@ -95,8 +96,15 @@ suite('Schematron', () => {
 			const names = (list: vscode.DocumentSymbol[]): string[] => list.filter((s) => s.name !== 'attributes').flatMap((s) => [s.name, ...names(s.children)]);
 			return names(symbols ?? []);
 		};
-		assert.deepEqual(await outline(unprefixed('<pattern id="p"><rule context="a"><assert test="1"/></rule></pattern>')), ['schema', 'pattern', 'rule', 'assert']);
-		assert.deepEqual(await outline(prefixed('<sch:pattern id="p"><sch:rule context="a"><sch:assert test="1"/></sch:rule></sch:pattern>')), ['sch:schema', 'sch:pattern', 'sch:rule', 'sch:assert']);
+		assert.deepEqual(await outline(unprefixed('<pattern id="p"><rule context="a"><assert test="1"/></rule></pattern>')), ['schema', 'pattern › p', 'rule › a', 'assert › 1']);
+		assert.deepEqual(await outline(prefixed('<sch:pattern id="p"><sch:rule context="a"><sch:assert test="1"/></sch:rule></sch:pattern>')), ['sch:schema', 'sch:pattern › p', 'sch:rule › a', 'sch:assert › 1']);
+		// each element by what identifies it: a rule by its context - an abstract rule by its id - an assertion by its id, else
+		// its test, on one line
+		assert.deepEqual(await outline(unprefixed(`<phase id="ph"><active pattern="p"/></phase><pattern is-a="ap"/>
+<pattern id="p"><rule abstract="true" id="ar"/><rule context="row
+   [@n]"><extends rule="ar"/><assert id="a1" test="1"/><report test="count(*)
+ gt 1"/></rule></pattern>`)),
+			['schema', 'phase › ph', 'active › p', 'pattern › is-a ap', 'pattern › p', 'rule › ar', 'rule › row [@n]', 'extends › ar', 'assert › a1', 'report › count(*) gt 1']);
 	});
 
 	const moduleDiagnostics = (XsltSymbolProvider as unknown as { moduleDiagnostics(d: vscode.TextDocument, parent: boolean, config: LanguageConfiguration): Promise<vscode.Diagnostic[]> }).moduleDiagnostics;
@@ -586,5 +594,87 @@ suite('Schematron', () => {
 			assert.strictEqual(XSpecRunner.syntaxExtensionsValue(xspecFor(noteSchema(' use-when="false()"'))), 'off');
 			assert.strictEqual(XSpecRunner.syntaxExtensionsValue(xspecFor('<schema xmlns="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt4"/>')), 'on');
 		});
+	});
+
+	// a document from the text, with the offset of the end of a text found in it - after another text, when given
+	const opened = async (content: string) => {
+		const file = path.join(dir, `ids${count++}.sch`);
+		fs.writeFileSync(file, content);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const at = (text: string, after = '') => document.positionAt(content.indexOf(text, content.indexOf(after)) + text.length);
+		return { document, at };
+	};
+	const labels = (items: vscode.CompletionItem[] | undefined) => (items ?? []).map((i) => typeof i.label === 'string' ? i.label : i.label.label).sort();
+
+	test('ids: auto-completion of a reference - the ids of the elements it can refer to', async () => {
+		const { document, at } = await opened(unprefixed(`<phase id="ph1"><active pattern=""/></phase><phase id="ph2"/>
+<pattern abstract="true" id="ap"><param name="c"/><param name="d" value="1"/><rule context="$c"><assert test="$d">x</assert></rule></pattern>
+<group abstract="true" id="ag"/>
+<pattern id="pi" is-a=""><param name="c" value="a"/><param name=""/></pattern>
+<pattern id="p1"><rule abstract="true" id="ar"/><rule context="a" id="concrete"><extends rule=""/><assert test="1" diagnostics="d1 ">x</assert></rule></pattern>
+<diagnostics><diagnostic id="d1">d</diagnostic><diagnostic id="d2">d</diagnostic></diagnostics>`).replace('queryBinding="xslt3"', 'queryBinding="xslt3" defaultPhase=""'));
+		assert.deepEqual(labels(SchReferences.completions(document, at('defaultPhase="'))), ['ph1', 'ph2']);
+		assert.deepEqual(labels(SchReferences.completions(document, at('active pattern="'))), ['p1', 'pi']);
+		assert.deepEqual(labels(SchReferences.completions(document, at('is-a="'))), ['ap']);
+		assert.deepEqual(labels(SchReferences.completions(document, at('extends rule="'))), ['ar']);
+		assert.deepEqual(labels(SchReferences.completions(document, at('diagnostics="d1 '))), ['d1', 'd2']);
+		// in a pattern with is-a, the abstract pattern's parameters not given yet
+		const instance = await opened(unprefixed(`<pattern abstract="true" id="ap"><param name="c"/><param name="d" value="1"/></pattern>
+<pattern id="pi" is-a="ap"><param name="c" value="a"/><param name=""/></pattern>`));
+		assert.deepEqual(labels(SchReferences.completions(instance.document, instance.at('<param name="', 'value="a"'))), ['d']);
+	});
+
+	test('ids: Find All References and Rename - in the schema and the files it includes - and a defaultPhase no phase has', async () => {
+		fs.writeFileSync(path.join(dir, 'ids-included.sch'), `<pattern xmlns="http://purl.oclc.org/dsdl/schematron" id="inc" is-a="ap"/>`);
+		const content = unprefixed(`<phase id="ph"><active pattern="ap"/></phase>
+<include href="ids-included.sch"/>
+<pattern abstract="true" id="ap"><rule context="a"><assert test="1">x</assert></rule></pattern>
+<pattern id="p2" is-a="ap"/>`).replace('queryBinding="xslt3"', 'queryBinding="xslt3" defaultPhase="nophase"');
+		const { document, at } = await opened(content);
+		const where = (locations: vscode.Location[] | undefined) => (locations ?? []).map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line}`).sort();
+		const file = path.basename(document.uri.fsPath);
+		assert.deepEqual(where(SchReferences.referenceLocations(document, at('id="a'), true)), [`${file}:1`, `${file}:3`, `${file}:4`, 'ids-included.sch:0'].sort());
+		assert.deepEqual(where(SchReferences.referenceLocations(document, at('id="a'), false)), [`${file}:1`, `${file}:4`, 'ids-included.sch:0'].sort());
+		const edit = SchReferences.rename(document, at('is-a="a'), 'table');
+		assert.strictEqual(edit?.entries().reduce((sum, [, edits]) => sum + edits.length, 0), 4);
+		assert.include(await problems(content), '0: SchXslt2: no phase has the id nophase - no pattern is active');
+	});
+
+	test('variables: Go to Definition, Find All References and Rename - as SchXslt2 scopes them', async () => {
+		const { document, at } = await opened(unprefixed(`<let name="max" value="10"/>
+<pattern abstract="true" id="ap"><rule context="$table"><assert test="count(row) le $max">x</assert></rule></pattern>
+<pattern id="pi" is-a="ap"><param name="table" value="tbl"/></pattern>
+<pattern id="p1">
+<rule abstract="true" id="ar"><assert test="$v gt 0 and $max">x</assert></rule>
+<rule context="row"><let name="v" value="@v"/><extends rule="ar"/><assert test="$v le $max and '$v' ne ''">x</assert></rule>
+<rule context="cell"><let name="max" value="5"/><assert test="$max">x</assert></rule>
+</pattern>`));
+		const where = (locations: vscode.Location[] | undefined) => (locations ?? []).map((l) => `${l.range.start.line}:${l.range.start.character}`).sort();
+		// a global, not where a rule's own declaration of the name hides it
+		const max = where(SchVariables.references(document, at('$m', '<rule context="row">'), true));
+		assert.deepEqual(max, where([...SchVariables.references(document, at('name="m'), true)!]));
+		assert.lengthOf(max, 4);
+		assert.deepEqual(where(SchVariables.definition(document, at('$m', '<rule context="row">'))), where(SchVariables.definition(document, at('name="m'))));
+		// a rule's, in the abstract rule it extends too - not in a string literal
+		assert.lengthOf(SchVariables.references(document, at('$v', '<rule context="row">'), true)!, 3);
+		// the hidden one: just the rule's own
+		assert.lengthOf(SchVariables.references(document, at('$m', '<rule context="cell">'), true)!, 2);
+		// an abstract pattern's parameter, with the sch:param of the pattern with is-a
+		const edit = SchVariables.rename(document, at('$t'), 'element');
+		assert.deepEqual(edit?.get(document.uri).map((e) => document.getText(e.range)), ['table', 'table']);
+	});
+
+	test('ids and variables: through VS Code - completion, Go to Definition, Find All References and Rename', async () => {
+		const { document, at } = await opened(unprefixed(`<let name="max" value="10"/>
+<pattern abstract="true" id="ap"><rule context="a"><assert test="$max">x</assert></rule></pattern>
+<pattern id="pi" is-a="ap"/>`));
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, at('is-a="'));
+		assert.deepEqual(labels(list.items), ['ap']);
+		const definitions = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', document.uri, at('$m'));
+		assert.deepEqual(definitions.map((l) => l.range.start.line), [1]);
+		const references = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, at('id="a'));
+		assert.deepEqual(references.map((l) => l.range.start.line).sort(), [2, 3]);
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', document.uri, at('$m'), 'limit');
+		assert.deepEqual(edit.get(document.uri).map((e) => e.newText), ['limit', 'limit']);
 	});
 });

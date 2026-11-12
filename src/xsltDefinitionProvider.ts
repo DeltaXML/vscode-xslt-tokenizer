@@ -29,6 +29,7 @@ import { XPathQuery } from './xpathQuery';
 import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XPathVersion } from './xpathVersion';
 import { XSpecNodeNames } from './xspecNodeNames';
+import { SchReferences } from './schReferences';
 
 interface ImportedGlobals {
 	href: string;
@@ -361,6 +362,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		const xspecRoot = this.docType === DocumentTypes.XSPEC ? XSpecScenario.rootCompletions(document, position) : undefined;
 		if (xspecRoot) {
 			return xspecRoot;
+		}
+		// Schematron: in a reference, e.g. is-a or extends' rule, the ids it can refer to (see SchReferences)
+		const schIds = this.docType === DocumentTypes.SCH ? SchReferences.completions(document, position) : undefined;
+		if (schIds) {
+			return new vscode.CompletionList(schIds, false);
 		}
 		let result = await this.completionItems(document, position, token, context);
 		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix - or in an XSpec file, the items

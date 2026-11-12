@@ -19,6 +19,7 @@ import { SchXslt2Checks } from './schXslt2Checks';
 import { SchReferences } from './schReferences';
 import { SchRequired } from './schRequired';
 import { SchHover } from './schHover';
+import { SchVariables } from './schVariables';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
@@ -1717,7 +1718,25 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecCompat.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 	// Schematron: Go to Definition from is-a, extends' rule, active's pattern, and diagnostics and properties (see SchReferences)
-	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'sch' }, { provideDefinition: (document, position) => SchReferences.definition(document, position) }));
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'sch' }, {
+		provideDefinition: (document, position) => SchReferences.definition(document, position) ?? SchVariables.definition(document, position)
+	}));
+	// Schematron: Find All References and Rename, for ids - patterns, rules, phases, diagnostics and properties - and for
+	// sch:let and sch:param variables (see SchReferences and SchVariables)
+	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'sch' }, {
+		provideReferences: (document, position, referenceContext) => SchReferences.referenceLocations(document, position, referenceContext.includeDeclaration) ??
+			SchVariables.references(document, position, referenceContext.includeDeclaration)
+	}));
+	context.subscriptions.push(vscode.languages.registerRenameProvider({ language: 'sch' }, {
+		prepareRename: (document, position) => {
+			const range = SchReferences.renameRange(document, position) ?? SchVariables.renameRange(document, position);
+			if (!range) {
+				throw new Error('Rename: a pattern, rule, phase, diagnostic or property id, or a variable');
+			}
+			return range;
+		},
+		provideRenameEdits: (document, position, newName) => SchReferences.rename(document, position, newName) ?? SchVariables.rename(document, position, newName)
+	}));
 	// Schematron: quick fixes for the attributes ISO Schematron requires that an element is missing (see SchRequired)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('sch', { provideCodeActions: (document, _range, context) => SchRequired.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));

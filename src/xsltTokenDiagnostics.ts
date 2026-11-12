@@ -1172,6 +1172,13 @@ export class XsltTokenDiagnostics {
 								withinTypeDeclarationAttr = false;
 								// e.g. a text value template in the element's content is not part of the last attribute
 								currentAttName = '';
+								if (docType === DocumentTypes.SCH && startTagToken && tagType === TagType.XSLTstart && tagElementName.startsWith('sch:')) {
+									// Schematron: in the outline, e.g. rule › its context, or assert › its id or test
+									const label = XsltTokenDiagnostics.schOutlineLabel(tagElementName, documentText, document.offsetAt(new vscode.Position(startTagToken.line, startTagToken.startCharacter)));
+									if (label) {
+										tagIdentifierName = label;
+									}
+								}
 								// start-tag ended, we're now within the new element scope:
 								if (docType === DocumentTypes.XSPEC && onRootStartTag) {
 									// the known namespaces, e.g. xs for xs:integer(...), as in XSLT
@@ -5030,6 +5037,23 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		return allowances;
+	}
+
+	// Schematron: what identifies an element in the outline - the first of its attributes that it has, on one line
+	private static readonly schOutlineAttributes: { [name: string]: string[] } = {
+		'sch:pattern': ['id', 'is-a'], 'sch:group': ['id', 'is-a'], 'sch:rule': ['context', 'id'], 'sch:assert': ['id', 'test'], 'sch:report': ['id', 'test'],
+		'sch:phase': ['id'], 'sch:active': ['pattern'], 'sch:extends': ['rule', 'href'], 'sch:include': ['href'], 'sch:ns': ['prefix'],
+		'sch:diagnostic': ['id'], 'sch:property': ['id']
+	};
+	private static schOutlineLabel(name: string, text: string, offset: number) {
+		for (const attribute of XsltTokenDiagnostics.schOutlineAttributes[name] ?? []) {
+			const value = RecordTypes.attributeOfElementAt(text, offset, attribute)?.replace(/\s+/g, ' ').trim();
+			if (value) {
+				const label = attribute === 'is-a' ? `is-a ${value}` : value;
+				return label.length > 60 ? label.substring(0, 59) + '…' : label;
+			}
+		}
+		return undefined;
 	}
 
 	// the prefix of a Schematron file's XSLT elements (see XslLexer.schXsltPrefix) - for the document's version

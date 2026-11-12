@@ -40,6 +40,10 @@ interface Reference {
 // When a file brought in can't be read, a reference isn't reported as not found, as it may be declared there
 export class SchReferences {
 	public static readonly code = 'schxslt2-reference';
+	// the elements whose ids each attribute refers to
+	private static readonly declaredBy: { [attribute: string]: string[] } = {
+		'pattern': ['pattern', 'group'], 'is-a': ['pattern', 'group'], 'rule': ['rule'], 'diagnostics': ['diagnostic'], 'properties': ['property'], 'defaultPhase': ['phase']
+	};
 
 	public static problems(document: vscode.TextDocument): vscode.Diagnostic[] {
 		const schema = SchReferences.schema(document);
@@ -106,6 +110,10 @@ export class SchReferences {
 				} else if (rules.length === 0 && complete) {
 					add(reference.start, reference.end, `no abstract rule has the id ${reference.id}`);
 				}
+			} else if (reference.attribute === 'defaultPhase') {
+				if (complete && byId(reference.id, ['phase']).length === 0 && reference.id !== '#ALL') {
+					add(reference.start, reference.end, `no phase has the id ${reference.id} - no pattern is active`, vscode.DiagnosticSeverity.Warning);
+				}
 			} else if (complete && byId(reference.id, [reference.attribute === 'diagnostics' ? 'diagnostic' : 'property']).length === 0) {
 				add(reference.start, reference.end, `no ${reference.attribute === 'diagnostics' ? 'diagnostic' : 'property'} has the id ${reference.id} - it's left out of the report`, vscode.DiagnosticSeverity.Warning);
 			}
@@ -157,8 +165,7 @@ export class SchReferences {
 		if (!reference) {
 			return undefined;
 		}
-		const locals = reference.attribute === 'rule' ? ['rule'] : reference.attribute === 'diagnostics' ? ['diagnostic'] :
-			reference.attribute === 'properties' ? ['property'] : ['pattern', 'group'];
+		const locals = SchReferences.declaredBy[reference.attribute];
 		return schema.declared.filter((d) => d.element.attributes.get('id')?.trim() === reference.id && locals.includes(d.local)).map((d) => {
 			const lines = d.text.substring(0, d.element.start).split('\n');
 			const start = new vscode.Position(lines.length - 1, lines[lines.length - 1].length);
@@ -177,9 +184,11 @@ export class SchReferences {
 		const colon = root.name.indexOf(':');
 		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
 		const declared: Declared[] = [];
+		const files: { file: string, text: string, prefix: string }[] = [];
 		let complete = true;
 		const seen = new Set<string>();
 		const collect = (element: XmlElement, file: string, fileText: string, elementPrefix: string) => {
+			files.push({ file, text: fileText, prefix: elementPrefix });
 			const elements = [element, ...descendants(element)];
 			elements.filter((e) => e.name.startsWith(elementPrefix) && !e.name.substring(elementPrefix.length).includes(':') && e.attributes.has('id'))
 				.forEach((e) => declared.push({ element: e, local: e.name.substring(elementPrefix.length), file, text: fileText }));
@@ -207,7 +216,7 @@ export class SchReferences {
 			});
 		};
 		collect(root, document.fileName, text, prefix);
-		return { prefix, declared, complete };
+		return { prefix, declared, complete, files };
 	}
 
 	// the references in the schema: active's pattern, is-a, extends' rule, and an assertion's diagnostics and properties
@@ -217,7 +226,8 @@ export class SchReferences {
 			return [];
 		}
 		const attributes: { [local: string]: string[] } = {
-			active: ['pattern'], pattern: ['is-a'], group: ['is-a'], extends: ['rule'], assert: ['diagnostics', 'properties'], report: ['diagnostics', 'properties']
+			active: ['pattern'], pattern: ['is-a'], group: ['is-a'], extends: ['rule'], assert: ['diagnostics', 'properties'], report: ['diagnostics', 'properties'],
+			schema: ['defaultPhase']
 		};
 		const references: Reference[] = [];
 		[root, ...descendants(root)].forEach((element) => {
@@ -234,6 +244,142 @@ export class SchReferences {
 			}
 		});
 		return references;
+	}
+
+	// the id at the position - in a reference, or an element's id attribute - with the kinds of element that declare it
+	private static idAt(document: vscode.TextDocument, position: vscode.Position): { id: string, locals: string[], start: number, end: number } | undefined {
+		const text = document.getText();
+		const root = parseXml(text);
+		if (!root) {
+			return undefined;
+		}
+		const colon = root.name.indexOf(':');
+		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+		const offset = document.offsetAt(position);
+		const reference = SchReferences.references(text, prefix).find((r) => offset >= r.start && offset <= r.end);
+		if (reference) {
+			return { id: reference.id, locals: SchReferences.declaredBy[reference.attribute], start: reference.start, end: reference.end };
+		}
+		const element = [root, ...descendants(root)].filter((e) => e.start < offset && offset < e.contentStart).pop();
+		const local = element?.name.startsWith(prefix) ? element.name.substring(prefix.length) : undefined;
+		const value = element && local && ['pattern', 'group', 'rule', 'diagnostic', 'property', 'phase'].includes(local) ? SchReferences.attributeValue(text, element, 'id') : undefined;
+		if (!value || offset < value.start || offset > value.end || !value.value.trim()) {
+			return undefined;
+		}
+		const locals = local === 'pattern' || local === 'group' ? ['pattern', 'group'] : [local!];
+		return { id: value.value.trim(), locals, start: value.start, end: value.end };
+	}
+
+	// the id's declarations - their id attributes - and references, in the schema and the files it brings in
+	private static occurrences(document: vscode.TextDocument, id: string, locals: string[]): { location: vscode.Location, isDeclaration: boolean }[] {
+		const schema = SchReferences.schema(document);
+		if (!schema) {
+			return [];
+		}
+		const location = (file: string, text: string, start: number, end: number) => {
+			const position = (offset: number) => {
+				const lines = text.substring(0, offset).split('\n');
+				return new vscode.Position(lines.length - 1, lines[lines.length - 1].length);
+			};
+			return new vscode.Location(vscode.Uri.file(file), new vscode.Range(position(start), position(end)));
+		};
+		const declarations = schema.declared.filter((d) => locals.includes(d.local) && d.element.attributes.get('id')?.trim() === id).flatMap((d) => {
+			const value = SchReferences.attributeValue(d.text, d.element, 'id');
+			if (!value) {
+				return [];
+			}
+			const leading = value.value.length - value.value.trimStart().length;
+			return [{ location: location(d.file, d.text, value.start + leading, value.start + leading + id.length), isDeclaration: true }];
+		});
+		const references = schema.files.flatMap((f) => SchReferences.references(f.text, f.prefix)
+			.filter((r) => r.id === id && SchReferences.declaredBy[r.attribute].some((l) => locals.includes(l)))
+			.map((r) => ({ location: location(f.file, f.text, r.start, r.end), isDeclaration: false })));
+		return declarations.concat(references);
+	}
+
+	// Find All References: of the id at the position - its declarations, if asked for, and references
+	public static referenceLocations(document: vscode.TextDocument, position: vscode.Position, includeDeclaration: boolean): vscode.Location[] | undefined {
+		const at = SchReferences.idAt(document, position);
+		if (!at) {
+			return undefined;
+		}
+		return SchReferences.occurrences(document, at.id, at.locals).filter((o) => includeDeclaration || !o.isDeclaration).map((o) => o.location);
+	}
+
+	// Rename: the id at the position, in its declarations and references - in the files the schema brings in too
+	public static renameRange(document: vscode.TextDocument, position: vscode.Position): vscode.Range | undefined {
+		const at = SchReferences.idAt(document, position);
+		return at ? new vscode.Range(document.positionAt(at.start), document.positionAt(at.end)) : undefined;
+	}
+
+	public static rename(document: vscode.TextDocument, position: vscode.Position, newName: string): vscode.WorkspaceEdit | undefined {
+		const at = SchReferences.idAt(document, position);
+		if (!at) {
+			return undefined;
+		}
+		const edit = new vscode.WorkspaceEdit();
+		SchReferences.occurrences(document, at.id, at.locals).forEach(({ location }) => edit.replace(location.uri, location.range, newName));
+		return edit;
+	}
+
+	// auto-completion of a reference: the ids of the elements it can refer to - for is-a, the abstract patterns, or groups;
+	// for extends, the abstract rules; for active, the patterns and groups that aren't abstract - and in a pattern with
+	// is-a, an sch:param's name: the abstract pattern's parameters
+	public static completions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const root = parseXml(text);
+		const schema = root ? SchReferences.schema(document) : undefined;
+		if (!root || !schema) {
+			return undefined;
+		}
+		const prefix = schema.prefix;
+		const offset = document.offsetAt(position);
+		const element = [root, ...descendants(root)].filter((e) => e.start < offset && offset < e.contentStart).pop();
+		const local = element?.name.startsWith(prefix) ? element.name.substring(prefix.length) : undefined;
+		if (!element || !local) {
+			return undefined;
+		}
+		const attributes: { [local: string]: string[] } = {
+			active: ['pattern'], pattern: ['is-a'], group: ['is-a'], extends: ['rule'], assert: ['diagnostics', 'properties'], report: ['diagnostics', 'properties'],
+			schema: ['defaultPhase'], param: ['name']
+		};
+		for (const attribute of attributes[local] ?? []) {
+			const value = SchReferences.attributeValue(text, element, attribute);
+			if (!value || offset < value.start || offset > value.end) {
+				continue;
+			}
+			// the token being typed: for a list, e.g. diagnostics="d1 d2", just the one at the position
+			const before = value.value.substring(0, offset - value.start).replace(/^[\s\S]*\s/, '');
+			const after = value.value.substring(offset - value.start).replace(/\s[\s\S]*$/, '');
+			const range = new vscode.Range(document.positionAt(offset - before.length), document.positionAt(offset + after.length));
+			const isAbstract = (e: XmlElement) => e.attributes.get('abstract')?.trim() === 'true';
+			let items: { id: string, detail?: string }[];
+			if (attribute === 'name') {
+				// a parameter of a pattern with is-a: those its abstract pattern declares, or else refers to
+				const isA = element.parent?.attributes.get('is-a')?.trim();
+				const template = isA ? schema.declared.find((d) => d.element.attributes.get('id')?.trim() === isA && isAbstract(d.element)) : undefined;
+				if (!template) {
+					return undefined;
+				}
+				const templatePrefix = schema.files.find((f) => f.file === template.file)?.prefix ?? prefix;
+				const declaredParams = template.element.children.filter((c) => c.name === templatePrefix + 'param').map((p) => p.attributes.get('name')?.trim() ?? '');
+				const used = [...template.text.substring(template.element.start, template.element.end).matchAll(/\$([\w.-]+)/g)].map((m) => m[1]);
+				const supplied = element.parent!.children.filter((c) => c !== element && c.name === prefix + 'param').map((p) => p.attributes.get('name')?.trim());
+				items = [...new Set(declaredParams.length > 0 ? declaredParams : used)].filter((n) => n && !supplied.includes(n)).map((id) => ({ id, detail: `parameter of ${isA}` }));
+			} else {
+				const kinds = SchReferences.declaredBy[attribute];
+				items = schema.declared.filter((d) => kinds.includes(d.local) &&
+					(attribute === 'is-a' ? isAbstract(d.element) && d.local === local : attribute === 'rule' ? isAbstract(d.element) : attribute === 'pattern' ? !isAbstract(d.element) : true))
+					.map((d) => ({ id: d.element.attributes.get('id')!.trim(), detail: `${isAbstract(d.element) ? 'abstract ' : ''}${d.local}${d.file !== document.fileName ? ` - ${d.file.replace(/^.*[\\/]/, '')}` : ''}` }));
+			}
+			return [...new Map(items.map((item) => [item.id, item])).values()].map((item) => {
+				const completion = new vscode.CompletionItem(item.id, vscode.CompletionItemKind.Reference);
+				completion.detail = item.detail;
+				completion.range = range;
+				return completion;
+			});
+		}
+		return undefined;
 	}
 
 	// an attribute's value as written, with its offsets

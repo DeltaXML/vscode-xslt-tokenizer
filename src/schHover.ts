@@ -222,11 +222,14 @@ export class SchHover {
 			ancestors.push(e);
 		}
 		const markdown = new vscode.MarkdownString();
-		const abstractPattern = ancestors.find((a) => (context.local(a) === 'pattern' || context.local(a) === 'group') && a.attributes.get('abstract')?.trim() === 'true');
+		// an abstract pattern's parameter - a name it declares, or a pattern with is-a for it supplies: SchXslt2 replaces only those
+		const all = [ancestors[ancestors.length - 1], ...descendants(ancestors[ancestors.length - 1])];
+		const isParameterOf = (pattern: XmlElement) => SchHover.children(context, pattern, 'param').some((p) => p.attributes.get('name')?.trim() === name) ||
+			all.some((p) => context.local(p) === 'param' && p.attributes.get('name')?.trim() === name && p.parent?.attributes.get('is-a')?.trim() === pattern.attributes.get('id')?.trim());
+		const abstractPattern = ancestors.find((a) => (context.local(a) === 'pattern' || context.local(a) === 'group') && a.attributes.get('abstract')?.trim() === 'true' && isParameterOf(a));
 		if (abstractPattern) {
 			const id = abstractPattern.attributes.get('id')?.trim();
-			const root = ancestors[ancestors.length - 1];
-			const instances = [root, ...descendants(root)].filter((p) => p.attributes.get('is-a')?.trim() === id);
+			const instances = all.filter((p) => p.attributes.get('is-a')?.trim() === id);
 			markdown.appendCodeblock(`$${name}`, 'xml').appendMarkdown(`Parameter of the abstract ${context.local(abstractPattern)} \`${id}\` - replaced, as text, by each value:\n`);
 			const lines = instances.map((instance) => {
 				const value = SchHover.children(context, instance, 'param').find((p) => p.attributes.get('name')?.trim() === name)?.attributes.get('value');
