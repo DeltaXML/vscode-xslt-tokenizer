@@ -7,6 +7,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
+import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
+import { SchConfiguration } from '../../src/languageConfigurations';
+import { LanguageConfiguration } from '../../src/xslLexer';
 
 suite('Schematron', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-'));
@@ -85,5 +88,51 @@ suite('Schematron', () => {
 		};
 		assert.deepEqual(await outline(unprefixed('<pattern id="p"><rule context="a"><assert test="1"/></rule></pattern>')), ['schema', 'pattern', 'rule', 'assert']);
 		assert.deepEqual(await outline(prefixed('<sch:pattern id="p"><sch:rule context="a"><sch:assert test="1"/></sch:rule></sch:pattern>')), ['sch:schema', 'sch:pattern', 'sch:rule', 'sch:assert']);
+	});
+
+	const moduleDiagnostics = (XsltSymbolProvider as unknown as { moduleDiagnostics(d: vscode.TextDocument, parent: boolean, config: LanguageConfiguration): Promise<vscode.Diagnostic[]> }).moduleDiagnostics;
+	const problems = async (content: string) => {
+		const file = path.join(dir, `problems${count++}.sch`);
+		fs.writeFileSync(file, content);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const diagnostics = await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration);
+		return diagnostics.filter((d) => d.severity !== vscode.DiagnosticSeverity.Hint).map((d) => `${d.range.start.line}: ${d.message}`);
+	};
+
+	test('variables: sch:let and sch:param, in scope as SchXslt2 declares them - the schema\'s and a phase\'s are global', async () => {
+		assert.deepEqual(await problems(unprefixed(`
+<let name="g" value="1"/>
+<param name="gp" value="2"/>
+<phase id="ph"><let name="phv" value="3"/><active pattern="p"/></phase>
+<pattern id="p">
+<let name="pv" value="4"/>
+<rule context="a">
+<let name="rv" value="5"/>
+<assert test="$g + $gp + $phv + $pv + $rv + $undeclared">x</assert>
+</rule>
+</pattern>`)), ['9: XPath: The variable/parameter $undeclared cannot be resolved']);
+	});
+
+	test('variables: a rule\'s sch:let is in scope in the rule, and a pattern\'s in the pattern - not in others', async () => {
+		assert.deepEqual(await problems(unprefixed(`
+<pattern id="p1"><let name="pv" value="1"/>
+<rule context="a"><let name="rv" value="2"/><assert test="$pv + $rv">x</assert></rule>
+<rule context="b"><assert test="$rv">x</assert></rule>
+</pattern>
+<pattern id="p2"><rule context="c"><assert test="$pv">x</assert></rule></pattern>`)),
+		['4: XPath: The variable/parameter $rv cannot be resolved', '6: XPath: The variable/parameter $pv cannot be resolved']);
+	});
+
+	test('variables: an abstract pattern\'s parameters are replaced as text, so they aren\'t variable references - also with a prefix', async () => {
+		assert.deepEqual(await problems(unprefixed(`
+<pattern abstract="true" id="ap"><rule context="$ctx"><assert test="$param1">y</assert></rule></pattern>
+<pattern is-a="ap" id="p"><param name="ctx" value="a"/><param name="param1" value="true()"/></pattern>`)), []);
+		assert.deepEqual(await problems(prefixed(`
+<sch:group abstract="true" id="ag"><sch:rule context="$ctx"><sch:assert test="$p">y</sch:assert></sch:rule></sch:group>`)), []);
+	});
+
+	test('a new file: auto-completion of the outermost element offers a Schematron schema', async () => {
+		const names = await completions('<|');
+		assert.include(names, 'Schematron schema', names.join(', '));
 	});
 });

@@ -3543,6 +3543,15 @@ export class XsltTokenDiagnostics {
 		if (hasItemTypes) {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}
+		if (docType === DocumentTypes.SCH && unresolvedXsltVariableReferences.length > 0) {
+			// Schematron: in an abstract pattern or group, a parameter, e.g. $ctx, is replaced by its value in each pattern
+			// with is-a - as text, so it isn't a variable reference
+			const abstract = XsltTokenDiagnostics.schAbstractPatternRanges(documentText);
+			unresolvedXsltVariableReferences = unresolvedXsltVariableReferences.filter((token) => {
+				const offset = document.offsetAt(new vscode.Position(token.line, token.startCharacter));
+				return !abstract.some(([start, end]) => offset > start && offset < end);
+			});
+		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		if (docType === DocumentTypes.XSLT && !hasItemTypes) {
 			XsltTokenDiagnostics.checkNotesBeforeXSLT40(document, problemTokens);
@@ -4847,6 +4856,26 @@ export class XsltTokenDiagnostics {
 			return 'sch:' + name.substring(colon + 1);
 		}
 		return colon > 0 && document.languageId === 'xslt' && !name.startsWith('xsl:') ? 'xsl' + name.substring(colon) : name;
+	}
+
+	// the offsets of a Schematron file's abstract patterns and groups (abstract="true"): from the '<' of each to its end
+	public static schAbstractPatternRanges(text: string): [number, number][] {
+		const root = parseXml(text);
+		if (!root) {
+			return [];
+		}
+		const colon = root.name.indexOf(':');
+		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+		const ranges: [number, number][] = [];
+		const visit = (element: XmlElement) => element.children.forEach((child) => {
+			if ((child.name === prefix + 'pattern' || child.name === prefix + 'group') && child.attributes.get('abstract')?.trim() === 'true') {
+				ranges.push([child.start, child.end]);
+			} else {
+				visit(child);
+			}
+		});
+		visit(root);
+		return ranges;
 	}
 
 	// the prefix of a Schematron file's sch:schema (or sch:library), e.g. iso for iso:schema - '' when it has none, with

@@ -868,6 +868,8 @@ export class XslLexer {
         this.isXSLT40 = false;
         this.setNativePrefix(this.languageConfiguration.nativePrefix);
         let rootNamed = false;
+        // the name of the top-level element the lexer is in, when it's native, e.g. phase in a Schematron schema
+        let currentRootChildName = '';
         let contextGlobalStart = 0;
         const rootAttributes = new Map<string, string>();
         this.lineNumber = 0;
@@ -1050,7 +1052,12 @@ export class XslLexer {
                                 rootNamed = true;
                                 this.useRootPrefix(tokenChars.join(''));
                             }
-                            let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag);
+                            // the top-level element the tag is in, e.g. a Schematron phase, for its sch:let
+                            const rootChildName = !isCloseTag && xmlElementStack.length === 2 ? currentRootChildName : undefined;
+                            let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag, rootChildName);
+                            if (isRootChildStartTag) {
+                                currentRootChildName = elementProperties.isNative ? elementProperties.nativeName : '';
+                            }
                             isNativeElement = elementProperties.isNative;
                             tagGlobalInstructionType = elementProperties.instructionType;
                             tagElementName = elementProperties.nativeName;
@@ -1745,7 +1752,7 @@ export class XslLexer {
         return expandTextValue;
     }
 
-    protected getElementProperties(tokenChars: string[], isRootChild: boolean): ElementProperties {
+    protected getElementProperties(tokenChars: string[], isRootChild: boolean, rootChildName?: string): ElementProperties {
         let elementName= tokenChars.join('');
         let isNative = (this.nativePrefixLength === 0 && elementName.indexOf(':') === -1) || (tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.nativePrefix + ':'));
         let instructionType = GlobalInstructionType.Unknown;
@@ -1759,10 +1766,14 @@ export class XslLexer {
                 instructionType = GlobalInstructionType.Import;
             }
         } else if (isNative && this.languageConfiguration.docType === DocumentTypes.SCH) {
-            // Schematron: not XSLT's declarations - e.g. sch:include is replaced by a Schematron element, not imported
+            // Schematron: not XSLT's declarations - e.g. sch:include is replaced by a Schematron element, not imported. Its
+            // global variables are those SchXslt2 makes global: the schema's sch:param and sch:let, and a phase's sch:let.
+            // A pattern's or rule's sch:let is in scope in the pattern or rule, as a local variable is
             nativeName = elementName.substring(this.nativePrefixLength);
             if (isRootChild && nativeName === 'param') {
                 instructionType = GlobalInstructionType.Parameter;
+            } else if ((isRootChild || rootChildName === 'phase') && nativeName === 'let') {
+                instructionType = GlobalInstructionType.Variable;
             }
         } else if (isNative && this.languageConfiguration.docType === DocumentTypes.XSPEC) {
             nativeName = elementName.substring(this.nativePrefixLength);

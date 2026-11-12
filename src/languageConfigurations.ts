@@ -7,6 +7,7 @@ import { DCPSnippets } from './dcpSnippets';
 import { XSLTSnippets } from './xsltSnippets';
 import { XMLSnippets } from './xmlSnippets';
 import { SchSchema } from './schSchema';
+import { SchSnippets } from './schSnippets';
 import { XSpecSchema } from './xspecSchema';
 
 export class XSLTConfiguration {
@@ -85,21 +86,21 @@ export class DCPConfiguration {
 }
 
 export class SchConfiguration {
-	// initial configuration is for basic Schematron support only
+	// ISO Schematron, as SchXslt2 - the Schematron processor bundled with XSpec - implements it (see SchSchema)
 	public static configuration: LanguageConfiguration = {
 		// with ISO Schematron 2025's visit-each (rule), documents (pattern) and from and when (phase)
 		expressionAtts: ['context', 'test', 'subject', 'path', 'select', 'value', 'visit-each', 'documents', 'from', 'when'],
 		// SchXslt2 copies role, flag and severity into the SVRL report as attribute value templates, e.g. role="{$level}"
 		// (a variable on its own, e.g. severity="$level", also works)
 		avtAtts: ['role', 'flag', 'severity'],
-		variableElementNames: ['stringParameter', 'booleanParameter'],
-		linkElementAttrNames: ['file', 'path'],
+		// as the linter compares them, with the prefix sch (see XsltTokenDiagnostics.xsltElementName)
+		variableElementNames: ['sch:let', 'sch:param'],
 		nativePrefix: '',
 		tvtAttributes: [],
 		nonNativeAvts: false,
 		schemaData: new SchSchema(),
 		docType: DocumentTypes.SCH,
-		rootElementSnippets: DCPSnippets.xsltRootTags
+		rootElementSnippets: SchSnippets.rootTags
 	}; 
 }
 
