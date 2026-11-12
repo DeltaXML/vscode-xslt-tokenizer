@@ -365,7 +365,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								// xsl:template, where the module's prefix for XSLT is x (and an XSpec file's t:scenario as x:scenario)
 								// - and with none, e.g. a Schematron file's </rule> as sch:rule
 								const nativePrefix = this.xslLexer.nativePrefix;
-								const isNativeEndTag = !!writtenEndTagName && (nativePrefix ? writtenEndTagName.startsWith(nativePrefix + ':') : !writtenEndTagName.includes(':'));
+								// and an XSLT element's within a Schematron schema, e.g. </xsl:function>
+								const xsltWithin = this.xslLexer.xsltPrefixWithin;
+								const isNativeEndTag = !!writtenEndTagName && ((nativePrefix ? writtenEndTagName.startsWith(nativePrefix + ':') : !writtenEndTagName.includes(':')) ||
+									(!!xsltWithin && writtenEndTagName.startsWith(xsltWithin + ':')));
 								const endTagName = isNativeEndTag ? XsltTokenDiagnostics.xsltElementName(writtenEndTagName!, document) : writtenEndTagName;
 								if (endTagName && openElementNames.length > 0) {
 									const matchIndex = openElementNames.lastIndexOf(endTagName);

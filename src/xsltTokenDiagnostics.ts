@@ -671,7 +671,7 @@ export class XsltTokenDiagnostics {
 		// Schematron: SchXslt2 declares only the sch:ns prefixes in its validation stylesheet - so they're the prefixes for the
 		// schema's XPath, wherever sch:ns is, and an xmlns declaration doesn't apply. An XSLT element, e.g. xsl:function, is
 		// copied as it is, so within one its in-scope namespaces apply too
-		const schNamespaces = docType === DocumentTypes.SCH ? XsltTokenDiagnostics.schNamespaces(documentText) : undefined;
+		const schNamespaces = docType === DocumentTypes.SCH ? XslLexer.schNamespaces(documentText) : undefined;
 		const schPrefixes = schNamespaces ? [...schNamespaces.keys(), 'xml'] : undefined;
 		const withinSchXslt = () => tagElementName.startsWith('xsl:') || elementStack.some((element) => element.symbolName.startsWith('xsl:'));
 		// the namespace prefixes for XPath and QNames: the fixed ones, or else the in-scope ones
@@ -4869,30 +4869,12 @@ export class XsltTokenDiagnostics {
 			return 'x' + name.substring(colon);
 		}
 		if (document.languageId === 'sch') {
-			// a Schematron element - with the prefix of sch:schema, or none - is compared as sch:rule (see SchSchema)
-			return 'sch:' + name.substring(colon + 1);
+			// a Schematron element - with the prefix of sch:schema, or none - is compared as sch:rule (see SchSchema), and an
+			// XSLT element, e.g. xsl:function, as xsl:function
+			const isXslt = colon > 0 && name.substring(0, colon) === XsltTokenDiagnostics.schXsltPrefixOf(document);
+			return (isXslt ? 'xsl:' : 'sch:') + name.substring(colon + 1);
 		}
 		return colon > 0 && document.languageId === 'xslt' && !name.startsWith('xsl:') ? 'xsl' + name.substring(colon) : name;
-	}
-
-	// the namespace bindings of a Schematron file's sch:ns elements: prefix to URI
-	public static schNamespaces(text: string): Map<string, string> {
-		const root = parseXml(text);
-		const bindings = new Map<string, string>();
-		if (!root) {
-			return bindings;
-		}
-		const colon = root.name.indexOf(':');
-		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
-		const visit = (element: XmlElement) => element.children.forEach((child) => {
-			const ns = child.name === prefix + 'ns' ? [child.attributes.get('prefix')?.trim(), child.attributes.get('uri')?.trim()] : undefined;
-			if (ns && ns[0] && ns[1] !== undefined) {
-				bindings.set(ns[0], ns[1]);
-			}
-			visit(child);
-		});
-		visit(root);
-		return bindings;
 	}
 
 	// the offsets of a Schematron file's abstract patterns and groups (abstract="true"): from the '<' of each to its end
@@ -4913,6 +4895,18 @@ export class XsltTokenDiagnostics {
 		});
 		visit(root);
 		return ranges;
+	}
+
+	// the prefix of a Schematron file's XSLT elements (see XslLexer.schXsltPrefix) - for the document's version
+	private static schXsltPrefixCache: { uri: string, version: number, prefix: string } | undefined;
+	private static schXsltPrefixOf(document: vscode.TextDocument) {
+		const cached = XsltTokenDiagnostics.schXsltPrefixCache;
+		if (cached && cached.uri === document.uri.toString() && cached.version === document.version) {
+			return cached.prefix;
+		}
+		const prefix = XslLexer.schXsltPrefix(document.getText());
+		XsltTokenDiagnostics.schXsltPrefixCache = { uri: document.uri.toString(), version: document.version, prefix };
+		return prefix;
 	}
 
 	// the prefix of a Schematron file's sch:schema (or sch:library), e.g. iso for iso:schema - '' when it has none, with

@@ -93,8 +93,11 @@ export class SchConfiguration {
 		// SchXslt2 copies role, flag and severity into the SVRL report as attribute value templates, e.g. role="{$level}"
 		// (a variable on its own, e.g. severity="$level", also works)
 		avtAtts: ['role', 'flag', 'severity'],
-		// as the linter compares them, with the prefix sch (see XsltTokenDiagnostics.xsltElementName)
-		variableElementNames: ['sch:let', 'sch:param'],
+		// as the linter compares them, with the prefix sch (see XsltTokenDiagnostics.xsltElementName) - and those of its XSLT,
+		// e.g. in an xsl:function
+		variableElementNames: ['sch:let', 'sch:param', 'xsl:variable', 'xsl:param'],
+		// its XSLT elements, e.g. xsl:function and xsl:key, which SchXslt2 copies into its validation stylesheet
+		embeddedXslt: { expressionAtts: XSLTConfiguration.expressionAtts, avtAtts: XSLTConfiguration.avtAtts },
 		nativePrefix: '',
 		tvtAttributes: [],
 		nonNativeAvts: false,

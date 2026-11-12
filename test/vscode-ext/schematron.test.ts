@@ -150,4 +150,41 @@ suite('Schematron', () => {
 		assert.deepEqual(await problems(`<schema xmlns="http://purl.oclc.org/dsdl/schematron" ${xmlns} queryBinding="xslt3">
 <xsl:key name="k" match="a" use="xs:integer(@n)"/></schema>`), []);
 	});
+
+	const xsl = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema"';
+
+	test('XSLT: a function declared with xsl:function - its parameters, variables and namespaces checked as in a stylesheet', async () => {
+		assert.deepEqual(await problems(unprefixed(`<ns prefix="f" uri="urn:f"/>
+<xsl:function ${xsl} name="f:x" as="xs:integer"><xsl:param name="a" as="xs:integer"/><xsl:variable name="v" select="$a + 1"/><xsl:sequence select="$v cast as xs:integer"/></xsl:function>
+<pattern><rule context="a"><assert test="f:x(1) eq 2 and f:x() and f:nope(1)">x</assert></rule></pattern>`)),
+		["3: XPath: Function: 'f:x' with 0 arguments not found", "3: XPath: Function: 'f:nope' with 1 arguments not found"]);
+	});
+
+	test('XSLT: the XPath of an XSLT element is checked, e.g. xsl:key\'s use', async () => {
+		assert.deepEqual(await problems(unprefixed(`<xsl:key ${xsl} name="k" match="a" use="xs:integer(@n) + $undeclared"/>
+<pattern><rule context="a"><assert test="key('k', 1)">x</assert></rule></pattern>`)), ['1: XPath: The variable/parameter $undeclared cannot be resolved']);
+	});
+
+	test('XSLT: the functions of a module included with xsl:include', async () => {
+		fs.writeFileSync(path.join(dir, 'lib.xsl'), `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:g="urn:f">
+<xsl:function name="g:lib"><xsl:param name="p"/><xsl:sequence select="$p"/></xsl:function></xsl:stylesheet>`);
+		assert.deepEqual(await problems(unprefixed(`<ns prefix="f" uri="urn:f"/><xsl:include ${xsl} href="lib.xsl"/>
+<pattern><rule context="a"><assert test="f:lib(1) and f:lib()">x</assert></rule></pattern>`)), ["2: XPath: Function: 'f:lib' with 0 arguments not found"]);
+	});
+
+	test('XSLT: a top-level XSLT declaration that SchXslt2 ignores, e.g. xsl:param, declares nothing', async () => {
+		assert.deepEqual(await problems(unprefixed(`<xsl:param ${xsl} name="OTP" select="false()"/>
+<pattern><rule context="a"><assert test="$OTP">x</assert></rule></pattern>`)), ['2: XPath: The variable/parameter $OTP cannot be resolved']);
+	});
+
+	test('formatting: an XSLT element\'s end tag is outdented', async () => {
+		const file = path.join(dir, `format${count++}.sch`);
+		fs.writeFileSync(file, unprefixed(`<xsl:function ${xsl} name="f:x">\n<xsl:sequence select="1"/>\n</xsl:function>\n<pattern/>`));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const edits = await vscode.commands.executeCommand<vscode.TextEdit[]>('vscode.executeFormatDocumentProvider', document.uri, { tabSize: 2, insertSpaces: true });
+		const edit = new vscode.WorkspaceEdit();
+		edit.set(document.uri, edits ?? []);
+		await vscode.workspace.applyEdit(edit);
+		assert.deepEqual(document.getText().split('\n').slice(2, 5), ['    <xsl:sequence select="1"/>', '  </xsl:function>', '  <pattern/>']);
+	});
 });

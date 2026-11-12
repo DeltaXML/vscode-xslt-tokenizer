@@ -8,6 +8,7 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 
+import { XmlElement as ParsedElement, parseXml } from './xspecXml';
 import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType, XmlLessThan } from "./xpLexer";
 import { SchemaData } from "./xsltSchema";
 import { Snippet} from './xsltSnippets';
@@ -160,6 +161,9 @@ export interface LanguageConfiguration {
     rootElementSnippets?: Snippet[];
     elementSnippets?: Snippet[];
     isVersion4?: boolean;
+    // XSLT within another language, e.g. a Schematron schema's xsl:function: the attributes of its XSLT elements that are
+    // XPath expressions and attribute value templates
+    embeddedXslt?: { expressionAtts: string[], avtAtts: string[] };
 }
 
 export interface GlobalInstructionData {
@@ -258,6 +262,15 @@ export class XslLexer {
     // stylesheet, transform or package with another, e.g. xslt:stylesheet in some W3C tests (see useRootPrefix)
     public nativePrefix = '';
     private nativePrefixLength = 0;
+    // Schematron: the prefix of its XSLT elements, e.g. xsl:function (see schXsltPrefix) - and whether the tag being
+    // lexed is one
+    private embeddedXsltPrefix = '';
+    private tagIsEmbeddedXslt = false;
+
+    // the prefix of the XSLT elements within another language, e.g. a Schematron schema - '' when there are none
+    public get xsltPrefixWithin() {
+        return this.embeddedXsltPrefix;
+    }
     private dtdNesting = 0;
     // within a <!...>: its last two characters, the quote of a literal it's in, whether it's in a processing
     // instruction, and whether a comment in a DOCTYPE's internal subset is followed by more of the DOCTYPE
@@ -328,11 +341,16 @@ export class XslLexer {
     }
 
     public isAvtAtt(name: string) {
-        return this.languageConfiguration.avtAtts? this.languageConfiguration.avtAtts.indexOf(name) > -1: false;
+        const avtAtts = this.tagIsEmbeddedXslt ? this.languageConfiguration.embeddedXslt?.avtAtts : this.languageConfiguration.avtAtts;
+        return avtAtts ? avtAtts.indexOf(name) > -1 : false;
     }
 
     public isExpressionAtt(name: string, parentElement: string) {
-        if (name === 'use' && (parentElement === 'context-item' || parentElement === 'global-context-item')) {
+        if (this.tagIsEmbeddedXslt) {
+            // an XSLT element within, e.g., a Schematron schema: XSLT's expressions
+            return name === 'use' && (parentElement === 'context-item' || parentElement === 'global-context-item') ? false :
+                !!this.languageConfiguration.embeddedXslt?.expressionAtts.includes(name);
+        } else if (name === 'use' && (parentElement === 'context-item' || parentElement === 'global-context-item')) {
             return false;
         } else if (this.docType === DocumentTypes.SCH && name === 'value' && parentElement === 'dir') {
             // Schematron: sch:dir's value is ltr or rtl - unlike that of sch:let and sch:param
@@ -853,6 +871,33 @@ export class XslLexer {
 
     // the prefix of the XSLT instructions of a stylesheet module's text (see useRootPrefix): lexed only as far as the name
     // of its outermost element
+    // Schematron: the namespace bindings of its sch:ns elements - prefix to URI - wherever they are
+    public static schNamespaces(text: string): Map<string, string> {
+        const root = parseXml(text);
+        const bindings = new Map<string, string>();
+        if (!root) {
+            return bindings;
+        }
+        const colon = root.name.indexOf(':');
+        const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+        const visit = (element: ParsedElement) => element.children.forEach((child) => {
+            const nsPrefix = child.name === prefix + 'ns' ? child.attributes.get('prefix')?.trim() : undefined;
+            const uri = child.attributes.get('uri')?.trim();
+            if (nsPrefix && uri !== undefined) {
+                bindings.set(nsPrefix, uri);
+            }
+            visit(child);
+        });
+        visit(root);
+        return bindings;
+    }
+
+    // Schematron: the prefix of its XSLT elements - the one the outermost element binds to the XSLT namespace, else xsl
+    public static schXsltPrefix(text: string): string {
+        const rootTag = /^(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>]*>)*(<[^>]*>)/.exec(text)?.[1] ?? '';
+        return /\sxmlns:([\w.-]+)\s*=\s*["']http:\/\/www\.w3\.org\/1999\/XSL\/Transform["']/.exec(rootTag)?.[1] ?? 'xsl';
+    }
+
     public static rootPrefix(xsl: string): string {
         const lexer = new XslLexer({ expressionAtts: [], variableElementNames: [], nativePrefix: 'xsl', tvtAttributes: [], nonNativeAvts: false, docType: DocumentTypes.XSLT });
         lexer.analyse(xsl, false, true);
@@ -868,6 +913,8 @@ export class XslLexer {
         this.isXSLT40 = false;
         this.setNativePrefix(this.languageConfiguration.nativePrefix);
         let rootNamed = false;
+        this.embeddedXsltPrefix = this.languageConfiguration.embeddedXslt ? XslLexer.schXsltPrefix(xsl) : '';
+        this.tagIsEmbeddedXslt = false;
         // the name of the top-level element the lexer is in, when it's native, e.g. phase in a Schematron schema
         let currentRootChildName = '';
         let contextGlobalStart = 0;
@@ -1059,6 +1106,7 @@ export class XslLexer {
                                 currentRootChildName = elementProperties.isNative ? elementProperties.nativeName : '';
                             }
                             isNativeElement = elementProperties.isNative;
+                            this.tagIsEmbeddedXslt = !!elementProperties.isEmbeddedXslt;
                             tagGlobalInstructionType = elementProperties.instructionType;
                             tagElementName = elementProperties.nativeName;
                             if (nextState === XMLCharState.rStNoAtt && isNativeElement && tagElementName === 'note' && xmlElementStack.length > 0) {
@@ -1612,6 +1660,11 @@ export class XslLexer {
         }
         this.globalInstructionData = StaticHrefs.withDeclarations(this.globalInstructionData, xsl).concat(this.globalModeData);
         this.prefixBindings = ModulePrefixes.fromRootAttributes(rootAttributes);
+        if (this.docType === DocumentTypes.SCH) {
+            // Schematron: the prefixes of its XPath are those of sch:ns, e.g. for an included module's function f:lib
+            const bindings = this.prefixBindings;
+            XslLexer.schNamespaces(xsl).forEach((uri, prefix) => bindings.set(prefix, uri));
+        }
         ModulePrefixes.resolve(this.globalInstructionData, this.prefixBindings);
         return result;
     }
@@ -1758,7 +1811,19 @@ export class XslLexer {
         let instructionType = GlobalInstructionType.Unknown;
         let nativeName = '';
 
-        if (this.languageConfiguration.docType === DocumentTypes.DCP) {
+        if (this.embeddedXsltPrefix && elementName.startsWith(this.embeddedXsltPrefix + ':')) {
+            // an XSLT element within a Schematron schema - its top-level declarations those SchXslt2 copies into its
+            // validation stylesheet: it ignores any other, e.g. xsl:param or xsl:template
+            nativeName = elementName.substring(this.embeddedXsltPrefix.length + 1);
+            if (isRootChild) {
+                const declarations: { [name: string]: GlobalInstructionType } = {
+                    'function': GlobalInstructionType.Function, 'key': GlobalInstructionType.Key, 'include': GlobalInstructionType.Include,
+                    'import': GlobalInstructionType.Import, 'accumulator': GlobalInstructionType.Accumulator, 'use-package': GlobalInstructionType.UsePackage
+                };
+                instructionType = declarations[nativeName] ?? GlobalInstructionType.Unknown;
+            }
+            return { isNative: true, instructionType, nativeName, isEmbeddedXslt: true };
+        } else if (this.languageConfiguration.docType === DocumentTypes.DCP) {
             if (this.languageConfiguration.variableElementNames && this.languageConfiguration.variableElementNames.indexOf(elementName) !== -1) {
                 instructionType = GlobalInstructionType.Variable;
             }
@@ -1839,6 +1904,8 @@ export interface ElementProperties {
     isNative: boolean;
     instructionType: GlobalInstructionType;
     nativeName: string;
+    // an XSLT element within another language, e.g. a Schematron schema's xsl:function
+    isEmbeddedXslt?: boolean;
 }
 
 export enum GlobalInstructionType {
