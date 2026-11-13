@@ -208,6 +208,16 @@ export class SchXslt2Checks {
 				action.edit = new vscode.WorkspaceEdit();
 				action.edit.replace(document.uri, new vscode.Range(document.positionAt(element.start), document.positionAt(element.end)), replacement);
 				return [action];
+			} else if (diagnostic.code === SchXslt2Checks.namespaceCode) {
+				const edit = SchXslt2Checks.toIso(document, text, schema);
+				if (!edit) {
+					return [];
+				}
+				const action = new vscode.CodeAction('Convert to ISO Schematron', vscode.CodeActionKind.QuickFix);
+				action.diagnostics = [diagnostic];
+				action.isPreferred = true;
+				action.edit = edit;
+				return [action];
 			} else if (diagnostic.code === SchXslt2Checks.attributeCode) {
 				// the attribute, with the whitespace before it
 				const start = document.offsetAt(diagnostic.range.start);
@@ -289,6 +299,68 @@ export class SchXslt2Checks {
 
 	// the schema: its outermost element, its prefix for Schematron (with the ':'), and the local names of its Schematron
 	// and XSLT elements
+	// a schema in another Schematron namespace - e.g. Schematron 1.5's - as ISO Schematron: the ISO namespace, a pattern's
+	// name as its title, which SchXslt2 reports, and Schematron 1.5's sch:key as the xsl:key ISO Schematron has instead
+	private static toIso(document: vscode.TextDocument, text: string, schema: NonNullable<ReturnType<typeof SchXslt2Checks.schema>>): vscode.WorkspaceEdit | undefined {
+		const rootPrefix = schema.prefix ? schema.prefix.slice(0, -1) : '';
+		const oldNamespace = schema.root.attributes.get(rootPrefix ? `xmlns:${rootPrefix}` : 'xmlns');
+		if (!oldNamespace) {
+			return undefined;
+		}
+		const edit = new vscode.WorkspaceEdit();
+		const range = (start: number, end: number) => new vscode.Range(document.positionAt(start), document.positionAt(end));
+		// the namespace, wherever it's declared
+		const escaped = oldNamespace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		for (const match of text.matchAll(new RegExp(`(\\sxmlns(?::[\\w.-]+)?\\s*=\\s*["'])${escaped}["']`, 'g'))) {
+			const start = match.index! + match[1].length;
+			edit.replace(document.uri, range(start, start + oldNamespace.length), SchXslt2Checks.isoNamespace);
+		}
+		const all = [schema.root, ...descendants(schema.root)];
+		const sch = (local: string) => schema.prefix + local;
+		// a pattern's name: its title - the attribute as written, with its references, is the title's text
+		for (const pattern of all.filter((e) => schema.schLocal(e) === 'pattern' && e.attributes.has('name'))) {
+			const startTag = text.substring(pattern.start, pattern.contentStart);
+			const name = /\sname\s*=\s*(["'])([\s\S]*?)\1/.exec(startTag);
+			if (!name) {
+				continue;
+			}
+			edit.delete(document.uri, range(pattern.start + name.index, pattern.start + name.index + name[0].length));
+			if (pattern.children.some((c) => schema.schLocal(c) === 'title')) {
+				continue;
+			}
+			const title = `<${sch('title')}>${name[2]}</${sch('title')}>`;
+			if (pattern.contentStart === pattern.end) {
+				// <pattern name="..."/>
+				edit.replace(document.uri, range(pattern.end - 2, pattern.end), `>${title}</${pattern.name}>`);
+			} else {
+				// before its content, indented as its first child is
+				const indent = /^\s*/.exec(text.substring(pattern.contentStart, pattern.children[0]?.start ?? pattern.contentStart))![0];
+				edit.insert(document.uri, document.positionAt(pattern.contentStart), indent + title);
+			}
+		}
+		// Schematron 1.5's key: xsl:key, with path as use
+		const keys = schema.root.children.filter((e) => schema.schLocal(e) === 'key');
+		if (keys.length > 0) {
+			const declared = [...schema.root.attributes].find(([attribute, uri]) => attribute.startsWith('xmlns:') && uri === SchXslt2Checks.xsltNamespace);
+			const xsl = declared ? declared[0].substring('xmlns:'.length) : 'xsl';
+			if (!declared) {
+				edit.insert(document.uri, document.positionAt(schema.root.start + 1 + schema.root.name.length), ` xmlns:${xsl}="${SchXslt2Checks.xsltNamespace}"`);
+			}
+			for (const key of keys) {
+				// an attribute's value as written, with its references - in double quotes
+				const startTag = text.substring(key.start, key.contentStart);
+				const value = (attribute: string) => {
+					const match = new RegExp(`\\s${attribute}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(startTag);
+					return match ? (match[1] ?? match[2].replace(/"/g, '&quot;')) : undefined;
+				};
+				const attributes = [['name', value('name')], ['match', value('match')], ['use', value('path') ?? value('use')]]
+					.filter(([, v]) => v !== undefined).map(([n, v]) => ` ${n}="${v}"`).join('');
+				edit.replace(document.uri, range(key.start, key.end), `<${xsl}:key${attributes}/>`);
+			}
+		}
+		return edit;
+	}
+
 	private static schema(text: string) {
 		const root = parseXml(text);
 		if (!root || !/^(?:[\w.-]+:)?(?:schema|library)$/.test(root.name)) {

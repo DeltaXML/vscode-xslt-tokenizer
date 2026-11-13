@@ -360,6 +360,29 @@ suite('Schematron', () => {
 			["0: SchXslt2: this isn't ISO Schematron, whose namespace is http://purl.oclc.org/dsdl/schematron - SchXslt2 doesn't validate with it"]);
 	});
 
+	test('Schematron 1.5: the quick fix converts it to ISO Schematron - the namespace, a pattern\'s name as its title, and sch:key as xsl:key', async () => {
+		const old = `<s:schema xmlns:s="http://www.ascc.net/xml/schematron">
+  <s:key name='k' match="item" path='@code = "a"'/>
+  <s:pattern name="Item &amp; 'code' constraint">
+    <s:rule context="item"><s:assert test="key('k', @id)">x</s:assert></s:rule>
+  </s:pattern>
+  <s:pattern name="Empty"/>
+  <s:pattern name="Titled"><s:title>The title</s:title><s:rule context="b" xmlns:s="http://www.ascc.net/xml/schematron"><s:report test="c">y</s:report></s:rule></s:pattern>
+</s:schema>`;
+		const iso = await fixed(old, /isn't ISO Schematron/);
+		assert.strictEqual(iso, `<s:schema xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:s="http://purl.oclc.org/dsdl/schematron">
+  <xsl:key name="k" match="item" use="@code = &quot;a&quot;"/>
+  <s:pattern>
+    <s:title>Item &amp; 'code' constraint</s:title>
+    <s:rule context="item"><s:assert test="key('k', @id)">x</s:assert></s:rule>
+  </s:pattern>
+  <s:pattern><s:title>Empty</s:title></s:pattern>
+  <s:pattern><s:title>The title</s:title><s:rule context="b" xmlns:s="http://purl.oclc.org/dsdl/schematron"><s:report test="c">y</s:report></s:rule></s:pattern>
+</s:schema>`);
+		// ISO Schematron, with no problems
+		assert.deepEqual(await problems(iso), []);
+	});
+
 	test('the problems are in the Problems view for a Schematron file open in an editor', async () => {
 		const file = path.join(dir, `published${count++}.sch`);
 		fs.writeFileSync(file, unprefixed('<pattern><rule context="a"><assert test="$undeclared">x</assert></rule></pattern>'));
