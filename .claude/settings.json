@@ -127,7 +127,9 @@
       "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Schematron 1.5\")",
       "Bash(sed -n 15,18p schematron.xml)",
       "Bash(sed -n 30,33p schematron.xml)",
-      "Bash(sed -n 42,44p schematron.xml)"
+      "Bash(sed -n 42,44p schematron.xml)",
+      "Bash(sed -n 109,130p settings.xml)",
+      "Bash(sed -n 160,206p settings.xml)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"
