@@ -36,6 +36,7 @@ const files: { [name: string]: string } = {
   <ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/>
   <ns prefix="o" uri="urn:o"/>
   <xsl:include href="lib/f.xsl"/>
+  <xsl:function name="o:inline"><xsl:sequence select="1"/></xsl:function>
   <let name="max" value="10"/>
   <phase id="ph"><let name="phaseVar" value="1"/><active pattern="p"/></phase>
   <include href="patterns/p.sch"/>
@@ -47,7 +48,7 @@ const files: { [name: string]: string } = {
 	'ctx/patterns/own.sch': `<pattern ${iso} id="own"><rule context="c"><let name="max" value="99"/><assert test="$max">o</assert></rule></pattern>`,
 	'ctx/lib/f.xsl': `<xsl:stylesheet ${xsl} version="3.0" xmlns:o="urn:o"><xsl:function name="o:f"><xsl:param name="n"/><xsl:sequence select="$n"/></xsl:function></xsl:stylesheet>`,
 	'ctx/patterns/p.sch': `<pattern ${iso} id="p">
-  <rule context="item"><assert test="xs:integer(@n) le $max and o:f(.) and $phaseVar">x</assert></rule>
+  <rule context="item"><assert test="xs:integer(@n) le $max and o:f(.) and $phaseVar and o:inline()">x</assert></rule>
 </pattern>`,
 	'ctx/patterns/rule.sch': `<rule ${iso} context="b">
   <assert test="$patternVar and $max and $undeclared and u:nope(.)">y</assert>
@@ -160,6 +161,34 @@ suite('Schematron includes', () => {
 		// own.sch's $max: its own
 		const own = await open('ctx/patterns/own.sch');
 		assert.deepEqual(where(await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', own.uri, at(own, '$max'))).map((l) => l.split(':')[0]), [path.join('ctx', 'patterns', 'own.sch')]);
+	});
+
+	test('functions across files: Go to Definition, Find All References and Rename for a call of an XSLT function - from a Schematron file, and from the module', async () => {
+		const open = async (name: string) => vscode.workspace.openTextDocument(vscode.Uri.file(file(name)));
+		const at = (document: vscode.TextDocument, text: string) => document.positionAt(document.getText().indexOf(text) + 2);
+		const where = (locations: (vscode.Location | vscode.LocationLink)[] | undefined) => (locations ?? []).map((l) => {
+			const uri = 'uri' in l ? l.uri : l.targetUri;
+			const range = 'range' in l ? l.range : l.targetSelectionRange ?? l.targetRange;
+			return `${path.relative(folder, uri.fsPath)}:${range.start.line}`;
+		}).sort();
+		const p = await open('ctx/patterns/p.sch');
+		const main = await open('ctx/main.sch');
+		const module = await open('ctx/lib/f.xsl');
+		const fDeclaration = `${path.join('ctx', 'lib', 'f.xsl')}:0`;
+		// a function of the XSLT module the schema includes: from the included file, the schema and the module
+		const calls = [fDeclaration, `${path.join('ctx', 'main.sch')}:${main.positionAt(main.getText().indexOf('o:f(1)')).line}`, `${path.join('ctx', 'patterns', 'p.sch')}:1`].sort();
+		assert.deepEqual(where(await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', p.uri, at(p, 'o:f('))), [fDeclaration]);
+		for (const [document, position] of [[p, at(p, 'o:f(')], [main, at(main, 'o:f(1)')], [module, module.positionAt(module.getText().indexOf('name="o:f"') + 7)]] as const) {
+			assert.deepEqual(where(await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, position)), calls, path.basename(document.fileName));
+		}
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', p.uri, at(p, 'o:f('), 'o:g');
+		assert.deepEqual(edit.entries().map(([uri, edits]) => `${path.relative(folder, uri.fsPath)}:${edits.map((e) => e.newText).join(',')}`).sort(),
+			[`${path.join('ctx', 'lib', 'f.xsl')}:o:g`, `${path.join('ctx', 'main.sch')}:o:g`, `${path.join('ctx', 'patterns', 'p.sch')}:o:g`]);
+		// a function the schema declares itself, with xsl:function
+		const inline = `${path.join('ctx', 'main.sch')}:${main.positionAt(main.getText().indexOf('o:inline')).line}`;
+		assert.deepEqual(where(await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', p.uri, at(p, 'o:inline'))), [inline]);
+		assert.deepEqual(where(await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', p.uri, at(p, 'o:inline'))),
+			[inline, `${path.join('ctx', 'patterns', 'p.sch')}:1`].sort());
 	});
 
 	test('SchXslt2\'s checks for a file sch:include brings in, e.g. a pattern: an ignored XSLT attribute, and Schematron 1.5', async () => {

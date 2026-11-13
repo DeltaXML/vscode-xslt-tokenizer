@@ -70,6 +70,7 @@ import { XsltPackages } from './xsltPackages';
 import { HrefPaths } from './hrefPaths';
 import { ImportTreeProvider } from './importTreeProvider';
 import { SchIncludes } from './schIncludes';
+import { SchematronFunctions } from './schematronFunctions';
 import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
@@ -1740,32 +1741,40 @@ export function activate(context: vscode.ExtensionContext) {
 	// Schematron: Validate: an XML file validated with a schema, by SchXslt2 (see SchematronValidation)
 	SchematronValidation.register(context);
 	// Schematron: Go to Definition from is-a, extends' rule, active's pattern, and diagnostics and properties (see SchReferences)
+	// - and of a function call, e.g. of an XSLT module the schema includes, or one that includes the file (see SchIncludes)
+	const schDefinitionProvider = new XsltDefinitionProvider(SchConfiguration.configuration);
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'sch' }, {
-		provideDefinition: (document, position) => SchReferences.definition(document, position) ?? SchVariables.definition(document, position)
+		provideDefinition: async (document, position, token) => SchReferences.definition(document, position) ?? SchVariables.definition(document, position) ??
+			await SchematronFunctions.definition(schDefinitionProvider, document, position, token)
 	}));
 	// Schematron: Find All References and Rename, for ids - patterns, rules, phases, diagnostics and properties - and for
 	// sch:let and sch:param variables (see SchReferences and SchVariables)
 	// - and for an assertion's, report's or rule's id, the XSpec expectations of the tests of the schema (see XSpecSchematron)
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'sch' }, {
-		provideReferences: async (document, position, referenceContext) => {
+		provideReferences: async (document, position, referenceContext, token) => {
 			const own = SchReferences.referenceLocations(document, position, referenceContext.includeDeclaration) ?? SchVariables.references(document, position, referenceContext.includeDeclaration);
 			const tested = XSpecSchematron.schemaIdAt(document, position);
 			if (!tested) {
-				return own;
+				// - or a function's, with its calls in the stylesheets and Schematron files that use it
+				return own ?? await SchematronFunctions.references(schDefinitionProvider, document, position, referenceContext, token);
 			}
 			const declaration = referenceContext.includeDeclaration && !own ? [new vscode.Location(document.uri, tested.range)] : [];
 			return [...(own ?? declaration), ...await XSpecSchematron.xspecReferences(document.fileName, tested.kind, tested.id)];
 		}
 	}));
 	context.subscriptions.push(vscode.languages.registerRenameProvider({ language: 'sch' }, {
-		prepareRename: (document, position) => {
-			const range = SchReferences.renameRange(document, position) ?? XSpecSchematron.schemaIdAt(document, position)?.range ?? SchVariables.renameRange(document, position);
+		prepareRename: async (document, position, token) => {
+			const range = SchReferences.renameRange(document, position) ?? XSpecSchematron.schemaIdAt(document, position)?.range ?? SchVariables.renameRange(document, position) ??
+				await SchematronFunctions.prepareRename(schDefinitionProvider, document, position, token);
 			if (!range) {
-				throw new Error('Rename: a pattern, rule, assertion, report, phase, diagnostic or property id, or a variable');
+				throw new Error('Rename: a pattern, rule, assertion, report, phase, diagnostic or property id, a variable, or a function');
 			}
 			return range;
 		},
-		provideRenameEdits: async (document, position, newName) => {
+		provideRenameEdits: async (document, position, newName, token) => {
+			if (!SchReferences.renameRange(document, position) && !XSpecSchematron.schemaIdAt(document, position) && !SchVariables.renameRange(document, position)) {
+				return SchematronFunctions.rename(schDefinitionProvider, document, position, newName, token);
+			}
 			const tested = XSpecSchematron.schemaIdAt(document, position);
 			const edit = SchReferences.rename(document, position, newName) ?? (tested ? new vscode.WorkspaceEdit() : SchVariables.rename(document, position, newName));
 			if (tested && edit) {

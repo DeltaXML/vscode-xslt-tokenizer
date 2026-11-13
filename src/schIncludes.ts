@@ -117,6 +117,21 @@ export class SchIncludes {
 		return [...this.references].filter(([, references]) => references.some((r) => r.path === filePath)).map(([file]) => file);
 	}
 
+	// the indexed Schematron files that use one of the XSLT modules: those that include or import one - or are one, e.g. a
+	// schema with an xsl:function - and the files they bring in with sch:include and sch:extends href, directly or not
+	public usersOf(modules: string[]): string[] {
+		const users = new Set([...this.references].filter(([file, references]) => modules.includes(file) ||
+			references.some((r) => (r.kind === 'xsl:include' || r.kind === 'xsl:import') && modules.includes(r.path))).map(([file]) => file));
+		const visit = (file: string) => (this.references.get(file) ?? []).filter((r) => r.kind === 'sch:include' || r.kind === 'sch:extends').forEach((r) => {
+			if (!users.has(r.path) && fs.existsSync(r.path)) {
+				users.add(r.path);
+				visit(r.path);
+			}
+		});
+		[...users].forEach(visit);
+		return [...users];
+	}
+
 	// the file's chain of includers, from the schema that includes it, directly or not, down to the file - its first
 	// includer at each step, not in a cycle. Just the file, when nothing includes it
 	public chain(filePath: string): string[] {

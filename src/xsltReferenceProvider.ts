@@ -1,7 +1,8 @@
 import { XSpecReferences } from './xspecReferences';
 import * as vscode from 'vscode';
 import { XSLTnamespaces, FunctionData } from './functionData';
-import { XSLTConfiguration } from './languageConfigurations';
+import { XSLTConfiguration, SchConfiguration } from './languageConfigurations';
+import { SchIncludes } from './schIncludes';
 import { XslLexerLight } from './xslLexerLight';
 import { SchemaQuery } from './schemaQuery';
 import { LexPosition, BaseToken, CharLevelState, Data, ErrorType, TokenLevelState, XPathLexer } from './xpLexer';
@@ -273,6 +274,13 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					const kind = declaration.elementName === 'xsl:function' ? 'function' : 'template';
 					locations = locations.concat(await XSpecReferences.find(kind, declaration.expandedName, modules));
 				}
+				// for a function: its calls in the Schematron files that use its module - the schemas that include or import
+				// it, or declare it, and the files they bring in, with the prefixes in scope where they're included
+				if (declaration && declarationDocument && !declaration.isParam && declaration.elementName === 'xsl:function') {
+					const modules = XSpecReferences.modulesOf(declaration.file, await ImportIndex.moduleTrees(declarationDocument));
+					const schLocations = await XSLTReferenceProvider.schematronReferences(seekInstruction, modules);
+					locations = locations.concat(schLocations.filter((x) => !locations.some((l) => l.uri.toString() === x.uri.toString() && l.range.isEqual(x.range))));
+				}
 				// for a mode: its uses in the XSpec files that test it, e.g. x:context mode="m:index"
 				const isMode = [GlobalInstructionType.Mode, GlobalInstructionType.ModeInstruction, GlobalInstructionType.ModeTemplate].includes(instruction.type);
 				if (isMode && !instruction.name.startsWith('#') && this.definition.uri.scheme === 'file') {
@@ -288,6 +296,28 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			this.refLocations = locations;
 			resolve(locations);
 		});
+	}
+
+	// the references to the declaration in the Schematron files that use one of the modules (see SchIncludes.usersOf):
+	// each lexed as Schematron, with its sch:ns prefixes - and those of the schemas that include it
+	private static async schematronReferences(instruction: GlobalInstructionData, modules: string[]): Promise<vscode.Location[]> {
+		await SchIncludes.instance.whenBuilt();
+		const locations: vscode.Location[] = [];
+		for (const file of SchIncludes.instance.usersOf(modules)) {
+			try {
+				const schDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+				const lexer = new XslLexer(SchConfiguration.configuration);
+				const tokens = lexer.analyse(schDocument.getText());
+				const bindings = SchIncludes.withContext(schDocument, lexer.prefixBindings);
+				const [inSchema] = ModulePrefixes.inModule([instruction], bindings);
+				const globals = ModulePrefixes.inModule(lexer.globalInstructionData, bindings);
+				locations.push(...XSLTReferenceProvider.calculateReferences(inSchema, SchConfiguration.configuration, DocumentTypes.SCH, schDocument, tokens, globals, [])
+					.map((token) => XsltTokenDefinitions.createLocationFromToken(token, schDocument)));
+			} catch (error) {
+				console.error(error);
+			}
+		}
+		return locations;
 	}
 
 	// XSLT 4.0: the references in the documentation notes of a module (noteDocument) to the declaration at the definition,
