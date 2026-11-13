@@ -75,7 +75,7 @@
     <xsl:variable name="common" select="(for $i in 1 to count($fromFolder) return $i[$path[$i] eq $fromFolder[$i]][every $j in 1 to $i satisfies $path[$j] eq $fromFolder[$j]])[last()]"/>
     <xsl:variable name="shared" select="($common, 0)[1]"/>
     <xsl:sequence select="if ($shared eq 0) then $uri else
-      string-join((for $i in $shared + 1 to count($fromFolder) return '..', subsequence($path, $shared + 1)), '/')"/>
+      string-join((($shared + 1 to count($fromFolder)) ! '..', subsequence($path, $shared + 1)), '/')"/>
   </xsl:function>
 
   <xsl:template match="@xsl:expand-text" mode="tvt:expand"/>

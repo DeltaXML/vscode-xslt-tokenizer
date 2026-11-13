@@ -286,6 +286,20 @@ suite('XSpec: running tests', function () {
 		assert.include(debugged.output, 'the file\'s focused scenarios couldn\'t be run');
 	});
 
+	test('the XSpec tests of xslt-resources/schematron/expand-text.xsl - in test/xspec - pass', async () => {
+		const xspecFile = path.resolve(__dirname, '../../../test/xspec/expand-text.xspec');
+		const xspec = XSpecTestController.instance!;
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecFile));
+		const fileItem = xspec.testController.items.get(document.uri.toString())!;
+		const outcomes = new Map<string, string>();
+		xspec.createRun = () => recordingRun(outcomes, new Map());
+		await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		const failed = [...outcomes].filter(([, outcome]) => outcome !== 'passed');
+		assert.deepEqual(failed, []);
+		assert.strictEqual(outcomes.size, 13, JSON.stringify([...outcomes]));
+	});
+
 	test('a Schematron\'s XSpec: text value templates in messages, with xsl:expand-text - rewritten as sch:value-of, with the XSLT.schematron.allowExpandText setting', async () => {
 		fs.writeFileSync(path.join(dir, 'tvt.sch'), `<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" queryBinding="xslt3" xsl:expand-text="yes">
   <sch:pattern><sch:rule context="doc"><sch:assert id="has-title" test="title">the {name()} has no title</sch:assert></sch:rule></sch:pattern>

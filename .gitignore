@@ -10,3 +10,6 @@ debug.log
 # XSLT debug adapter build output and the jars it is compiled/tested against
 debugger/build/
 debugger/lib/
+
+# results of the XSpec tests of the extension's own stylesheets, e.g. test/xspec/expand-text.xspec
+test/xspec/xspec/

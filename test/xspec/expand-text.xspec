@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tests of expand-text.xsl, which rewrites a Schematron schema's text value templates - a non-standard extension, with
+  xsl:expand-text - as standard ISO Schematron: each {expression} in a message as sch:value-of. Each scenario is a rule
+  of the rewrite, with an example: the schema as written (x:context), and as standard Schematron (x:expect).
+
+  The schema's root gets an xml:base, and xsl:include its href, as absolute URIs - or relative to the output file, with
+  -o: on the command line: they're '...' in the expected results here.
+  In x:context and x:expect, XSpec treats attribute values as attribute value templates: a brace in one is doubled, e.g.
+  select="map {{ 'a': 1 }}?a" for select="map { 'a': 1 }?a" - but not in text.
+-->
+<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec"
+               xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+               xmlns:sch="http://purl.oclc.org/dsdl/schematron"
+               xmlns:tvt="urn:x-vscode-xslt-xpath:schematron-expand-text"
+               stylesheet="../../xslt-resources/schematron/expand-text.xsl">
+
+   <x:scenario label="a message's text value templates become sch:value-of">
+      <x:context mode="tvt:expand">
+         <sch:schema xsl:expand-text="yes">
+            <sch:pattern>
+               <sch:rule context="order">
+                  <sch:let name="id" value="@id"/>
+                  <sch:assert test="@date castable as xs:date">Order {$id} has an invalid date: {@date}</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:context>
+      <x:expect label="and xsl:expand-text is removed">
+         <sch:schema xml:base="...">
+            <sch:pattern>
+               <sch:rule context="order">
+                  <sch:let name="id" value="@id"/>
+                  <sch:assert test="@date castable as xs:date">Order <sch:value-of select="$id"/> has an invalid date: <sch:value-of select="@date"/></sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="the messages: the text of sch:assert, sch:report, sch:diagnostic and sch:property - and of sch:emph, sch:span and sch:dir within them">
+      <x:context mode="tvt:expand">
+         <sch:schema xsl:expand-text="yes">
+            <sch:pattern>
+               <sch:rule context="line">
+                  <sch:report test="@price gt 100">The line for <sch:emph>{@product}</sch:emph> costs <sch:span class="price">{@price}</sch:span></sch:report>
+               </sch:rule>
+            </sch:pattern>
+            <sch:diagnostics><sch:diagnostic id="d">{count(../line)} lines</sch:diagnostic></sch:diagnostics>
+            <sch:properties><sch:property id="p">{@product}</sch:property></sch:properties>
+         </sch:schema>
+      </x:context>
+      <x:expect label="each as sch:value-of">
+         <sch:schema xml:base="...">
+            <sch:pattern>
+               <sch:rule context="line">
+                  <sch:report test="@price gt 100">The line for <sch:emph><sch:value-of select="@product"/></sch:emph> costs <sch:span class="price"><sch:value-of select="@price"/></sch:span></sch:report>
+               </sch:rule>
+            </sch:pattern>
+            <sch:diagnostics><sch:diagnostic id="d"><sch:value-of select="count(../line)"/> lines</sch:diagnostic></sch:diagnostics>
+            <sch:properties><sch:property id="p"><sch:value-of select="@product"/></sch:property></sch:properties>
+         </sch:schema>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="not messages: a title or sch:p, where sch:value-of isn't allowed - their braces are text">
+      <x:context mode="tvt:expand">
+         <sch:schema xsl:expand-text="yes">
+            <sch:title>Orders {2026}</sch:title>
+            <sch:pattern>
+               <sch:p>Checks {each} order</sch:p>
+            </sch:pattern>
+         </sch:schema>
+      </x:context>
+      <x:expect label="unchanged">
+         <sch:schema xml:base="...">
+            <sch:title>Orders {2026}</sch:title>
+            <sch:pattern>
+               <sch:p>Checks {each} order</sch:p>
+            </sch:pattern>
+         </sch:schema>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="{{ and }} are braces, as text - within an expression, braces are the expression's: a map constructor, or in a string literal">
+      <x:context mode="tvt:expand">
+         <sch:schema xsl:expand-text="yes">
+            <sch:pattern>
+               <sch:rule context="code">
+                  <sch:assert test="false()">{{literal}} {map { 'a': 1 }?a} {'}'}</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:context>
+      <x:expect label="the expressions as written">
+         <sch:schema xml:base="...">
+            <sch:pattern>
+               <sch:rule context="code">
+                  <sch:assert test="false()">{literal} <sch:value-of select="map {{ 'a': 1 }}?a"/><sch:value-of select="' '"/><sch:value-of select="'}}'"/></sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="whitespace between expressions is kept - as sch:value-of, as the validation stylesheet would strip it as text">
+      <x:context mode="tvt:expand">
+         <sch:schema xsl:expand-text="yes">
+            <sch:pattern>
+               <sch:rule context="name">
+                  <sch:assert test="false()">{@first} {@last}</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:context>
+      <x:expect label="a space between the names">
+         <sch:schema xml:base="...">
+            <sch:pattern>
+               <sch:rule context="name">
+                  <sch:assert test="false()"><sch:value-of select="@first"/><sch:value-of select="' '"/><sch:value-of select="@last"/></sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="an unfinished expression - with no closing brace - is text">
+      <x:context mode="tvt:expand">
+         <sch:schema xsl:expand-text="yes">
+            <sch:pattern>
+               <sch:rule context="a">
+                  <sch:assert test="false()">Brace {@b</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:context>
+      <x:expect label="as written">
+         <sch:schema xml:base="...">
+            <sch:pattern>
+               <sch:rule context="a">
+                  <sch:assert test="false()">Brace {@b</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="xsl:expand-text is inherited, as in XSLT: the nearest one applies - and without it, braces are text">
+      <x:context mode="tvt:expand">
+         <sch:schema>
+            <sch:pattern xsl:expand-text="yes">
+               <sch:rule context="a">
+                  <sch:assert test="false()">{@x}</sch:assert>
+                  <sch:assert test="false()" xsl:expand-text="no">{@x}</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+            <sch:pattern>
+               <sch:rule context="b">
+                  <sch:assert test="false()">{@x}</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:context>
+      <x:expect label="only in the first assertion">
+         <sch:schema xml:base="...">
+            <sch:pattern>
+               <sch:rule context="a">
+                  <sch:assert test="false()"><sch:value-of select="@x"/></sch:assert>
+                  <sch:assert test="false()">{@x}</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+            <sch:pattern>
+               <sch:rule context="b">
+                  <sch:assert test="false()">{@x}</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="an abstract pattern's parameter: sch:value-of's select, where the processor replaces it">
+      <x:context mode="tvt:expand">
+         <sch:schema xsl:expand-text="yes">
+            <sch:pattern abstract="true" id="required">
+               <sch:param name="attribute"/>
+               <sch:rule context="item">
+                  <sch:assert test="normalize-space($attribute)">The {name()} needs {'$attribute'}</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:context>
+      <x:expect label="replaced, in each pattern with is-a, by the processor">
+         <sch:schema xml:base="...">
+            <sch:pattern abstract="true" id="required">
+               <sch:param name="attribute"/>
+               <sch:rule context="item">
+                  <sch:assert test="normalize-space($attribute)">The <sch:value-of select="name()"/> needs <sch:value-of select="'$attribute'"/></sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="sch:include: the file's element, included - with its own xsl:expand-text: a file without it is unchanged, braces and all">
+      <x:context href="expand-text/main.sch"/>
+      <!-- main.sch includes lib/library.sch, without xsl:expand-text, and lib/tvt-pattern.sch, with it -->
+      <x:expect label="no sch:include is left: each is replaced by the element of its file" test="empty($x:result//sch:include) and count($x:result/sch:pattern) eq 3"/>
+      <x:expect label="each included element has the base URI of its file, for the files it refers to"
+                test="every $p in $x:result/sch:pattern[@id = ('codes', 'names')] satisfies ends-with($p/@xml:base, '/lib/' || (if ($p/@id eq 'codes') then 'library.sch' else 'tvt-pattern.sch'))"/>
+      <x:expect label="library.sch, without xsl:expand-text, is unchanged: its braces are text"
+                test="$x:result/sch:pattern[@id = 'codes']//sch:assert/text()[last()] = ' must match [A-Z]{2,3}'"/>
+      <x:expect label="tvt-pattern.sch, with its own xsl:expand-text, is rewritten"
+                test="$x:result/sch:pattern[@id = 'names']//sch:value-of/@select = 'local-name(..)'"/>
+      <x:expect label="and main.sch, with xsl:expand-text, is rewritten"
+                test="$x:result/sch:pattern[@id = 'items']//sch:value-of/@select = '@id'"/>
+   </x:scenario>
+
+</x:description>
