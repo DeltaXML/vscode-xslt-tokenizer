@@ -371,11 +371,16 @@ export class SchXslt2Checks {
 
 	private static schema(text: string) {
 		const root = parseXml(text);
-		if (!root || !/^(?:[\w.-]+:)?(?:schema|library)$/.test(root.name)) {
+		if (!root) {
 			return undefined;
 		}
 		const colon = root.name.indexOf(':');
 		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+		// a schema, or a library - or a file sch:include brings in, e.g. a pattern: an element of a Schematron namespace
+		const namespace = root.attributes.get(prefix ? `xmlns:${prefix.slice(0, -1)}` : 'xmlns');
+		if (!/^(?:schema|library)$/.test(root.name.substring(prefix.length)) && !(namespace && /schematron/i.test(namespace))) {
+			return undefined;
+		}
 		const xsltPrefix = XslLexer.schXsltPrefix(text) + ':';
 		return {
 			root, prefix, xsltPrefix,

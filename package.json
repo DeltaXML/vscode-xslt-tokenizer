@@ -532,7 +532,7 @@
 					"id": "xslt-xpath.imports",
 					"name": "XSLT Imports",
 					"contextualTitle": "XSLT Imports",
-					"when": "resourceLangId == xslt",
+					"when": "resourceLangId == xslt || resourceLangId == sch",
 					"visibility": "collapsed",
 					"icon": "$(type-hierarchy)"
 				}

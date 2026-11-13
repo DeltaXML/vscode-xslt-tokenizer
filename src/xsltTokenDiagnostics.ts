@@ -4958,6 +4958,13 @@ export class XsltTokenDiagnostics {
 		};
 		// the outermost element is checked as Schematron, whatever its namespace
 		const rootScope = withDeclarations(root, new Map());
+		// - unless it's in another Schematron namespace, e.g. Schematron 1.5's, reported by SchXslt2Checks: as its content,
+		// it's not checked against ISO Schematron's schema, e.g. for a pattern's name - in a file that sch:include includes
+		const rootColon = root.name.indexOf(':');
+		const rootNamespace = rootScope.get(rootColon > 0 ? root.name.substring(0, rootColon) : '');
+		if (rootNamespace && rootNamespace !== known[0] && /schematron/i.test(rootNamespace)) {
+			foreign.add(root.start + 1);
+		}
 		root.children.forEach((child) => visit(child, rootScope, false));
 		return foreign;
 	}

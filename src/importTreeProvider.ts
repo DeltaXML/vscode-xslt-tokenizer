@@ -13,6 +13,7 @@ import * as path from 'path';
 import { ImportIndex, ModuleReference, UsedPackage } from './importIndex';
 import { XsltPackages } from './xsltPackages';
 import { HrefPaths } from './hrefPaths';
+import { SchIncludes, SchReference } from './schIncludes';
 
 // a module in the import tree: the top-level stylesheet, or a module it imports or includes, directly or indirectly -
 // with the modules above it, to stop a cycle of imports
@@ -23,11 +24,19 @@ export interface ImportNode {
 	// for a package an xsl:use-package uses: its name, the package-version asked for, and the version found - a package
 	// that isn't found has the path 'package:' and its name
 	package?: { name: string; versionRange?: string; version?: string; fromSetting?: boolean };
+	// in a Schematron schema's tree: how its parent refers to it, e.g. sch:include
+	kind?: SchReference['kind'];
 }
+
+// a Schematron file - its tree is a schema's
+const isSchematron = (filePath: string) => /\.sch$/i.test(filePath);
 
 // The 'XSLT Imports' view: for the XSLT module in the active editor, the top-level stylesheet that imports or includes
 // it - found from the workspace's XSLT modules (see ImportIndex) - with its tree of imports and includes. The modules
-// from the top-level stylesheet down to the active module are expanded, and the active module is marked
+// from the top-level stylesheet down to the active module are expanded, and the active module is marked.
+// For a Schematron file - 'Schematron Includes' - the schema that includes it, found from the workspace's .sch files
+// (see SchIncludes), with the files it brings in: with sch:include and sch:extends href, and the XSLT modules of its
+// xsl:include and xsl:import, with their own imports and includes
 export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 	private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<void>();
 	public readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
@@ -36,7 +45,7 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 	// the active XSLT document - a function, for testing
 	public constructor(private readonly currentDocument: () => vscode.TextDocument | undefined = () => {
 		const document = vscode.window.activeTextEditor?.document;
-		return document?.languageId === 'xslt' && document.uri.scheme === 'file' ? document : undefined;
+		return (document?.languageId === 'xslt' || document?.languageId === 'sch') && document.uri.scheme === 'file' ? document : undefined;
 	}) {
 	}
 
@@ -53,9 +62,20 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 		const index = ImportIndex.instance;
 		const current = this.currentDocument();
 		if (!node) {
+			this.setTitle(current);
 			if (!current) {
-				this.setMessage('Open an XSLT module to see its imports and includes');
+				this.setMessage('Open an XSLT module, or a Schematron file, to see its imports and includes');
 				return [];
+			}
+			if (isSchematron(current.fileName)) {
+				const includes = SchIncludes.instance;
+				if (!includes.built) {
+					this.setMessage('Scanning the workspace\'s Schematron files...');
+					includes.whenBuilt().then(() => this.refresh());
+				} else {
+					this.setMessage(undefined);
+				}
+				return [{ path: includes.chain(current.fileName)[0], ancestors: [] }];
 			}
 			if (!index.built && ImportIndex.isEnabled()) {
 				this.setMessage('Scanning the workspace\'s XSLT modules...');
@@ -69,6 +89,9 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 			return [];
 		}
 		const ancestors = node.ancestors.concat(node.path);
+		if (isSchematron(node.path)) {
+			return this.schReferences(node.path, current).map((reference): ImportNode => ({ path: reference.path, kind: reference.kind, isInclude: reference.kind !== 'xsl:import', ancestors }));
+		}
 		const { references, usedPackages } = this.moduleInfo(node.path, current);
 		return references.map((reference): ImportNode => ({ path: reference.path, isInclude: reference.isInclude, ancestors }))
 			.concat(usedPackages.map((used) => this.packageNode(used, ancestors)));
@@ -88,12 +111,15 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 	public getTreeItem(node: ImportNode): vscode.TreeItem {
 		const index = ImportIndex.instance;
 		const current = this.currentDocument();
-		const chain = current && ImportIndex.isEnabled() ? index.importChain(current.fileName) : [];
+		const inSchema = isSchematron(node.ancestors[0] ?? node.path);
+		const chain = current && isSchematron(current.fileName) ? SchIncludes.instance.chain(current.fileName) :
+			current && ImportIndex.isEnabled() ? index.importChain(current.fileName) : [];
 		const isCurrent = node.path === current?.fileName;
 		const isCycle = node.ancestors.includes(node.path);
 		const exists = fs.existsSync(node.path);
-		const info = exists ? this.moduleInfo(node.path, current) : undefined;
-		const hasChildren = !isCycle && !!info && info.references.length + info.usedPackages.length > 0;
+		const childCount = !exists ? 0 : isSchematron(node.path) ? this.schReferences(node.path, current).length :
+			(({ references, usedPackages }) => references.length + usedPackages.length)(this.moduleInfo(node.path, current));
+		const hasChildren = !isCycle && childCount > 0;
 		// the modules from the top-level stylesheet down to the active module are expanded, to show it
 		const isOnChain = chain.indexOf(node.path) > -1 && chain.indexOf(node.path) < chain.length - 1 && node.ancestors.every((ancestor, i) => chain[i] === ancestor);
 		const pkg = node.package;
@@ -110,7 +136,7 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 			notes.push('current');
 		}
 		if (node.ancestors.length === 0 && chain.length > 1) {
-			notes.push(current && index.isChosen(current.fileName) ? 'chosen top-level stylesheet' : 'inferred top-level stylesheet');
+			notes.push(inSchema ? 'includes it' : current && index.isChosen(current.fileName) ? 'chosen top-level stylesheet' : 'inferred top-level stylesheet');
 		}
 		if (isCycle) {
 			notes.push('cycle');
@@ -121,8 +147,9 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 		item.description = [pkg && !exists ? '' : folder].concat(notes).filter((part) => part !== '').join(' · ');
 		const range = pkg?.versionRange && pkg.versionRange !== '*' ? ` package-version="${pkg.versionRange}"` : '';
 		const kind = pkg ? `xsl:use-package name="${pkg.name}"${range}` + (exists ? `\nversion ${pkg.version}, from ${pkg.fromSetting ? 'the XSLT.resources.xsltPackages setting' : 'the workspace'}` : '\npackage not found - in the workspace, or the XSLT.resources.xsltPackages setting') :
-			node.ancestors.length === 0 ? 'top-level stylesheet' : node.isInclude ? 'xsl:include' : 'xsl:import';
-		const otherImporters = index.importersOf(node.path).filter((importer) => importer !== node.ancestors[node.ancestors.length - 1]);
+			node.ancestors.length === 0 ? (inSchema ? 'Schematron schema' : 'top-level stylesheet') : node.kind ?? (node.isInclude ? 'xsl:include' : 'xsl:import');
+		const otherImporters = (inSchema && isSchematron(node.path) ? SchIncludes.instance.includersOf(node.path) : index.importersOf(node.path))
+			.filter((importer) => importer !== node.ancestors[node.ancestors.length - 1]);
 		item.tooltip = (pkg && !exists ? kind : `${node.path}\n${kind}`) + (otherImporters.length > 0 ? `\nalso imported or included by: ${otherImporters.map((p) => vscode.workspace.asRelativePath(p)).join(', ')}` : '');
 		item.iconPath = new vscode.ThemeIcon(isCurrent ? 'arrow-right' : node.ancestors.length === 0 ? 'root-folder' : pkg ? 'package' : node.isInclude ? 'file-symlink-file' : 'file-code');
 		if (exists) {
@@ -130,7 +157,8 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 		}
 		item.id = node.ancestors.concat(node.path).join('\n');
 		// the top-level stylesheet has a Quick Run action - an imported or included module, Analyse as Package
-		item.contextValue = node.ancestors.length === 0 && exists ? 'topLevel' : pkg ? 'package' : 'module';
+		// - not in a schema's tree
+		item.contextValue = inSchema ? (node.ancestors.length === 0 ? 'schema' : 'schemaModule') : node.ancestors.length === 0 && exists ? 'topLevel' : pkg ? 'package' : 'module';
 		return item;
 	}
 
@@ -155,6 +183,29 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 			this.scanned.set(modulePath, info);
 		}
 		return this.scanned.get(modulePath)!;
+	}
+
+	// the files a Schematron file refers to - for the active document, from its text, which may not be saved yet
+	private schReferences(filePath: string, current: vscode.TextDocument | undefined): SchReference[] {
+		if (current && filePath === current.fileName) {
+			return SchIncludes.referencesIn(current.getText(), filePath);
+		}
+		const indexed = SchIncludes.instance.referencesOf(filePath);
+		if (indexed) {
+			return indexed;
+		}
+		try {
+			return SchIncludes.referencesIn(fs.readFileSync(filePath, 'utf8'), filePath);
+		} catch {
+			return [];
+		}
+	}
+
+	// 'Schematron Includes' for a Schematron file, else 'XSLT Imports'
+	private setTitle(current: vscode.TextDocument | undefined) {
+		if (this.view && current) {
+			this.view.title = isSchematron(current.fileName) ? 'Schematron Includes' : 'XSLT Imports';
+		}
 	}
 
 	private setMessage(message: string | undefined) {

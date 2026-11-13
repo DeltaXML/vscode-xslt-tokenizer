@@ -129,7 +129,12 @@
       "Bash(sed -n 30,33p schematron.xml)",
       "Bash(sed -n 42,44p schematron.xml)",
       "Bash(sed -n 109,130p settings.xml)",
-      "Bash(sed -n 160,206p settings.xml)"
+      "Bash(sed -n 160,206p settings.xml)",
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Schematron includes\")",
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Schematron includes|Schematron 1.5\")",
+      "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep 'from the output to its source')",
+      "Bash(sed -n 139,144p navigation.xml)",
+      "Bash(grep -n \"<li><strong>Outline</strong>\" schematron.xml)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"
