@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Validate with Schematron: the source document validated with a Schematron schema, as SchXslt2 - the Schematron
+  Schematron: Validate - the source document validated with a Schematron schema, as SchXslt2 - the Schematron
   processor bundled with XSpec - validates it, with one run of Saxon: the schema compiled to an XSLT 3.0 stylesheet by
   SchXslt2's transpiler, which is then run on the source document. The result is SchXslt2's SVRL report.
   The string parameters must be passed to Saxon as XPath expressions - ?schema="'file:/...'" - not as text: with an

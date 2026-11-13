@@ -16,7 +16,7 @@
   The files sch:include brings in are included - each with its own xsl:expand-text, so a file without it is unchanged,
   braces and all - with xml:base, for the files they refer to. The xsl:expand-text attributes are removed.
 
-  It's the first step of 'Validate with Schematron', and of XSpec tests of a schema, in the XSLT/XPath for VS Code
+  It's the first step of 'Schematron: Validate', and of XSpec tests of a schema, in the XSLT/XPath for VS Code
   extension, with its setting XSLT.schematron.allowExpandText - and can be run before SchXslt2, or another processor:
       java -jar saxon.jar -s:schema.sch -xsl:expand-text.xsl -o:schema-standard.sch
 -->

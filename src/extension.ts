@@ -1729,7 +1729,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// quick fixes for x:expect elements that XSpec 4 stops the run for (see XSpecCompat)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecCompat.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
-	// Validate with Schematron: an XML file validated with a schema, by SchXslt2 (see SchematronValidation)
+	// Schematron: Validate: an XML file validated with a schema, by SchXslt2 (see SchematronValidation)
 	SchematronValidation.register(context);
 	// Schematron: Go to Definition from is-a, extends' rule, active's pattern, and diagnostics and properties (see SchReferences)
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'sch' }, {

@@ -5,20 +5,20 @@
   instead of
     Order <value-of select="$id"/> has an invalid date: <value-of select="@date"/>
   They're a non-standard extension: with xsl:expand-text="yes" - on the schema below, as in XSLT - and the setting
-  XSLT.schematron.allowExpandText on. The extension rewrites them as sch:value-of for 'Validate with Schematron' and
-  XSpec tests - and 'XSLT: Export as Standard Schematron...' writes a copy that way, for other Schematron processors.
+  XSLT.schematron.allowExpandText on. The extension rewrites them as sch:value-of for 'Schematron: Validate' and
+  XSpec tests - and 'Schematron: Export Standard Copy...' writes a copy that way, for other Schematron processors.
 
   Things to try:
   - without the setting: xsl:expand-text below is reported as ignored, and the braces are text
   - turn on XSLT.schematron.allowExpandText: the text value templates are highlighted as XPath, and checked as you edit
-  - with orders.xml in the editor - which is associated with order-rules.sch - 'XSLT: Validate with Schematron (Choose
-    Schema)...' and choose this one: the messages are those of order-rules.sch
+  - with orders.xml in the editor - which is associated with order-rules.sch - 'Schematron: Validate (Choose Schema)...'
+    and choose this one: the messages are those of order-rules.sch
   - Rename (F2) the id of <let name="id">: its references in the messages are renamed too - and hover over one, or Go
     to Definition (F12)
   - type {$ in a message: the variables in scope - and a brace as text is written {{ or }}
   - xsl:expand-text="no" on a pattern, rule or assertion: the braces within it are text
   - shared/required-attribute-tvt.sch has its own xsl:expand-text: each file included decides for itself
-  - 'XSLT: Export as Standard Schematron...': the copy has sch:value-of, with the abstract pattern included
+  - 'Schematron: Export Standard Copy...': the copy has sch:value-of, with the abstract pattern included
 -->
 <schema xmlns="http://purl.oclc.org/dsdl/schematron"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"

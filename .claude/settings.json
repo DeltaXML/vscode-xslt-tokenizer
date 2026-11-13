@@ -124,7 +124,10 @@
       "Bash(sed -i '' \"s#Saxon bug 7323: transform\\(\\) stylesheet-params\\\\]\\(saxon-transform-params-bug.md\\) — NPE with run-time stylesheet-location \\(13.x, not 12.9\\); Schematron phase via defaultPhase workaround#Saxon bug 7323: transform\\(\\) stylesheet-params]\\(saxon-transform-params-bug.md\\) — NPE when a string param is passed untyped \\(13.x\\); pass ?name='value'#\" MEMORY.md)",
       "Bash(grep -n \"7323\\\\|allowExpandText\" MEMORY.md)",
       "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep 'expand-text.xsl - in test/xspec')",
-      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Schematron 1.5\")"
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Schematron 1.5\")",
+      "Bash(sed -n 15,18p schematron.xml)",
+      "Bash(sed -n 30,33p schematron.xml)",
+      "Bash(sed -n 42,44p schematron.xml)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

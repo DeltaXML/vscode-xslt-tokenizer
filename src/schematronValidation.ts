@@ -42,7 +42,7 @@ export interface SchematronCoverage {
 	activePatterns: Set<string>;
 }
 
-// Validate with Schematron: an XML file validated with a Schematron schema, as SchXslt2 - the Schematron processor bundled
+// Schematron: Validate: an XML file validated with a Schematron schema, as SchXslt2 - the Schematron processor bundled
 // with XSpec - validates it, with the Saxon of the XSLT.tasks.saxonJar setting (see
 // xslt-resources/schematron/validate.xsl). Each failed assertion and successful report is a problem in the XML file, at
 // the node it's about, with a link to the assertion in the schema.
@@ -84,6 +84,8 @@ export class SchematronValidation {
 				provideCodeLenses: (document) => SchematronValidation.codeLenses(document)
 			}),
 			vscode.commands.registerCommand(SchematronValidation.validateCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, false)),
+			// the same, in the editor title's More Actions menu - where the title has no category, so it's 'Validate with Schematron'
+			vscode.commands.registerCommand(SchematronValidation.validateCommand + 'Menu', (uri?: vscode.Uri) => SchematronValidation.run(uri, false)),
 			vscode.commands.registerCommand(SchematronValidation.chooseCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, true)),
 			vscode.commands.registerCommand(SchematronValidation.choosePhaseCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, false, true)),
 			vscode.commands.registerCommand(SchematronValidation.exportCommand, (uri?: vscode.Uri) => SchematronValidation.exportStandard(uri)),
@@ -123,7 +125,7 @@ export class SchematronValidation {
 	private static async run(uri: vscode.Uri | undefined, choose: boolean, choosePhase = false) {
 		const target = uri ?? vscode.window.activeTextEditor?.document.uri;
 		if (!target || target.scheme !== 'file') {
-			vscode.window.showInformationMessage('Validate with Schematron: open an XML file, or a Schematron schema, first.');
+			vscode.window.showInformationMessage('Schematron: open an XML file, or a Schematron schema, first.');
 			return;
 		}
 		const pairs = SchematronValidation.pairs();
@@ -184,7 +186,7 @@ export class SchematronValidation {
 	private static async setPhase(xml: string, schema: string): Promise<boolean> {
 		const { phases, defaultPhase } = SchematronValidation.phasesOf(fs.existsSync(schema) ? fs.readFileSync(schema, 'utf8') : '');
 		if (phases.length === 0) {
-			vscode.window.showInformationMessage(`Validate with Schematron: ${path.basename(schema)} has no phases - all its patterns are used.`);
+			vscode.window.showInformationMessage(`Schematron: ${path.basename(schema)} has no phases - all its patterns are used.`);
 			return false;
 		}
 		const items = [
@@ -319,32 +321,32 @@ export class SchematronValidation {
 		return results;
 	}
 
-	// Export as Standard Schematron: a copy of the schema - with the files sch:include brings in - with the text value
+	// Schematron: Export Standard Copy...: a copy of the schema - with the files sch:include brings in - with the text value
 	// templates of xsl:expand-text, a non-standard extension, as sch:value-of: for any Schematron processor
 	public static async exportStandard(uri?: vscode.Uri): Promise<vscode.Uri | undefined> {
 		const schemaUri = uri ?? (vscode.window.activeTextEditor?.document.languageId === 'sch' ? vscode.window.activeTextEditor.document.uri : undefined);
 		if (!schemaUri || schemaUri.scheme !== 'file') {
-			vscode.window.showErrorMessage('Export as Standard Schematron: open a Schematron schema first.');
+			vscode.window.showErrorMessage('Schematron: Export Standard Copy: open a Schematron schema first.');
 			return undefined;
 		}
 		const saxonJar = XSpecRunner.saxonJar(schemaUri);
 		if (!saxonJar || !fs.existsSync(saxonJar)) {
-			vscode.window.showErrorMessage(saxonJar ? `Export as Standard Schematron: the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting.` :
-				'Export as Standard Schematron: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
+			vscode.window.showErrorMessage(saxonJar ? `Schematron: Export Standard Copy: the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting.` :
+				'Schematron: Export Standard Copy: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
 			return undefined;
 		}
 		for (const document of vscode.workspace.textDocuments.filter((d) => d.isDirty && d.uri.fsPath === schemaUri.fsPath)) {
 			await document.save();
 		}
 		const target = await SchematronValidation.saveDialog({
-			title: 'Export as Standard Schematron', saveLabel: 'Export', filters: { Schematron: ['sch'] },
+			title: 'Schematron: Export Standard Copy', saveLabel: 'Export', filters: { Schematron: ['sch'] },
 			defaultUri: vscode.Uri.file(schemaUri.fsPath.replace(/(\.sch)?$/, '-standard.sch'))
 		});
 		if (!target) {
 			return undefined;
 		}
 		if (target.fsPath === schemaUri.fsPath) {
-			vscode.window.showErrorMessage('Export as Standard Schematron: choose another file than the schema itself.');
+			vscode.window.showErrorMessage('Schematron: Export Standard Copy: choose another file than the schema itself.');
 			return undefined;
 		}
 		const catalog = CatalogSetting.taskOption({});
@@ -356,7 +358,7 @@ export class SchematronValidation {
 		const outcome = await SchematronValidation.java(args, path.dirname(schemaUri.fsPath));
 		channel.append(outcome.output);
 		if (!outcome.ok || !fs.existsSync(target.fsPath)) {
-			const action = await vscode.window.showErrorMessage(`Export as Standard Schematron: ${path.basename(schemaUri.fsPath)} couldn't be exported - see the Schematron output`, 'Show Output');
+			const action = await vscode.window.showErrorMessage(`Schematron: Export Standard Copy: ${path.basename(schemaUri.fsPath)} couldn't be exported - see the Schematron output`, 'Show Output');
 			if (action) {
 				channel.show(true);
 			}
@@ -370,11 +372,11 @@ export class SchematronValidation {
 	private static problem(xmlUri: vscode.Uri, schema: string) {
 		const saxonJar = XSpecRunner.saxonJar(xmlUri);
 		if (!saxonJar) {
-			return 'Validate with Schematron: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.';
+			return 'Schematron: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.';
 		} else if (!fs.existsSync(saxonJar)) {
-			return `Validate with Schematron: the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting.`;
+			return `Schematron: the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting.`;
 		} else if (!fs.existsSync(schema)) {
-			return `Validate with Schematron: the schema '${schema}' doesn't exist.`;
+			return `Schematron: the schema '${schema}' doesn't exist.`;
 		}
 		return undefined;
 	}

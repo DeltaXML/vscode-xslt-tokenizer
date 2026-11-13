@@ -12,8 +12,8 @@ import { XslLexer } from './xslLexer';
 
 // Schematron: text value templates in messages, with xsl:expand-text="yes" on a Schematron element - a non-standard
 // extension, allowed by the XSLT.schematron.allowExpandText setting. They're rewritten as sch:value-of, for SchXslt2, by
-// xslt-resources/schematron/expand-text.xsl: before 'Validate with Schematron' and XSpec tests of a schema, and by 'Export
-// as Standard Schematron'. In the editor, the lexer has them where expand-text.xsl does (see XslLexer.schAllowExpandText)
+// xslt-resources/schematron/expand-text.xsl: before 'Schematron: Validate' and XSpec tests of a schema, and by 'Schematron:
+// Export Standard Copy...'. In the editor, the lexer has them where expand-text.xsl does (see XslLexer.schAllowExpandText)
 export class SchExpandText {
 	public static readonly section = 'XSLT.schematron';
 	public static readonly setting = 'allowExpandText';

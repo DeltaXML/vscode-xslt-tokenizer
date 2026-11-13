@@ -4,9 +4,9 @@
   bundled with XSpec) runs it.
 
   Things to try:
-  - Validate with Schematron: with orders.xml in the editor, 'XSLT: Validate with Schematron' - the problems are in the
+  - validate: with orders.xml in the editor, 'Schematron: Validate' - the problems are in the
     Problems view, at the elements they're about; click a problem's id to come back to its assertion here
-  - after validating: above each rule, the nodes it fired for - and 'Validate with Schematron (Choose Phase)...' to
+  - after validating: above each rule, the nodes it fired for - and 'Schematron: Validate (Choose Phase)...' to
     validate with the 'structure' phase only
   - hover over is-a="required-attribute": the abstract pattern's rules, with this pattern's values in place
   - hover over a rule's name, an assertion's name, extends' rule, or $max-order-total

@@ -343,24 +343,30 @@
 			},
 			{
 				"command": "xslt-xpath.validateWithSchematron",
+				"title": "Validate",
+				"category": "Schematron",
+				"icon": "$(checklist)"
+			},
+			{
+				"command": "xslt-xpath.validateWithSchematronMenu",
 				"title": "Validate with Schematron",
-				"category": "XSLT",
+				"category": "Schematron",
 				"icon": "$(checklist)"
 			},
 			{
 				"command": "xslt-xpath.validateWithSchematronChoose",
-				"title": "Validate with Schematron (Choose Schema)...",
-				"category": "XSLT"
+				"title": "Validate (Choose Schema)...",
+				"category": "Schematron"
 			},
 			{
 				"command": "xslt-xpath.validateWithSchematronPhase",
-				"title": "Validate with Schematron (Choose Phase)...",
-				"category": "XSLT"
+				"title": "Validate (Choose Phase)...",
+				"category": "Schematron"
 			},
 			{
 				"command": "xslt-xpath.exportStandardSchematron",
-				"title": "Export as Standard Schematron...",
-				"category": "XSLT"
+				"title": "Export Standard Copy...",
+				"category": "Schematron"
 			},
 			{
 				"command": "xslt-xpath.clearTimelineFile",
@@ -642,7 +648,7 @@
 					"group": "1_xslt@2"
 				},
 				{
-					"command": "xslt-xpath.validateWithSchematron",
+					"command": "xslt-xpath.validateWithSchematronMenu",
 					"when": "resourceLangId == xml || resourceLangId == sch",
 					"group": "1_xslt@3"
 				},
@@ -736,6 +742,10 @@
 				{
 					"command": "xslt-xpath.validateWithSchematronChoose",
 					"when": "editorLangId == xml"
+				},
+				{
+					"command": "xslt-xpath.validateWithSchematronMenu",
+					"when": "false"
 				},
 				{
 					"command": "xslt-xpath.validateWithSchematronPhase",
@@ -1047,7 +1057,7 @@
 					"type": "boolean",
 					"default": false,
 					"scope": "window",
-					"markdownDescription": "Allow text value templates in Schematron messages - a non-standard extension: with `xsl:expand-text=\"yes\"` on a Schematron element, as in XSLT, `Order {@id} has no lines` is `Order <value-of select=\"@id\"/> has no lines` in the messages within it - the text of `sch:assert`, `sch:report`, `sch:diagnostic` and `sch:property`. They're highlighted and checked as you edit, and rewritten as `sch:value-of` for 'Validate with Schematron' and XSpec tests - each file included with its own `xsl:expand-text`. Other Schematron processors ignore the attribute: 'XSLT: Export as Standard Schematron' writes a copy of a schema without it, for them."
+					"markdownDescription": "Allow text value templates in Schematron messages - a non-standard extension: with `xsl:expand-text=\"yes\"` on a Schematron element, as in XSLT, `Order {@id} has no lines` is `Order <value-of select=\"@id\"/> has no lines` in the messages within it - the text of `sch:assert`, `sch:report`, `sch:diagnostic` and `sch:property`. They're highlighted and checked as you edit, and rewritten as `sch:value-of` for 'Schematron: Validate' and XSpec tests - each file included with its own `xsl:expand-text`. Other Schematron processors ignore the attribute: 'Schematron: Export Standard Copy...' writes a copy of a schema without it, for them."
 				},
 				"XSLT.xspec.home": {
 					"type": "string",
