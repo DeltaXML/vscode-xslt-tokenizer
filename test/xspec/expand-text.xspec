@@ -103,6 +103,27 @@
       </x:expect>
    </x:scenario>
 
+   <x:scenario label="quotes in an expression are copied as written - a doubled quote in a string literal too; select's XML escaping of them is the serializer's">
+      <x:context mode="tvt:expand">
+         <sch:schema xsl:expand-text="yes">
+            <sch:pattern>
+               <sch:rule context="pet">
+                  <sch:assert test="false()">A: {"the ""new"" dog"} B: {'it''s'} C: {"it's {fine}"}</sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:context>
+      <x:expect label="each expression as sch:value-of's select - a brace in a string literal doesn't end the expression">
+         <sch:schema xml:base="...">
+            <sch:pattern>
+               <sch:rule context="pet">
+                  <sch:assert test="false()">A: <sch:value-of select='"the ""new"" dog"'/> B: <sch:value-of select="'it''s'"/> C: <sch:value-of select='"it&apos;s {{fine}}"'/></sch:assert>
+               </sch:rule>
+            </sch:pattern>
+         </sch:schema>
+      </x:expect>
+   </x:scenario>
+
    <x:scenario label="whitespace between expressions is kept - as sch:value-of, as the validation stylesheet would strip it as text">
       <x:context mode="tvt:expand">
          <sch:schema xsl:expand-text="yes">

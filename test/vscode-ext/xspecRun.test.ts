@@ -297,7 +297,7 @@ suite('XSpec: running tests', function () {
 		xspec.createRun = undefined;
 		const failed = [...outcomes].filter(([, outcome]) => outcome !== 'passed');
 		assert.deepEqual(failed, []);
-		assert.strictEqual(outcomes.size, 13, JSON.stringify([...outcomes]));
+		assert.strictEqual(outcomes.size, 14, JSON.stringify([...outcomes]));
 	});
 
 	test('a Schematron\'s XSpec: text value templates in messages, with xsl:expand-text - rewritten as sch:value-of, with the XSLT.schematron.allowExpandText setting', async () => {
