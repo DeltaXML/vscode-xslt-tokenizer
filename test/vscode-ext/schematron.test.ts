@@ -18,6 +18,7 @@ import { XSpecRunner } from '../../src/xspecRunner';
 import { SchVariables } from '../../src/schVariables';
 import { SchematronValidation } from '../../src/schematronValidation';
 import { XSpecSchematron } from '../../src/xspecSchematron';
+import { SchExpandText } from '../../src/schExpandText';
 
 suite('Schematron', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-'));
@@ -219,7 +220,8 @@ suite('Schematron', () => {
 		const diagnostics = await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration);
 		const diagnostic = diagnostics.find((d) => message.test(d.message));
 		assert.isDefined(diagnostic, diagnostics.map((d) => d.message).join('\n'));
-		const actions = SchXslt2Checks.codeActions(document, [diagnostic!]);
+		// the one that changes the text - not one that runs a command, e.g. opening a setting
+		const actions = SchXslt2Checks.codeActions(document, [diagnostic!]).filter((action) => action.edit);
 		assert.lengthOf(actions, 1, diagnostic!.message);
 		// applied to the text, not the document - which, left with unsaved changes, would be checked again as other tests run
 		const edits = actions[0].edit!.get(document.uri).map((edit) => [document.offsetAt(edit.range.start), document.offsetAt(edit.range.end), edit.newText] as const);
@@ -233,10 +235,22 @@ suite('Schematron', () => {
 		const messages = await problems(schema(' x:expand-text="yes"'));
 		assert.deepEqual(messages, [
 			'0: SchXslt2: the attribute xsl:version is ignored on sch:schema',
-			'1: SchXslt2: the attribute xsl:expand-text is ignored on sch:pattern - text value templates with it are a non-standard extension, allowed by the XSLT.schematron.allowExpandText setting',
+			'1: SchXslt2: the attribute xsl:expand-text is ignored on sch:pattern - text value templates with it are a non-standard extension, allowed by the setting XSLT.schematron.allowExpandText: see the quick fixes',
 			'1: SchXslt2: the attribute xsl:use-when is ignored on sch:assert'
 		]);
 		assert.strictEqual(await fixed(schema(' x:expand-text="yes"'), /expand-text/), schema(''));
+		// and a quick fix opening the setting - not changing it, as it's for every Schematron file
+		const file = path.join(dir, `expand-text${count++}.sch`);
+		fs.writeFileSync(file, schema(' x:expand-text="yes"'));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const diagnostics = await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration);
+		const actions = SchXslt2Checks.codeActions(document, diagnostics.filter((d) => /expand-text/.test(d.message)));
+		assert.deepEqual(actions.map((a) => [a.title, a.command?.command]), [
+			['Remove x:expand-text', undefined],
+			['Open the setting XSLT.schematron.allowExpandText - for every Schematron file', SchExpandText.openSettingCommand]
+		]);
+		// x:use-when: just the one to remove it
+		assert.lengthOf(SchXslt2Checks.codeActions(document, diagnostics.filter((d) => /use-when/.test(d.message))), 1);
 		try {
 			XslLexer.schAllowExpandText = true;
 			assert.deepEqual(await problems(schema(' x:expand-text="yes"')), [
@@ -245,6 +259,31 @@ suite('Schematron', () => {
 			]);
 		} finally {
 			XslLexer.schAllowExpandText = false;
+		}
+	});
+
+	test('the status bar, for a Schematron file: tvt:on or tvt:off, by the XSLT.schematron.allowExpandText setting - and a click opens the setting', async () => {
+		const file = path.join(dir, `status${count++}.sch`);
+		fs.writeFileSync(file, unprefixed('<pattern/>'));
+		const setting = vscode.workspace.getConfiguration('XSLT.schematron');
+		try {
+			await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(file)));
+			assert.include(SchExpandText.status(), { text: 'tvt:off', shown: true });
+			assert.include(SchExpandText.status()!.tooltip, '**not allowed**');
+			await setting.update('allowExpandText', true, vscode.ConfigurationTarget.Global);
+			assert.include(SchExpandText.status(), { text: 'tvt:on', shown: true });
+			assert.include(SchExpandText.status()!.tooltip, 'for every Schematron file');
+			// not for another file
+			const xml = path.join(dir, `status${count++}.xml`);
+			fs.writeFileSync(xml, '<a/>');
+			await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(xml)));
+			assert.isFalse(SchExpandText.status()!.shown);
+			// the click: the Settings editor, at the setting
+			await vscode.commands.executeCommand(SchExpandText.openSettingCommand);
+			assert.strictEqual(vscode.window.tabGroups.activeTabGroup.activeTab?.label, 'Settings');
+		} finally {
+			await setting.update('allowExpandText', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 		}
 	});
 
@@ -279,7 +318,7 @@ suite('Schematron', () => {
 			XslLexer.schAllowExpandText = false;
 		}
 		// without the setting: text - with a warning that xsl:expand-text is ignored
-		assert.deepEqual(await problems(schema), ['0: SchXslt2: the attribute xsl:expand-text is ignored on sch:schema - text value templates with it are a non-standard extension, allowed by the XSLT.schematron.allowExpandText setting']);
+		assert.deepEqual(await problems(schema), ['0: SchXslt2: the attribute xsl:expand-text is ignored on sch:schema - text value templates with it are a non-standard extension, allowed by the setting XSLT.schematron.allowExpandText: see the quick fixes']);
 	});
 
 	test('SchXslt2: XSLT it ignores - a top-level declaration it doesn\'t copy, or in a rule - or doesn\'t run, in a message', async () => {

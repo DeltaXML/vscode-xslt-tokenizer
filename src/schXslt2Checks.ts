@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { XmlElement, parseXml, descendants } from './xspecXml';
 import { XslLexer } from './xslLexer';
+import { SchExpandText } from './schExpandText';
 import { HrefPaths } from './hrefPaths';
 import { SCHXSLT2_XSLT_DECLARATIONS } from './schSchema';
 import { DiagnosticCode } from './xsltTokenDiagnostics';
@@ -81,7 +82,7 @@ export class SchXslt2Checks {
 						// text value templates in messages: the non-standard extension, allowed
 						continue;
 					}
-					const instead = name === 'xsl:expand-text' ? ' - text value templates with it are a non-standard extension, allowed by the XSLT.schematron.allowExpandText setting' : '';
+					const instead = name === 'xsl:expand-text' ? ' - text value templates with it are a non-standard extension, allowed by the setting XSLT.schematron.allowExpandText: see the quick fixes' : '';
 					const diagnostic = new vscode.Diagnostic(new vscode.Range(document.positionAt(start), document.positionAt(start + match[1].length)),
 						`SchXslt2: the attribute ${name} is ignored on sch:${schElementLocal}${instead}`, vscode.DiagnosticSeverity.Warning);
 					diagnostic.code = SchXslt2Checks.attributeCode;
@@ -231,7 +232,14 @@ export class SchXslt2Checks {
 				action.isPreferred = true;
 				action.edit = new vscode.WorkspaceEdit();
 				action.edit.delete(document.uri, new vscode.Range(document.positionAt(start - before), document.positionAt(start + attribute[0].length)));
-				return [action];
+				if (!/:expand-text$/.test(text.substring(start, document.offsetAt(diagnostic.range.end)))) {
+					return [action];
+				}
+				// xsl:expand-text: or the setting that allows it - opened, not changed, as it's for every Schematron file
+				const setting = new vscode.CodeAction(`Open the setting ${SchExpandText.section}.${SchExpandText.setting} - for every Schematron file`, vscode.CodeActionKind.QuickFix);
+				setting.diagnostics = [diagnostic];
+				setting.command = { command: SchExpandText.openSettingCommand, title: setting.title };
+				return [action, setting];
 			} else if (diagnostic.code === SchXslt2Checks.noteCode) {
 				const element = elementAt(diagnostic);
 				if (!element) {
