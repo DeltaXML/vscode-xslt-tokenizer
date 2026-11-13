@@ -34,6 +34,7 @@ export class SchXslt2Checks {
 	public static readonly includeCode = 'schxslt2-include';
 	public static readonly namespaceCode = 'schxslt2-namespace';
 	public static readonly noteCode = 'schxslt2-note';
+	public static readonly attributeCode = 'schxslt2-ignored-attribute';
 	private static readonly isoNamespace = 'http://purl.oclc.org/dsdl/schematron';
 	private static readonly xsltNamespace = 'http://www.w3.org/1999/XSL/Transform';
 	// the Schematron elements whose content is a message, copied into the report
@@ -63,7 +64,29 @@ export class SchXslt2Checks {
 			// e.g. Schematron 1.5's http://www.ascc.net/xml/schematron
 			add(schema.root, `SchXslt2: this isn't ISO Schematron, whose namespace is ${SchXslt2Checks.isoNamespace} - SchXslt2 doesn't validate with it`, SchXslt2Checks.namespaceCode);
 		}
-		for (const element of descendants(schema.root)) {
+		const text = document.getText();
+		for (const element of [schema.root, ...descendants(schema.root)]) {
+			// an XSLT attribute of a Schematron element, e.g. xsl:expand-text on sch:pattern: allowed, as a foreign attribute,
+			// but SchXslt2 doesn't use it
+			const schElementLocal = schema.schLocal(element);
+			if (schElementLocal !== undefined) {
+				const startTag = text.substring(element.start, element.contentStart);
+				for (const match of startTag.matchAll(/\s([\w.-]+:[\w.-]+)\s*=/g)) {
+					if (!match[1].startsWith(schema.xsltPrefix)) {
+						continue;
+					}
+					const start = element.start + match.index! + 1;
+					const name = 'xsl:' + match[1].substring(schema.xsltPrefix.length);
+					const instead = name === 'xsl:expand-text' ? ' - text value templates in messages are enabled for every schema by the XSLT.schematron.expandText setting' : '';
+					const diagnostic = new vscode.Diagnostic(new vscode.Range(document.positionAt(start), document.positionAt(start + match[1].length)),
+						`SchXslt2: the attribute ${name} is ignored on sch:${schElementLocal}${instead}`, vscode.DiagnosticSeverity.Warning);
+					diagnostic.code = SchXslt2Checks.attributeCode;
+					diagnostics.push(diagnostic);
+				}
+			}
+			if (element === schema.root) {
+				continue;
+			}
 			const local = schema.xsltLocal(element);
 			const parent = element.parent!;
 			const parentLocal = schema.schLocal(parent);
@@ -181,6 +204,20 @@ export class SchXslt2Checks {
 				action.edit = new vscode.WorkspaceEdit();
 				action.edit.replace(document.uri, new vscode.Range(document.positionAt(element.start), document.positionAt(element.end)), replacement);
 				return [action];
+			} else if (diagnostic.code === SchXslt2Checks.attributeCode) {
+				// the attribute, with the whitespace before it
+				const start = document.offsetAt(diagnostic.range.start);
+				const attribute = /^[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*')/.exec(text.substring(start));
+				if (!attribute) {
+					return [];
+				}
+				const before = /\s+$/.exec(text.substring(0, start))?.[0].length ?? 0;
+				const action = new vscode.CodeAction(`Remove ${text.substring(start, document.offsetAt(diagnostic.range.end))}`, vscode.CodeActionKind.QuickFix);
+				action.diagnostics = [diagnostic];
+				action.isPreferred = true;
+				action.edit = new vscode.WorkspaceEdit();
+				action.edit.delete(document.uri, new vscode.Range(document.positionAt(start - before), document.positionAt(start + attribute[0].length)));
+				return [action];
 			} else if (diagnostic.code === SchXslt2Checks.noteCode) {
 				const element = elementAt(diagnostic);
 				if (!element) {
@@ -257,7 +294,7 @@ export class SchXslt2Checks {
 		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
 		const xsltPrefix = XslLexer.schXsltPrefix(text) + ':';
 		return {
-			root, prefix,
+			root, prefix, xsltPrefix,
 			schLocal: (element: XmlElement) => (prefix ? element.name.startsWith(prefix) : !element.name.includes(':')) ? element.name.substring(prefix.length) : undefined,
 			xsltLocal: (element: XmlElement) => element.name.startsWith(xsltPrefix) ? element.name.substring(xsltPrefix.length) : undefined
 		};

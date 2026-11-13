@@ -16,6 +16,7 @@ import { XSpecRequired } from './xspecRequired';
 import { XSpecVariables } from './xspecVariables';
 import { XSpecExpectResult } from './xspecExpectResult';
 import { SchXslt2Checks } from './schXslt2Checks';
+import { SchExpandText } from './schExpandText';
 import { SchReferences } from './schReferences';
 import { SchRequired } from './schRequired';
 import { SchHover } from './schHover';
@@ -1635,7 +1636,14 @@ export function activate(context: vscode.ExtensionContext) {
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt' }, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp' }, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'sch' }, new XsltSemanticTokensProvider(SchConfiguration.configuration), legend));
+	const schSemanticTokensProvider = new XsltSemanticTokensProvider(SchConfiguration.configuration);
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'sch' }, schSemanticTokensProvider, legend));
+	// Schematron text value templates, by the XSLT.schematron.expandText setting: when it changes, the open schemas are
+	// highlighted and checked again
+	SchExpandText.activate(context, () => {
+		schSemanticTokensProvider.refresh();
+		vscode.workspace.textDocuments.filter((doc) => doc.languageId === 'sch' && doc.uri.scheme === 'file').forEach((doc) => schSymbolProvider.getDocumentSymbols(doc, false));
+	});
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xspec' }, new XsltSemanticTokensProvider(XSpecConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'bpmn' }, new XsltSemanticTokensProvider(XMLConfiguration.configuration), legend));
 
@@ -1902,10 +1910,17 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 
 	private xslLexer: XslLexer;
+	private readonly changed = new vscode.EventEmitter<void>();
+	public readonly onDidChangeSemanticTokens = this.changed.event;
 
 	public constructor(languageConfig: LanguageConfiguration) {
 		this.xslLexer = new XslLexer(languageConfig);
 		this.xslLexer.provideCharLevelState = true;
+	}
+
+	// the tokens of every document are provided again, e.g. when a setting changes how they're lexed
+	public refresh() {
+		this.changed.fire();
 	}
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {

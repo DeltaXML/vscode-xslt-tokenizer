@@ -108,7 +108,9 @@
       "Bash(XSPEC_SAXON_JAR=__TRACKED_VAR__ SAXON_JAR=__TRACKED_VAR__ node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep 'XSpec'\\\\''s namespaces|breakpoint in the stylesheet under test|stops at a breakpoint, shows variables')",
       "Bash(awk \"/^            '?[a-z-]+'?: \\\\{|^        '?[a-z-]+'?: \\\\{/{el=\\\\$1} /'\\(xs:anyURI|xs:decimal|xsl:char|xsl:modes|xsl:mode|xs:NCName|xs:NMTOKEN|xs:ID|xsl:zero-digit|xsl:default-mode-type|xsl:EQName-in-namespace|xs:token|xsl:prefix-or-default|xs:string|xsl:uri-list|xsl:prefixes|xsl:prefix-list\\)'/{print NR, el, \\\\$0}\" src/xsltSchema.ts)",
       "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"probe empty\")",
-      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Empty attribute values\")"
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Empty attribute values\")",
+      "Bash(sed -i '' 's#no XSpec-side warning yet.$#no XSpec-side warning yet. 2026-11-13: TVT variables also in definition/references/rename/hover \\(SchVariables.tvtValues/contentAt, used by SchHover\\); completion, diagnostics, formatting came from the lexer already.#' schematron-language-support.md)",
+      "Bash(tail -1 schematron-language-support.md)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

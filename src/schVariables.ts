@@ -9,6 +9,7 @@
  */
 import * as vscode from 'vscode';
 import { XmlElement, parseXml, descendants } from './xspecXml';
+import { XslLexer } from './xslLexer';
 
 // a name in the text: a variable reference, without its '$', or a declaration's name attribute
 interface Occurrence {
@@ -23,7 +24,8 @@ interface Occurrence {
 // - sch:let of a pattern or group: in it - of a rule: in it, and in the abstract rules it extends, whose content is
 //   copied into it - of an abstract rule: in it, and the rules that extend it
 // - the parameters of an abstract pattern, e.g. $ctx: in it, and the sch:param of each pattern with is-a for it
-// An inner declaration of the same name hides an outer one, in its scope
+// An inner declaration of the same name hides an outer one, in its scope. The references are those in XPath attributes -
+// and with the XSLT.schematron.expandText setting, in the text value templates of messages (see tvtValues)
 export class SchVariables {
 	// the attributes that aren't XPath expressions - names, ids, references and URIs
 	private static readonly notXPath = new Set(['name', 'id', 'href', 'prefix', 'uri', 'abstract', 'is-a', 'pattern', 'rule', 'diagnostics', 'properties',
@@ -70,14 +72,17 @@ export class SchVariables {
 		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
 		const local = (e: XmlElement | undefined) => e && (prefix ? e.name.startsWith(prefix) : !e.name.includes(':')) ? e.name.substring(prefix.length) : undefined;
 		const offset = document.offsetAt(position);
-		const element = [root, ...descendants(root)].filter((e) => e.start < offset && offset < e.contentStart).pop();
+		const all = [root, ...descendants(root)];
+		// the element whose start tag the position is in - else, whose text: in a text value template
+		const element = all.filter((e) => e.start < offset && offset < e.contentStart).pop() ?? SchVariables.contentAt(all, offset);
 		if (!element) {
 			return undefined;
 		}
-		// the name at the position: a reference in an XPath attribute, or a declaration's name
+		// the name at the position: a reference in an XPath attribute or a text value template, or a declaration's name
 		let name: string | undefined;
 		let at: Occurrence | undefined;
-		for (const value of SchVariables.attributeValues(text, element)) {
+		const inStartTag = offset < element.contentStart;
+		for (const value of inStartTag ? SchVariables.attributeValues(text, element) : SchVariables.tvtValues(text, element, local)) {
 			if (offset < value.start || offset > value.end) {
 				continue;
 			}
@@ -102,7 +107,6 @@ export class SchVariables {
 		for (let e: XmlElement | undefined = element; e; e = e.parent) {
 			ancestors.push(e);
 		}
-		const all = [root, ...descendants(root)];
 		// an abstract pattern's parameter: in the pattern, and the sch:param of each pattern with is-a for it
 		const isInstanceParam = at.isDeclaration && local(element) === 'param' && element.parent?.attributes.has('is-a');
 		// - a name it declares, or a pattern with is-a supplies: SchXslt2 replaces only those; another is a variable reference
@@ -114,7 +118,7 @@ export class SchVariables {
 			const id = abstractPattern.attributes.get('id')?.trim();
 			const instanceParams = all.filter((p) => local(p) === 'param' && p.parent?.attributes.get('is-a')?.trim() === id && p.attributes.get('name')?.trim() === name);
 			const declared = SchVariables.children(abstractPattern, 'param', local).filter((p) => p.attributes.get('name')?.trim() === name);
-			const occurrences = [...declared, ...instanceParams].flatMap((p) => SchVariables.nameOccurrence(text, p)).concat(SchVariables.referencesWithin(text, abstractPattern, name, () => false));
+			const occurrences = [...declared, ...instanceParams].flatMap((p) => SchVariables.nameOccurrence(text, p)).concat(SchVariables.referencesWithin(text, abstractPattern, name, () => false, local));
 			return { at, occurrences };
 		}
 		// the declaration: the nearest - in the element's ancestors, a phase, or an abstract rule the element's rule extends
@@ -146,22 +150,82 @@ export class SchVariables {
 		}
 		// not where another declaration of the name hides it
 		const hidden = (e: XmlElement) => !scopes.includes(e) && e !== parent && declares(e);
-		const occurrences = SchVariables.nameOccurrence(text, declaration).concat(scopes.flatMap((scope) => SchVariables.referencesWithin(text, scope, name!, hidden)));
+		const occurrences = SchVariables.nameOccurrence(text, declaration).concat(scopes.flatMap((scope) => SchVariables.referencesWithin(text, scope, name!, hidden, local)));
 		return { at, occurrences: [...new Map(occurrences.map((o) => [o.start, o])).values()] };
 	}
 
 	// the $name references in the XPath attributes of the element and those within it - not within an element hidden
-	private static referencesWithin(text: string, scope: XmlElement, name: string, hidden: (e: XmlElement) => boolean): Occurrence[] {
+	private static referencesWithin(text: string, scope: XmlElement, name: string, hidden: (e: XmlElement) => boolean, local: (e: XmlElement | undefined) => string | undefined): Occurrence[] {
 		const result: Occurrence[] = [];
 		const visit = (e: XmlElement) => {
 			if (hidden(e)) {
 				return;
 			}
-			SchVariables.attributeValues(text, e).filter((v) => !SchVariables.notXPath.has(v.name)).forEach((v) =>
+			[...SchVariables.attributeValues(text, e).filter((v) => !SchVariables.notXPath.has(v.name)), ...SchVariables.tvtValues(text, e, local)].forEach((v) =>
 				SchVariables.referencesIn(v.value, v.start).filter((r) => text.substring(r.start, r.end) === name).forEach((r) => result.push({ ...r, isDeclaration: false })));
 			e.children.forEach(visit);
 		};
 		visit(scope);
+		return result;
+	}
+
+	// the innermost element whose text - not markup - the offset is in
+	public static contentAt(elements: XmlElement[], offset: number): XmlElement | undefined {
+		return elements.filter((e) => e.contentStart <= offset && offset <= e.contentEnd && !e.children.some((c) => c.start <= offset && offset < c.end)).pop();
+	}
+
+	// with the XSLT.schematron.expandText setting, the text value templates in the element's own text, e.g. {$id} - the
+	// expression within the braces, with its offsets. As the lexer has them (see XslLexer.schExpandText): not in a sch:p of
+	// a phase, pattern or rule, which isn't in the report, nor in xsl:note - and {{ and }} are braces
+	public static tvtValues(text: string, element: XmlElement, local: (e: XmlElement | undefined) => string | undefined): { name: string, value: string, start: number, end: number }[] {
+		if (!XslLexer.schExpandText || element.contentStart >= element.contentEnd) {
+			return [];
+		}
+		for (let e: XmlElement | undefined = element; e; e = e.parent) {
+			let depth = 0;
+			for (let a = e.parent; a; a = a.parent) {
+				depth++;
+			}
+			if ((local(e) === 'p' && depth > 1) || /(^|:)note$/.test(e.name) && local(e) === undefined) {
+				return [];
+			}
+		}
+		// the element's own text: its content, without its children - and without comments and processing instructions,
+		// and the markup of CDATA sections, as spaces
+		const content = text.substring(element.contentStart, element.contentEnd).split('');
+		element.children.forEach((c) => content.fill(' ', c.start - element.contentStart, c.end - element.contentStart));
+		const own = content.join('').replace(/<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!\[CDATA\[|\]\]>/g, (markup) => ' '.repeat(markup.length));
+		const result: { name: string, value: string, start: number, end: number }[] = [];
+		let i = 0;
+		while (i < own.length) {
+			const c = own[i];
+			if ((c === '{' || c === '}') && own[i + 1] === c) {
+				i += 2;
+			} else if (c === '{') {
+				// to the matching '}' - not one in a string literal, or of a nested map or inline function
+				let depth = 1;
+				let quote: string | undefined;
+				let j = i + 1;
+				for (; j < own.length && depth > 0; j++) {
+					const d = own[j];
+					if (quote) {
+						quote = d === quote ? undefined : quote;
+					} else if (d === '\'' || d === '"') {
+						quote = d;
+					} else if (d === '{') {
+						depth++;
+					} else if (d === '}') {
+						depth--;
+					}
+				}
+				const start = element.contentStart + i + 1;
+				const end = element.contentStart + j - (depth === 0 ? 1 : 0);
+				result.push({ name: '#tvt', value: own.substring(start - element.contentStart, end - element.contentStart), start, end });
+				i = j;
+			} else {
+				i++;
+			}
+		}
 		return result;
 	}
 

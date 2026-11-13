@@ -196,6 +196,9 @@ export interface GlobalInstructionData {
 }
 
 export class XslLexer {
+    // Schematron: whether text value templates are enabled in a schema - SchXslt2's schxslt:expand-text parameter, set by
+    // the XSLT.schematron.expandText setting - for the whole schema, as SchXslt2 sets expand-text on its stylesheet
+    public static schExpandText = false;
     // XSLT 4.0 optional function parameter: xsl:param required="no" (the 'required' attribute may come before or after 'name')
     protected static recordParamRequired(gd: GlobalInstructionData | undefined, requiredValue: string, currentParamNamePushed: boolean): boolean | undefined {
         const isOptional = ['no', 'false', '0'].includes(requiredValue.trim());
@@ -1110,8 +1113,10 @@ export class XslLexer {
                             this.tagIsEmbeddedXslt = !!elementProperties.isEmbeddedXslt;
                             tagGlobalInstructionType = elementProperties.instructionType;
                             tagElementName = elementProperties.nativeName;
-                            if (nextState === XMLCharState.rStNoAtt && isNativeElement && tagElementName === 'note' && xmlElementStack.length > 0) {
-                                // <xsl:note> - its content is ignored, so it has no text value templates
+                            if (nextState === XMLCharState.rStNoAtt && xmlElementStack.length > 0 && isNativeElement &&
+                                (tagElementName === 'note' || this.isSchUnreportedText(tagElementName, xmlElementStack.length - 1))) {
+                                // <xsl:note> - its content is ignored, so it has no text value templates - or Schematron's text
+                                // that isn't in the report
                                 xmlElementStack[xmlElementStack.length - 1].expandText = false;
                                 expandTextValue = false;
                             }
@@ -1297,7 +1302,7 @@ export class XslLexer {
                                 this.globalInstructionData.push({type: GlobalInstructionType.TemplateMatch, name: `${tagMatchToken.value}#${this.globalInstructionData.length}`, token: tagMatchToken, idNumber: 0});
                             }
                             // the content of xsl:note (XSLT 4.0) is ignored, so it has no text value templates
-                            expandTextValue = this.addToElementStack(isNativeElement && tagElementName === 'note' ? false : expandTextValue, xmlElementStack);
+                            expandTextValue = this.addToElementStack(isNativeElement && (tagElementName === 'note' || this.isSchUnreportedText(tagElementName, xmlElementStack.length)) ? false : expandTextValue, xmlElementStack);
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             storeToken = false;
                             tokenChars = [];
@@ -1793,13 +1798,19 @@ export class XslLexer {
         result.push(tkn);
     }
 
+    // Schematron: an element whose text SchXslt2 doesn't put in its report, so has no text value templates - sch:p, other
+    // than the schema's: of a phase, pattern or rule. With depth, the number of its ancestors
+    private isSchUnreportedText(nativeName: string, depth: number) {
+        return this.docType === DocumentTypes.SCH && nativeName === 'p' && depth > 1;
+    }
+
     private addToElementStack(expandTextValue: boolean | null, xmlElementStack: XmlElement[]) {
         if (expandTextValue === null) {
             if (xmlElementStack.length > 0) {
                 expandTextValue = xmlElementStack[xmlElementStack.length - 1].expandText;
             }
             else {
-                expandTextValue = false;
+                expandTextValue = this.docType === DocumentTypes.SCH && XslLexer.schExpandText;
             }
         }
         xmlElementStack.push({ "expandText": expandTextValue });

@@ -10,6 +10,7 @@
 import * as vscode from 'vscode';
 import { XmlElement, parseXml, descendants } from './xspecXml';
 import { SchReferences, Declared } from './schReferences';
+import { SchVariables } from './schVariables';
 import { SchSchema } from './schSchema';
 
 // Schematron: hover help for reviewing and editing a schema - before the hovers it shares with stylesheets, e.g. a
@@ -35,8 +36,17 @@ export class SchHover {
 		const local = context.local;
 		const offset = document.offsetAt(position);
 		// the innermost element whose start tag the position is in
-		const element = [root, ...descendants(root)].filter((e) => e.start < offset && offset < e.contentStart).pop();
-		if (!element || local(element) === undefined) {
+		const all = [root, ...descendants(root)];
+		const element = all.filter((e) => e.start < offset && offset < e.contentStart).pop();
+		if (!element) {
+			// in text: a variable reference in a text value template, with the XSLT.schematron.expandText setting
+			const content = SchVariables.contentAt(all, offset);
+			const inTvt = content && SchVariables.tvtValues(text, content, local).some((v) => offset >= v.start && offset <= v.end);
+			const variable = inTvt ? document.getWordRangeAtPosition(position, /\$[\w.-]+(?::[\w.-]+)?/) : undefined;
+			const markdown = variable ? SchHover.variableHover(context, content!, document.getText(variable).substring(1)) : undefined;
+			return markdown ? new vscode.Hover(markdown) : undefined;
+		}
+		if (local(element) === undefined) {
 			return undefined;
 		}
 		const name = local(element)!;

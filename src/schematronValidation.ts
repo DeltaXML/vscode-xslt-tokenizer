@@ -17,6 +17,7 @@ import { XSpecRunner } from './xspecRunner';
 import { CatalogSetting } from './catalogSetting';
 import { HrefPaths } from './hrefPaths';
 import { SchReferences } from './schReferences';
+import { SchExpandText } from './schExpandText';
 
 // a failed assertion or successful report, from the SVRL report
 export interface SchematronResult {
@@ -276,7 +277,9 @@ export class SchematronValidation {
 			'-s:' + xmlUri.fsPath, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'validate.xsl'), '-o:' + svrl,
 			'schema=' + vscode.Uri.file(schema).toString(), 'transpiler=' + vscode.Uri.file(transpiler).toString(),
 			// a phase that was chosen: not the schema's default phase - if it still has the phase
-			...(phase !== '#DEFAULT' ? ['phase=' + phase] : [])];
+			...(phase !== '#DEFAULT' ? ['phase=' + phase] : []),
+			// text value templates in messages: the XSLT.schematron.expandText setting
+			...(SchExpandText.enabled() ? ['?expand-text=true()'] : [])];
 		const channel = SchematronValidation.output();
 		channel.appendLine(`Validating ${xmlUri.fsPath} with ${schema}:`);
 		channel.appendLine('java ' + args.map((arg) => /[\s"]/.test(arg) ? `"${arg}"` : arg).join(' '));
