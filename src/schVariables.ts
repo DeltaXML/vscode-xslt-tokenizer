@@ -109,16 +109,18 @@ export class SchVariables {
 		}
 		// an abstract pattern's parameter: in the pattern, and the sch:param of each pattern with is-a for it
 		const isInstanceParam = at.isDeclaration && local(element) === 'param' && element.parent?.attributes.has('is-a');
+		// in a text value template, a name isn't an abstract pattern's parameter: SchXslt2 replaces them only in attributes
+		const inTvt = !inStartTag;
 		// - a name it declares, or a pattern with is-a supplies: SchXslt2 replaces only those; another is a variable reference
 		const isParameterOf = (pattern: XmlElement) => SchVariables.children(pattern, 'param', local).some((p) => p.attributes.get('name')?.trim() === name) ||
 			all.some((p) => local(p) === 'param' && p.attributes.get('name')?.trim() === name && p.parent?.attributes.get('is-a')?.trim() === pattern.attributes.get('id')?.trim());
 		const abstractPattern = isInstanceParam ? all.find((p) => (local(p) === 'pattern' || local(p) === 'group') && isAbstract(p) && p.attributes.get('id')?.trim() === element.parent!.attributes.get('is-a')?.trim()) :
-			ancestors.find((a) => (local(a) === 'pattern' || local(a) === 'group') && isAbstract(a) && isParameterOf(a));
+			inTvt ? undefined : ancestors.find((a) => (local(a) === 'pattern' || local(a) === 'group') && isAbstract(a) && isParameterOf(a));
 		if (abstractPattern) {
 			const id = abstractPattern.attributes.get('id')?.trim();
 			const instanceParams = all.filter((p) => local(p) === 'param' && p.parent?.attributes.get('is-a')?.trim() === id && p.attributes.get('name')?.trim() === name);
 			const declared = SchVariables.children(abstractPattern, 'param', local).filter((p) => p.attributes.get('name')?.trim() === name);
-			const occurrences = [...declared, ...instanceParams].flatMap((p) => SchVariables.nameOccurrence(text, p)).concat(SchVariables.referencesWithin(text, abstractPattern, name, () => false, local));
+			const occurrences = [...declared, ...instanceParams].flatMap((p) => SchVariables.nameOccurrence(text, p)).concat(SchVariables.referencesWithin(text, abstractPattern, name, () => false, local, false));
 			return { at, occurrences };
 		}
 		// the declaration: the nearest - in the element's ancestors, a phase, or an abstract rule the element's rule extends
@@ -155,13 +157,14 @@ export class SchVariables {
 	}
 
 	// the $name references in the XPath attributes of the element and those within it - not within an element hidden
-	private static referencesWithin(text: string, scope: XmlElement, name: string, hidden: (e: XmlElement) => boolean, local: (e: XmlElement | undefined) => string | undefined): Occurrence[] {
+	// - with tvts false, not those in text value templates: for an abstract pattern's parameter, which they aren't
+	private static referencesWithin(text: string, scope: XmlElement, name: string, hidden: (e: XmlElement) => boolean, local: (e: XmlElement | undefined) => string | undefined, tvts = true): Occurrence[] {
 		const result: Occurrence[] = [];
 		const visit = (e: XmlElement) => {
 			if (hidden(e)) {
 				return;
 			}
-			[...SchVariables.attributeValues(text, e).filter((v) => !SchVariables.notXPath.has(v.name)), ...SchVariables.tvtValues(text, e, local)].forEach((v) =>
+			[...SchVariables.attributeValues(text, e).filter((v) => !SchVariables.notXPath.has(v.name)), ...(tvts ? SchVariables.tvtValues(text, e, local) : [])].forEach((v) =>
 				SchVariables.referencesIn(v.value, v.start).filter((r) => text.substring(r.start, r.end) === name).forEach((r) => result.push({ ...r, isDeclaration: false })));
 			e.children.forEach(visit);
 		};
@@ -230,7 +233,7 @@ export class SchVariables {
 	}
 
 	// the names of the variable references in an XPath expression - after each '$', not within a string literal
-	private static referencesIn(value: string, start: number): { start: number, end: number }[] {
+	public static referencesIn(value: string, start: number): { start: number, end: number }[] {
 		const masked = value.replace(/"[^"]*"|'[^']*'/g, (literal) => ' '.repeat(literal.length));
 		return [...masked.matchAll(/\$((?:[\w.-]+:)?[\w.-]+)/g)].map((m) => ({ start: start + m.index! + 1, end: start + m.index! + m[0].length }));
 	}

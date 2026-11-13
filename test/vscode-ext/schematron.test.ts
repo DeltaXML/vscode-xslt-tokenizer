@@ -686,6 +686,32 @@ suite('Schematron', () => {
 		assert.include(await problems(content), '0: SchXslt2: no phase has the id nophase - no pattern is active');
 	});
 
+	test('text value templates: an abstract pattern\'s parameter isn\'t replaced in them - an error, with a quick fix to sch:value-of, and not renamed', async () => {
+		const schema = (message: string) => unprefixed(`<pattern abstract="true" id="ap"><param name="required"/><rule context="a">
+<assert test="normalize-space($required)">needs {$required} - "{string-length("x")}"</assert>${message}</rule></pattern>
+<pattern id="p" is-a="ap"><param name="required" value="@name"/></pattern>`);
+		const content = schema('');
+		try {
+			XslLexer.schExpandText = true;
+			assert.deepEqual(await problems(content), [
+				'2: SchXslt2: $required is a parameter of the abstract pattern, which is replaced only in attributes - in a text value template it\'s a variable that isn\'t declared (XPST0008): use <value-of select="$required"/>'
+			]);
+			assert.strictEqual(await fixed(content, /\$required is a parameter/), content.replace('{$required}', '<value-of select="$required"/>'));
+			// renamed: the parameter, its value and its reference in the test - not the text value template
+			const file = path.join(dir, `tvt-param${count++}.sch`);
+			fs.writeFileSync(file, content);
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+			const edit = SchVariables.rename(document, document.positionAt(content.indexOf('name="required"') + 8), 'attr');
+			assert.lengthOf(edit!.get(document.uri), 3);
+			const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, document.positionAt(content.indexOf('{$required}') + 3));
+			assert.notInclude(hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n'), 'Parameter of the abstract');
+		} finally {
+			XslLexer.schExpandText = false;
+		}
+		// without the setting: text
+		assert.deepEqual(await problems(content), []);
+	});
+
 	test('text value templates: Go to Definition, Find All References, Rename and hover for the variables in them - with the XSLT.schematron.expandText setting', async () => {
 		const content = unprefixed(`<let name="limit" value="5"/>
 <pattern id="p"><p>{$id} isn't a reference here</p><rule context="order"><let name="id" value="@id"/>
