@@ -132,6 +132,133 @@ export class SchIncludes {
 		return chain;
 	}
 
+	// for a file sch:include brings in - or sch:extends href - what's in scope where it's included, as SchXslt2 has it in
+	// the schema it assembles: the sch:ns prefixes of the schemas that include it, and the variables - the sch:let and
+	// sch:param of the elements that contain the sch:include, and of the phases, which are global. Undefined if nothing
+	// includes it
+	public contextOf(filePath: string): { namespaces: Map<string, string>, variables: Set<string> } | undefined {
+		const chain = this.chain(filePath);
+		if (chain.length < 2) {
+			return undefined;
+		}
+		const namespaces = new Map<string, string>();
+		const variables = new Set<string>();
+		for (let i = 0; i < chain.length - 1; i++) {
+			const text = SchIncludes.textOf(chain[i]);
+			const root = text !== undefined ? parseXml(text) : undefined;
+			if (!root) {
+				continue;
+			}
+			XslLexer.schNamespaces(text!).forEach((uri, prefix) => namespaces.set(prefix, uri));
+			const colon = root.name.indexOf(':');
+			const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+			const local = (e: XmlElement) => (prefix ? e.name.startsWith(prefix) : !e.name.includes(':')) ? e.name.substring(prefix.length) : undefined;
+			const declarations = (e: XmlElement) => e.children.filter((c) => local(c) === 'let' || local(c) === 'param').forEach((c) => {
+				const name = c.attributes.get('name')?.trim();
+				if (name) {
+					variables.add(name);
+				}
+			});
+			root.children.filter((c) => local(c) === 'phase').forEach(declarations);
+			// the sch:include of the next file in the chain
+			const include = descendants(root).find((e) => (local(e) === 'include' || local(e) === 'extends') && e.attributes.has('href') &&
+				HrefPaths.toPath(e.attributes.get('href')!.trim(), chain[i]) === chain[i + 1]);
+			for (let e = include?.parent; e; e = e.parent) {
+				declarations(e);
+			}
+		}
+		return { namespaces, variables };
+	}
+
+	// for a file sch:include brings in, the declaration of a variable it uses but doesn't declare: in scope where it's
+	// included - the nearest, from the sch:include outwards, and then the phases of that schema, and so on up the files
+	// that include it. The file, and the offsets of the name in its name attribute
+	public declarationOf(filePath: string, name: string): { file: string, start: number, end: number } | undefined {
+		const chain = this.chain(filePath);
+		for (let i = chain.length - 2; i >= 0; i--) {
+			const text = SchIncludes.textOf(chain[i]);
+			const root = text !== undefined ? parseXml(text) : undefined;
+			if (!root) {
+				continue;
+			}
+			const colon = root.name.indexOf(':');
+			const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+			const local = (e: XmlElement) => (prefix ? e.name.startsWith(prefix) : !e.name.includes(':')) ? e.name.substring(prefix.length) : undefined;
+			const declarationIn = (e: XmlElement) => e.children.find((c) => (local(c) === 'let' || local(c) === 'param') && c.attributes.get('name')?.trim() === name);
+			const include = descendants(root).find((e) => (local(e) === 'include' || local(e) === 'extends') && e.attributes.has('href') &&
+				HrefPaths.toPath(e.attributes.get('href')!.trim(), chain[i]) === chain[i + 1]);
+			let declaration: XmlElement | undefined;
+			for (let e = include?.parent; e && !declaration; e = e.parent) {
+				declaration = declarationIn(e);
+			}
+			declaration = declaration ?? root.children.filter((c) => local(c) === 'phase').map(declarationIn).find((d) => d);
+			if (declaration) {
+				const startTag = text!.substring(declaration.start, declaration.contentStart);
+				const match = /\sname\s*=\s*(["'])\s*([^"']*?)\s*\1/.exec(startTag);
+				if (match) {
+					const start = declaration.start + match.index + match[0].indexOf(match[2], match[0].indexOf(match[1]) + 1);
+					return { file: chain[i], start, end: start + match[2].length };
+				}
+			}
+		}
+		return undefined;
+	}
+
+	// the names of the variables referred to in the files the Schematron file brings in with sch:include or sch:extends
+	// href, directly or not - e.g. a schema's global sch:let, used only in a pattern it includes
+	public namesUsedIn(filePath: string): Set<string> {
+		const names = new Set<string>();
+		const visited = new Set<string>([filePath]);
+		const visit = (file: string) => {
+			const references = this.references.get(file) ?? (() => {
+				const text = SchIncludes.textOf(file);
+				return text !== undefined ? SchIncludes.referencesIn(text, file) : [];
+			})();
+			references.filter((r) => r.kind === 'sch:include' || r.kind === 'sch:extends').forEach((r) => {
+				if (visited.has(r.path)) {
+					return;
+				}
+				visited.add(r.path);
+				const text = SchIncludes.textOf(r.path);
+				if (text !== undefined) {
+					[...text.replace(/<!--[\s\S]*?-->/g, '').matchAll(/\$((?:[\w.-]+:)?[\w.-]+)/g)].forEach((m) => names.add(m[1]));
+				}
+				visit(r.path);
+			});
+		};
+		visit(filePath);
+		return names;
+	}
+
+	// the module's prefix bindings, with those of the schemas that include it - for a file sch:include brings in, whose
+	// XPath uses their sch:ns prefixes, e.g. for a function of the XSLT module a schema includes. Its own come first
+	public static withContext(document: vscode.TextDocument, bindings: Map<string, string> | undefined): Map<string, string> | undefined {
+		const context = document.languageId === 'sch' && document.uri.scheme === 'file' ? SchIncludes.instance.contextOf(document.fileName) : undefined;
+		if (!context) {
+			return bindings;
+		}
+		const withContext = bindings ?? new Map<string, string>();
+		context.namespaces.forEach((uri, prefix) => {
+			if (!withContext.has(prefix)) {
+				withContext.set(prefix, uri);
+			}
+		});
+		return withContext;
+	}
+
+	// the text of the file: an open document's, which may not be saved yet, else the file's
+	public static textOf(filePath: string): string | undefined {
+		const open = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'file' && d.fileName === filePath);
+		if (open) {
+			return open.getText();
+		}
+		try {
+			return fs.readFileSync(filePath, 'utf8');
+		} catch {
+			return undefined;
+		}
+	}
+
 	public dispose() {
 		this.watcher?.dispose();
 		this.changed.dispose();

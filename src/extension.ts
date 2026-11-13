@@ -811,7 +811,12 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((doc) => (doc.languageId === 'xslt' || doc.languageId === 'sch') && importTreeProvider.refresh()));
 	context.subscriptions.push(ImportIndex.instance.onDidChange(() => importTreeProvider.refresh()));
 	// Schematron: the schemas that include a file, for the view - from the workspace's .sch files
-	context.subscriptions.push(SchIncludes.instance.onDidChange(() => importTreeProvider.refresh()), SchIncludes.instance);
+	context.subscriptions.push(SchIncludes.instance.onDidChange(() => {
+		importTreeProvider.refresh();
+		// and the open Schematron files are checked again: a file sch:include brings in is checked with what's in scope
+		// where it's included (see SchIncludes.contextOf)
+		vscode.workspace.textDocuments.filter((doc) => doc.languageId === 'sch' && doc.uri.scheme === 'file').forEach((doc) => schSymbolProvider.getDocumentSymbols(doc, false));
+	}), SchIncludes.instance);
 	// a module's context file is its top-level stylesheet's, which the index may only now know
 	context.subscriptions.push(ImportIndex.instance.onDidChange(() => DocumentChangeHandler.refreshStatusBarItem()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.wrapWith', (uri?: vscode.Uri, start?: number, end?: number) => wrapWith(uri, start, end)));

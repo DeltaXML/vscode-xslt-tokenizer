@@ -42,6 +42,7 @@ import { SchSchema } from './schSchema';
 import { XSpecFocus } from './xspecFocus';
 import { XSpecDuplicateLabels } from './xspecDuplicateLabels';
 import { XmlElement, parseXml, descendants } from './xspecXml';
+import { SchIncludes } from './schIncludes';
 import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
 import { XSpecSourceMap } from './xspecSourceMap';
@@ -696,7 +697,10 @@ export class XsltTokenDiagnostics {
 		// Schematron: SchXslt2 declares only the sch:ns prefixes in its validation stylesheet - so they're the prefixes for the
 		// schema's XPath, wherever sch:ns is, and an xmlns declaration doesn't apply. An XSLT element, e.g. xsl:function, is
 		// copied as it is, so within one its in-scope namespaces apply too
-		const schNamespaces = docType === DocumentTypes.SCH ? XslLexer.schNamespaces(documentText) : undefined;
+		// - and in a file sch:include brings in, those of the schemas that include it, with the variables in scope where it's
+		// included (see SchIncludes.contextOf)
+		const schContext = docType === DocumentTypes.SCH && document.uri.scheme === 'file' ? SchIncludes.instance.contextOf(document.fileName) : undefined;
+		const schNamespaces = docType === DocumentTypes.SCH ? new Map([...(schContext?.namespaces ?? []), ...XslLexer.schNamespaces(documentText)]) : undefined;
 		if (schNamespaces && XsltTokenDiagnostics.schQueryBinding(documentText)?.startsWith('xquery') && !schNamespaces.has('local')) {
 			// Schematron with XQuery (XQS): XQuery's predeclared prefix for a query's own functions
 			schNamespaces.set('local', 'http://www.w3.org/2005/xquery-local-functions');
@@ -3609,8 +3613,14 @@ export class XsltTokenDiagnostics {
 			unresolvedXsltVariableReferences = unresolvedXsltVariableReferences.filter((token) => {
 				const offset = document.offsetAt(new vscode.Position(token.line, token.startCharacter));
 				const name = token.value.replace(/^\$/, '');
-				return !allowances.some(({ start, end, names }) => offset > start && offset < end && (!names || names.has(name))) && !schxsltPrefixes.includes(token.value);
+				return !allowances.some(({ start, end, names }) => offset > start && offset < end && (!names || names.has(name))) && !schxsltPrefixes.includes(token.value) &&
+					!schContext?.variables.has(name);
 			});
+		}
+		if (docType === DocumentTypes.SCH && document.uri.scheme === 'file' && /<(?:[\w.-]+:)?(?:include|extends)\b/.test(documentText)) {
+			// Schematron: a variable used in a file the schema includes isn't unused
+			const usedInIncludes = SchIncludes.instance.namesUsedIn(document.fileName);
+			xsltVariableDeclarations = xsltVariableDeclarations.filter((token) => !usedInIncludes.has(document.getText(new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length)).replace(/^["']|["']$/g, '').trim()));
 		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		if (docType === DocumentTypes.XSLT && !hasItemTypes) {

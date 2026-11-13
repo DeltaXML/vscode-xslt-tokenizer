@@ -1,7 +1,7 @@
 // tslint:disable
 import { XslLexerLight } from "./xslLexerLight";
 import * as vscode from 'vscode';
-import {XSLTLightConfiguration, XSpecConfiguration} from './languageConfigurations';
+import {XSLTLightConfiguration, XSpecConfiguration, SchConfiguration} from './languageConfigurations';
 import { GlobalInstructionData, GlobalInstructionType, XslLexer } from "./xslLexer";
 import * as fs from 'fs';
 
@@ -31,6 +31,13 @@ export class GlobalsProvider {
 				xspecLexer.analyse(text);
 				data = xspecLexer.globalInstructionData.filter((global) => [GlobalInstructionType.Variable, GlobalInstructionType.Parameter,
 					GlobalInstructionType.Import, GlobalInstructionType.Include].includes(global.type));
+			} else if (href.endsWith('.sch')) {
+				// a Schematron schema that includes the file being checked: the XSLT it declares - its functions, keys and
+				// accumulators - and the modules of its xsl:include and xsl:import (see XsltSymbolProvider.processTopLevelImports)
+				const schLexer = new XslLexer(SchConfiguration.configuration);
+				schLexer.analyse(text);
+				data = schLexer.globalInstructionData.filter((global) => [GlobalInstructionType.Function, GlobalInstructionType.Key, GlobalInstructionType.Accumulator,
+					GlobalInstructionType.Import, GlobalInstructionType.Include, GlobalInstructionType.UsePackage].includes(global.type));
 			} else {
 				data = lexer.analyseLight(text);
 			}

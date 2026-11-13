@@ -11,12 +11,17 @@ import * as vscode from 'vscode';
 import { XmlElement, parseXml, descendants } from './xspecXml';
 import { XslLexer } from './xslLexer';
 import { SchExpandText } from './schExpandText';
+import { SchIncludes } from './schIncludes';
+import { HrefPaths } from './hrefPaths';
 
 // a name in the text: a variable reference, without its '$', or a declaration's name attribute
 interface Occurrence {
 	start: number;
 	end: number;
 	isDeclaration: boolean;
+	// its file, and its range there - when it's placed (see placedIn)
+	file?: string;
+	range?: vscode.Range;
 }
 
 // Schematron: Go to Definition, Find All References and Rename for the variables of a schema - in the schema file - as
@@ -25,7 +30,10 @@ interface Occurrence {
 // - sch:let of a pattern or group: in it - of a rule: in it, and in the abstract rules it extends, whose content is
 //   copied into it - of an abstract rule: in it, and the rules that extend it
 // - the parameters of an abstract pattern, e.g. $ctx: in it, and the sch:param of each pattern with is-a for it
-// An inner declaration of the same name hides an outer one, in its scope. The references are those in XPath attributes -
+// An inner declaration of the same name hides an outer one, in its scope. Across files, as SchXslt2 assembles them: a
+// declaration's references are also those in the files the sch:include in its scope brings in - and in such a file, a
+// variable it doesn't declare is the one in scope where it's included (see SchIncludes.declarationOf).
+// The references are those in XPath attributes -
 // and with the XSLT.schematron.expandText setting, in the text value templates of messages (see tvtValues)
 export class SchVariables {
 	// the attributes that aren't XPath expressions - names, ids, references and URIs
@@ -54,25 +62,34 @@ export class SchVariables {
 		}
 		const edit = new vscode.WorkspaceEdit();
 		const name = newName.replace(/^\$/, '');
-		found.occurrences.forEach((o) => edit.replace(document.uri, new vscode.Range(document.positionAt(o.start), document.positionAt(o.end)), name));
+		found.occurrences.forEach((o) => {
+			const location = SchVariables.location(document, o);
+			edit.replace(location.uri, location.range, name);
+		});
 		return edit;
 	}
 
+	// in the document - or, with its file, another file
 	private static location(document: vscode.TextDocument, occurrence: Occurrence) {
-		return new vscode.Location(document.uri, new vscode.Range(document.positionAt(occurrence.start), document.positionAt(occurrence.end)));
+		return occurrence.file && occurrence.range && occurrence.file !== document.fileName ? new vscode.Location(vscode.Uri.file(occurrence.file), occurrence.range) :
+			new vscode.Location(document.uri, new vscode.Range(document.positionAt(occurrence.start), document.positionAt(occurrence.end)));
 	}
 
 	// the variable at the position - a reference, or a declaration's name - and its declarations and references
 	private static find(document: vscode.TextDocument, position: vscode.Position): { at: Occurrence, occurrences: Occurrence[] } | undefined {
-		const text = document.getText();
+		return SchVariables.findIn(document.getText(), document.offsetAt(position), document.uri.scheme === 'file' ? document.fileName : undefined);
+	}
+
+	// - in the text of the file, at the offset
+	private static findIn(text: string, offset: number, file: string | undefined, depth = 0): { at: Occurrence, occurrences: Occurrence[] } | undefined {
 		const root = parseXml(text);
 		if (!root) {
 			return undefined;
 		}
+		const placed = SchVariables.placedIn(text, file);
 		const colon = root.name.indexOf(':');
 		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
 		const local = (e: XmlElement | undefined) => e && (prefix ? e.name.startsWith(prefix) : !e.name.includes(':')) ? e.name.substring(prefix.length) : undefined;
-		const offset = document.offsetAt(position);
 		const all = [root, ...descendants(root)];
 		// the element whose start tag the position is in - else, whose text: in a text value template
 		const element = all.filter((e) => e.start < offset && offset < e.contentStart).pop() ?? SchVariables.contentAt(all, offset);
@@ -120,7 +137,7 @@ export class SchVariables {
 			const instanceParams = all.filter((p) => local(p) === 'param' && p.parent?.attributes.get('is-a')?.trim() === id && p.attributes.get('name')?.trim() === name);
 			const declared = SchVariables.children(abstractPattern, 'param', local).filter((p) => p.attributes.get('name')?.trim() === name);
 			const occurrences = [...declared, ...instanceParams].flatMap((p) => SchVariables.nameOccurrence(text, p)).concat(SchVariables.referencesWithin(text, abstractPattern, name, () => false, local));
-			return { at, occurrences };
+			return { at: placed(at), occurrences: occurrences.map(placed) };
 		}
 		// the declaration: the nearest - in the element's ancestors, a phase, or an abstract rule the element's rule extends
 		const declarationIn = (scope: XmlElement) => [...SchVariables.children(scope, 'let', local), ...SchVariables.children(scope, 'param', local)].find((d) => d.attributes.get('name')?.trim() === name);
@@ -139,7 +156,12 @@ export class SchVariables {
 			declaration = SchVariables.children(root, 'phase', local).map(declarationIn).find((d) => d);
 		}
 		if (!declaration) {
-			return undefined;
+			// in a file sch:include brings in: one in scope where it's included - with its references in the schema, and in
+			// the files it includes, this one too
+			const remote = file && depth === 0 ? SchIncludes.instance.declarationOf(file, name) : undefined;
+			const remoteText = remote ? SchIncludes.textOf(remote.file) : undefined;
+			const found = remote && remoteText !== undefined ? SchVariables.findIn(remoteText, remote.start, remote.file, depth + 1) : undefined;
+			return found ? { at: placed(at), occurrences: found.occurrences } : undefined;
 		}
 		// its scope: the schema, for a global one - else its parent, and the rules that share the content of an abstract rule
 		const parent = declaration.parent!;
@@ -151,8 +173,84 @@ export class SchVariables {
 		}
 		// not where another declaration of the name hides it
 		const hidden = (e: XmlElement) => !scopes.includes(e) && e !== parent && declares(e);
-		const occurrences = SchVariables.nameOccurrence(text, declaration).concat(scopes.flatMap((scope) => SchVariables.referencesWithin(text, scope, name!, hidden, local)));
-		return { at, occurrences: [...new Map(occurrences.map((o) => [o.start, o])).values()] };
+		const occurrences = SchVariables.nameOccurrence(text, declaration).concat(scopes.flatMap((scope) => SchVariables.referencesWithin(text, scope, name!, hidden, local))).map(placed);
+		// and in the files that the sch:include and sch:extends href in its scope bring in, as SchXslt2 assembles them
+		if (file) {
+			const visited = new Set<string>([file]);
+			const isHidden = (e: XmlElement) => {
+				for (let a: XmlElement | undefined = e; a; a = a.parent) {
+					if (hidden(a)) {
+						return true;
+					}
+				}
+				return false;
+			};
+			scopes.flatMap((scope) => [scope, ...descendants(scope)]).filter((e) => (local(e) === 'include' || local(e) === 'extends') && e.attributes.has('href') && !isHidden(e))
+				.forEach((include) => {
+					const included = HrefPaths.toPath(include.attributes.get('href')!.trim(), file);
+					if (included) {
+						occurrences.push(...SchVariables.includedReferences(included, name!, visited));
+					}
+				});
+		}
+		return { at: placed(at), occurrences: [...new Map(occurrences.map((o) => [`${o.file}:${o.start}`, o])).values()] };
+	}
+
+	// the references to the variable in a file sch:include brings in, and the files it includes - not where an element
+	// declares the name, which hides it
+	private static includedReferences(file: string, name: string, visited: Set<string>): Occurrence[] {
+		if (visited.has(file)) {
+			return [];
+		}
+		visited.add(file);
+		const text = SchIncludes.textOf(file);
+		const root = text !== undefined ? parseXml(text) : undefined;
+		if (!root) {
+			return [];
+		}
+		const colon = root.name.indexOf(':');
+		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
+		const local = (e: XmlElement | undefined) => e && (prefix ? e.name.startsWith(prefix) : !e.name.includes(':')) ? e.name.substring(prefix.length) : undefined;
+		const declares = (e: XmlElement) => e.children.some((c) => (local(c) === 'let' || local(c) === 'param') && c.attributes.get('name')?.trim() === name);
+		const placed = SchVariables.placedIn(text!, file);
+		const result = SchVariables.referencesWithin(text!, root, name, declares, local).map(placed);
+		const visible = (e: XmlElement) => {
+			for (let a: XmlElement | undefined = e; a; a = a.parent) {
+				if (declares(a)) {
+					return false;
+				}
+			}
+			return true;
+		};
+		descendants(root).concat(root).filter((e) => (local(e) === 'include' || local(e) === 'extends') && e.attributes.has('href') && visible(e)).forEach((include) => {
+			const included = HrefPaths.toPath(include.attributes.get('href')!.trim(), file);
+			if (included) {
+				result.push(...SchVariables.includedReferences(included, name, visited));
+			}
+		});
+		return result;
+	}
+
+	// an occurrence in the text, with its file and range
+	private static placedIn(text: string, file: string | undefined): (o: Occurrence) => Occurrence {
+		const lineStarts = [0];
+		for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) {
+			lineStarts.push(i + 1);
+		}
+		const position = (offset: number) => {
+			let line = 0;
+			for (let low = 0, high = lineStarts.length - 1; low <= high;) {
+				const mid = (low + high) >> 1;
+				if (lineStarts[mid] <= offset) {
+					line = mid;
+					low = mid + 1;
+				} else {
+					high = mid - 1;
+				}
+			}
+			return new vscode.Position(line, offset - lineStarts[line]);
+		};
+		return (o) => o.file ? o : { ...o, file, range: new vscode.Range(position(o.start), position(o.end)) };
 	}
 
 	// the $name references in the XPath attributes of the element and those within it - not within an element hidden

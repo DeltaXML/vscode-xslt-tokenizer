@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import { XmlElement, parseXml, descendants } from './xspecXml';
 import { SchReferences, Declared } from './schReferences';
 import { SchVariables } from './schVariables';
+import { SchIncludes } from './schIncludes';
 import { SchSchema } from './schSchema';
 
 // Schematron: hover help for reviewing and editing a schema - before the hovers it shares with stylesheets, e.g. a
@@ -262,6 +263,19 @@ export class SchHover {
 			const declaration = abstractRule ? SchHover.children(context, abstractRule, 'let').find((l) => l.attributes.get('name')?.trim() === name) : undefined;
 			found = declaration && abstractRule ? { d: declaration, scope: abstractRule } : undefined;
 		}
+		// in a file sch:include brings in: one in scope where it's included, in the schema that includes it
+		let inFile = '';
+		if (!found && context.document.uri.scheme === 'file') {
+			const remote = SchIncludes.instance.declarationOf(context.document.fileName, name);
+			const remoteText = remote ? SchIncludes.textOf(remote.file) : undefined;
+			const remoteRoot = remoteText !== undefined ? parseXml(remoteText) : undefined;
+			const declaration = remoteRoot ? [remoteRoot, ...descendants(remoteRoot)].find((e) => e.start < remote!.start && remote!.start < e.contentStart) : undefined;
+			if (declaration?.parent) {
+				context = SchHover.context(context.document, remoteText!, SchHover.prefixOf(remoteRoot!));
+				found = { d: declaration, scope: declaration.parent };
+				inFile = ` - in \`${vscode.workspace.asRelativePath(remote!.file)}\`, which includes this file`;
+			}
+		}
 		if (!found) {
 			return undefined;
 		}
@@ -272,7 +286,7 @@ export class SchHover {
 		const scopeName = context.local(scope);
 		const where = scopeName === 'rule' ? `the rule \`${SchHover.inline(scope.attributes.get('context') ?? scope.attributes.get('id') ?? '')}\`` :
 			scopeName === 'schema' || scopeName === 'library' ? 'the schema - global' : `the ${scopeName} \`${scope.attributes.get('id') ?? ''}\`${scopeName === 'phase' ? ' - global, when the phase is chosen' : ''}`;
-		markdown.appendMarkdown(`${value === undefined ? 'Its value is its content - ' : ''}Declared in ${where}`);
+		markdown.appendMarkdown(`${value === undefined ? 'Its value is its content - ' : ''}Declared in ${where}${inFile}`);
 		return markdown;
 	}
 

@@ -14,6 +14,7 @@ import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState,
 import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
 import { anyDocumentSymbol, XSLTCodeActions } from './xsltCodeActions';
 import { ImportIndex } from './importIndex';
+import { SchIncludes } from './schIncludes';
 import { XSLTConfiguration } from './languageConfigurations';
 import * as fs from 'fs';
 import { HrefPaths, ImportProblem } from './hrefPaths';
@@ -186,7 +187,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.languageConfig['isVersion4'] = isVersion4;
 		const languageConfig = { ...this.languageConfig, isVersion4 };
 		const globalInstructionData = this.xslLexer.globalInstructionData.slice();
-		const prefixBindings = this.xslLexer.prefixBindings;
+		const prefixBindings = SchIncludes.withContext(document, this.xslLexer.prefixBindings);
 		const xsltPackages: XsltPackage[] = XsltPackages.all();
 
 		// Import/include XSLT - ensuring no duplicates
@@ -360,7 +361,16 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[], parent: boolean | string = true) {
 		const inferParent = parent === true;
-		let matchingParent = typeof parent === 'string' ? parent : inferParent ? this.findMatchingParent(localImportedHrefs, document.fileName) : undefined;
+		let matchingParent = typeof parent === 'string' ? parent : inferParent && document.languageId !== 'sch' ? this.findMatchingParent(localImportedHrefs, document.fileName) : undefined;
+		if (inferParent && document.languageId === 'sch' && document.uri.scheme === 'file') {
+			// Schematron: a file sch:include brings in - the schema that includes it, for the XSLT functions it declares or
+			// includes (see SchIncludes) - from an index of the workspace's .sch files, built the first time it's needed
+			const chain = SchIncludes.instance.chain(document.fileName);
+			matchingParent = chain.length > 1 ? chain[0] : undefined;
+			if (!SchIncludes.instance.built) {
+				SchIncludes.instance.whenBuilt();
+			}
+		}
 		if (inferParent && !matchingParent && document.uri.scheme === 'file' && ImportIndex.isEnabled()) {
 			// the top-level stylesheet importing or including the module, from an index of the workspace's modules - built
 			// in the background the first time it's needed, when the open XSLT modules are checked again
@@ -457,6 +467,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const xslLexer = new XslLexer(languageConfig);
 		xslLexer.provideCharLevelState = true;
 		const allTokens = xslLexer.analyse(document.getText());
+		xslLexer.prefixBindings = SchIncludes.withContext(document, xslLexer.prefixBindings);
 		const globalInstructionData = xslLexer.globalInstructionData;
 		const xsltPackages: XsltPackage[] = XsltPackages.all();
 		const { importedGlobals1, accumulatedHrefs } = await XsltSymbolProvider.processTopLevelImports(false, xslLexer, XsltSymbolProvider.importSymbolHrefs, document, globalInstructionData, xsltPackages, parent);

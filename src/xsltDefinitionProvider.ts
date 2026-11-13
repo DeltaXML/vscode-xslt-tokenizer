@@ -1,3 +1,4 @@
+import { SchIncludes } from './schIncludes';
 import { XSpecScenario } from './xspecScenario';
 import { XSpecLike } from './xspecLike';
 import { XSpecVariables } from './xspecVariables';
@@ -316,7 +317,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		} else {
 			allTokens = this.xslLexer.analyse(document.getText());
 			globalInstructionData = this.xslLexer.globalInstructionData;
-			prefixBindings = this.xslLexer.prefixBindings;
+			prefixBindings = SchIncludes.withContext(document, this.xslLexer.prefixBindings);
 		}
 
 		const xsltPackages: XsltPackage[] = XsltPackages.all();
@@ -489,7 +490,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 			globalInstructionData = this.xslLexer.globalInstructionData;
-			prefixBindings = this.xslLexer.prefixBindings;
+			prefixBindings = SchIncludes.withContext(document, this.xslLexer.prefixBindings);
 			attNames = this.xslLexer.attributeNameTests ? this.xslLexer.attributeNameTests : [];
 			nodeNames = this.xslLexer.elementNameTests ? this.xslLexer.elementNameTests : [];
 			this.languageConfig['isVersion4'] = this.xslLexer.isXSLT40;
