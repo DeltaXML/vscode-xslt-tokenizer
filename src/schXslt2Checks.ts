@@ -16,7 +16,6 @@ import { SCHXSLT2_XSLT_DECLARATIONS } from './schSchema';
 import { DiagnosticCode } from './xsltTokenDiagnostics';
 import { XSpecRunner } from './xspecRunner';
 import { SaxonTaskProvider } from './saxonTaskProvider';
-import { SchVariables } from './schVariables';
 import * as path from 'path';
 
 // Schematron: the XSLT in a schema that SchXslt2 - the Schematron processor bundled with XSpec - doesn't use as it's
@@ -36,7 +35,6 @@ export class SchXslt2Checks {
 	public static readonly namespaceCode = 'schxslt2-namespace';
 	public static readonly noteCode = 'schxslt2-note';
 	public static readonly attributeCode = 'schxslt2-ignored-attribute';
-	public static readonly tvtParameterCode = 'schxslt2-tvt-parameter';
 	private static readonly isoNamespace = 'http://purl.oclc.org/dsdl/schematron';
 	private static readonly xsltNamespace = 'http://www.w3.org/1999/XSL/Transform';
 	// the Schematron elements whose content is a message, copied into the report
@@ -79,7 +77,11 @@ export class SchXslt2Checks {
 					}
 					const start = element.start + match.index! + 1;
 					const name = 'xsl:' + match[1].substring(schema.xsltPrefix.length);
-					const instead = name === 'xsl:expand-text' ? ' - text value templates in messages are enabled for every schema by the XSLT.schematron.expandText setting' : '';
+					if (name === 'xsl:expand-text' && XslLexer.schAllowExpandText) {
+						// text value templates in messages: the non-standard extension, allowed
+						continue;
+					}
+					const instead = name === 'xsl:expand-text' ? ' - text value templates with it are a non-standard extension, allowed by the XSLT.schematron.allowExpandText setting' : '';
 					const diagnostic = new vscode.Diagnostic(new vscode.Range(document.positionAt(start), document.positionAt(start + match[1].length)),
 						`SchXslt2: the attribute ${name} is ignored on sch:${schElementLocal}${instead}`, vscode.DiagnosticSeverity.Warning);
 					diagnostic.code = SchXslt2Checks.attributeCode;
@@ -114,15 +116,6 @@ export class SchXslt2Checks {
 				const instead = local === 'variable' ? ' - use sch:let' : '';
 				add(element, `SchXslt2: ${xsltName} is ignored in sch:${parentLocal}${instead}`, SchXslt2Checks.ignoredCode);
 			}
-		}
-		// an abstract pattern's parameter in a text value template: SchXslt2 replaces them only in attributes, so it's a
-		// variable reference - to a variable that isn't declared (XPST0008)
-		for (const { reference, name } of SchXslt2Checks.tvtParameters(text, schema)) {
-			const diagnostic = new vscode.Diagnostic(new vscode.Range(document.positionAt(reference.start - 1), document.positionAt(reference.end)),
-				`SchXslt2: $${name} is a parameter of the abstract pattern, which is replaced only in attributes - in a text value template it's a variable that isn't declared (XPST0008): use <value-of select="$${name}"/>`,
-				vscode.DiagnosticSeverity.Error);
-			diagnostic.code = SchXslt2Checks.tvtParameterCode;
-			diagnostics.push(diagnostic);
 		}
 		// xsl:note, which SchXslt2 copies into its stylesheet with the declaration it's in - for which XSpec turns Saxon's
 		// syntax extensions on - when the Saxon that runs the tests can't
@@ -215,21 +208,6 @@ export class SchXslt2Checks {
 				action.edit = new vscode.WorkspaceEdit();
 				action.edit.replace(document.uri, new vscode.Range(document.positionAt(element.start), document.positionAt(element.end)), replacement);
 				return [action];
-			} else if (diagnostic.code === SchXslt2Checks.tvtParameterCode) {
-				// the text value template, with its braces, as sch:value-of - whose select attribute SchXslt2 replaces it in
-				const offset = document.offsetAt(diagnostic.range.start);
-				const found = SchXslt2Checks.tvtParameters(text, schema).find((p) => p.reference.start - 1 === offset);
-				if (!found) {
-					return [];
-				}
-				const action = new vscode.CodeAction(`Replace {${found.tvt.value.trim()}} with ${sch('value-of')}`, vscode.CodeActionKind.QuickFix);
-				action.diagnostics = [diagnostic];
-				action.isPreferred = true;
-				action.edit = new vscode.WorkspaceEdit();
-				action.edit.replace(document.uri, new vscode.Range(document.positionAt(found.tvt.start - 1), document.positionAt(found.tvt.end + 1)),
-					// as written in the text, with & and < escaped already
-					`<${sch('value-of')} select="${found.tvt.value.trim().replace(/"/g, '&quot;')}"/>`);
-				return [action];
 			} else if (diagnostic.code === SchXslt2Checks.attributeCode) {
 				// the attribute, with the whitespace before it
 				const start = document.offsetAt(diagnostic.range.start);
@@ -311,27 +289,6 @@ export class SchXslt2Checks {
 
 	// the schema: its outermost element, its prefix for Schematron (with the ':'), and the local names of its Schematron
 	// and XSLT elements
-	// the references to an abstract pattern's or group's parameters - those it declares, or a pattern with is-a for it
-	// supplies - in its text value templates, with the text value template each is in
-	private static tvtParameters(text: string, schema: NonNullable<ReturnType<typeof SchXslt2Checks.schema>>) {
-		const local = (e: XmlElement | undefined) => e ? schema.schLocal(e) : undefined;
-		const all = [schema.root, ...descendants(schema.root)];
-		const result: { reference: { start: number, end: number }, name: string, tvt: { value: string, start: number, end: number } }[] = [];
-		all.filter((e) => (local(e) === 'pattern' || local(e) === 'group') && e.attributes.get('abstract')?.trim() === 'true').forEach((pattern) => {
-			const id = pattern.attributes.get('id')?.trim();
-			const names = new Set([...pattern.children.filter((c) => local(c) === 'param'), ...all.filter((e) => local(e) === 'param' && e.parent?.attributes.get('is-a')?.trim() === id)]
-				.map((p) => p.attributes.get('name')?.trim() ?? ''));
-			[pattern, ...descendants(pattern)].forEach((element) => SchVariables.tvtValues(text, element, local).forEach((tvt) =>
-				SchVariables.referencesIn(tvt.value, tvt.start).forEach((reference) => {
-					const name = text.substring(reference.start, reference.end);
-					if (names.has(name)) {
-						result.push({ reference, name, tvt });
-					}
-				})));
-		});
-		return result;
-	}
-
 	private static schema(text: string) {
 		const root = parseXml(text);
 		if (!root || !/^(?:[\w.-]+:)?(?:schema|library)$/.test(root.name)) {

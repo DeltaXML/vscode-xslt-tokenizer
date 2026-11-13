@@ -358,6 +358,11 @@
 				"category": "XSLT"
 			},
 			{
+				"command": "xslt-xpath.exportStandardSchematron",
+				"title": "Export as Standard Schematron...",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.clearTimelineFile",
 				"title": "Clear Profiles and XSpec Runs from Timeline (Current File)",
 				"category": "XSLT"
@@ -737,6 +742,10 @@
 					"when": "editorLangId == xml || editorLangId == sch"
 				},
 				{
+					"command": "xslt-xpath.exportStandardSchematron",
+					"when": "editorLangId == sch"
+				},
+				{
 					"command": "xslt-xpath.clearTimelineFile",
 					"when": "editorLangId =~ /^(xslt|xspec)$/"
 				},
@@ -1034,11 +1043,11 @@
 					"scope": "resource",
 					"markdownDescription": "Warn, in every stylesheet before XSLT 4.0, about a template rule whose union pattern has branches of different default priorities - which XSLT 4.0 gives one priority, the highest, so another rule may be chosen. Without the setting, the warning is only for XSLT 4.0 stylesheets, and those run with Saxon's syntax extensions as they use item types or notes - where 4.0's rule applies already."
 				},
-				"XSLT.schematron.expandText": {
+				"XSLT.schematron.allowExpandText": {
 					"type": "boolean",
 					"default": false,
 					"scope": "window",
-					"markdownDescription": "Text value templates in Schematron messages, e.g. `Order {@id} has no lines` instead of `<value-of select=\"@id\"/>` - SchXslt2's `schxslt:expand-text` parameter. For every schema: they're highlighted and checked as you edit, and evaluated by 'Validate with Schematron'. As with `expand-text=\"yes\"` in XSLT, it applies to all the text in the schema, including the XSLT it declares - a `{` or `}` in text must be written `{{` or `}}`. XSpec tests of a schema need `<x:param name=\"schxslt:expand-text\" select=\"true()\"/>`, with `xmlns:schxslt=\"http://dmaus.name/ns/2023/schxslt\"`. When on, `tvt:on` is shown in the status bar for a Schematron file."
+					"markdownDescription": "Allow text value templates in Schematron messages - a non-standard extension: with `xsl:expand-text=\"yes\"` on a Schematron element, as in XSLT, `Order {@id} has no lines` is `Order <value-of select=\"@id\"/> has no lines` in the messages within it - the text of `sch:assert`, `sch:report`, `sch:diagnostic` and `sch:property`. They're highlighted and checked as you edit, and rewritten as `sch:value-of` for 'Validate with Schematron' and XSpec tests - each file included with its own `xsl:expand-text`. Other Schematron processors ignore the attribute: 'XSLT: Export as Standard Schematron' writes a copy of a schema without it, for them."
 				},
 				"XSLT.xspec.home": {
 					"type": "string",

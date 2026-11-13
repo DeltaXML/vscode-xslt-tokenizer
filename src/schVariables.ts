@@ -10,6 +10,7 @@
 import * as vscode from 'vscode';
 import { XmlElement, parseXml, descendants } from './xspecXml';
 import { XslLexer } from './xslLexer';
+import { SchExpandText } from './schExpandText';
 
 // a name in the text: a variable reference, without its '$', or a declaration's name attribute
 interface Occurrence {
@@ -109,18 +110,16 @@ export class SchVariables {
 		}
 		// an abstract pattern's parameter: in the pattern, and the sch:param of each pattern with is-a for it
 		const isInstanceParam = at.isDeclaration && local(element) === 'param' && element.parent?.attributes.has('is-a');
-		// in a text value template, a name isn't an abstract pattern's parameter: SchXslt2 replaces them only in attributes
-		const inTvt = !inStartTag;
 		// - a name it declares, or a pattern with is-a supplies: SchXslt2 replaces only those; another is a variable reference
 		const isParameterOf = (pattern: XmlElement) => SchVariables.children(pattern, 'param', local).some((p) => p.attributes.get('name')?.trim() === name) ||
 			all.some((p) => local(p) === 'param' && p.attributes.get('name')?.trim() === name && p.parent?.attributes.get('is-a')?.trim() === pattern.attributes.get('id')?.trim());
 		const abstractPattern = isInstanceParam ? all.find((p) => (local(p) === 'pattern' || local(p) === 'group') && isAbstract(p) && p.attributes.get('id')?.trim() === element.parent!.attributes.get('is-a')?.trim()) :
-			inTvt ? undefined : ancestors.find((a) => (local(a) === 'pattern' || local(a) === 'group') && isAbstract(a) && isParameterOf(a));
+			ancestors.find((a) => (local(a) === 'pattern' || local(a) === 'group') && isAbstract(a) && isParameterOf(a));
 		if (abstractPattern) {
 			const id = abstractPattern.attributes.get('id')?.trim();
 			const instanceParams = all.filter((p) => local(p) === 'param' && p.parent?.attributes.get('is-a')?.trim() === id && p.attributes.get('name')?.trim() === name);
 			const declared = SchVariables.children(abstractPattern, 'param', local).filter((p) => p.attributes.get('name')?.trim() === name);
-			const occurrences = [...declared, ...instanceParams].flatMap((p) => SchVariables.nameOccurrence(text, p)).concat(SchVariables.referencesWithin(text, abstractPattern, name, () => false, local, false));
+			const occurrences = [...declared, ...instanceParams].flatMap((p) => SchVariables.nameOccurrence(text, p)).concat(SchVariables.referencesWithin(text, abstractPattern, name, () => false, local));
 			return { at, occurrences };
 		}
 		// the declaration: the nearest - in the element's ancestors, a phase, or an abstract rule the element's rule extends
@@ -157,14 +156,13 @@ export class SchVariables {
 	}
 
 	// the $name references in the XPath attributes of the element and those within it - not within an element hidden
-	// - with tvts false, not those in text value templates: for an abstract pattern's parameter, which they aren't
-	private static referencesWithin(text: string, scope: XmlElement, name: string, hidden: (e: XmlElement) => boolean, local: (e: XmlElement | undefined) => string | undefined, tvts = true): Occurrence[] {
+	private static referencesWithin(text: string, scope: XmlElement, name: string, hidden: (e: XmlElement) => boolean, local: (e: XmlElement | undefined) => string | undefined): Occurrence[] {
 		const result: Occurrence[] = [];
 		const visit = (e: XmlElement) => {
 			if (hidden(e)) {
 				return;
 			}
-			[...SchVariables.attributeValues(text, e).filter((v) => !SchVariables.notXPath.has(v.name)), ...(tvts ? SchVariables.tvtValues(text, e, local) : [])].forEach((v) =>
+			[...SchVariables.attributeValues(text, e).filter((v) => !SchVariables.notXPath.has(v.name)), ...SchVariables.tvtValues(text, e, local)].forEach((v) =>
 				SchVariables.referencesIn(v.value, v.start).filter((r) => text.substring(r.start, r.end) === name).forEach((r) => result.push({ ...r, isDeclaration: false })));
 			e.children.forEach(visit);
 		};
@@ -177,21 +175,33 @@ export class SchVariables {
 		return elements.filter((e) => e.contentStart <= offset && offset <= e.contentEnd && !e.children.some((c) => c.start <= offset && offset < c.end)).pop();
 	}
 
-	// with the XSLT.schematron.expandText setting, the text value templates in the element's own text, e.g. {$id} - the
-	// expression within the braces, with its offsets. As the lexer has them (see XslLexer.schExpandText): not in a sch:p of
-	// a phase, pattern or rule, which isn't in the report, nor in xsl:note - and {{ and }} are braces
+	// with the XSLT.schematron.allowExpandText setting, the text value templates in the element's own text, e.g. {$id} -
+	// the expression within the braces, with its offsets. As expand-text.xsl rewrites them (see XslLexer.schAllowExpandText):
+	// in a message - the text of sch:assert, sch:report, sch:diagnostic or sch:property, or sch:emph, sch:span or sch:dir
+	// within one - where the nearest xsl:expand-text is "yes"; {{ and }} are braces
 	public static tvtValues(text: string, element: XmlElement, local: (e: XmlElement | undefined) => string | undefined): { name: string, value: string, start: number, end: number }[] {
-		if (!XslLexer.schExpandText || element.contentStart >= element.contentEnd) {
+		if (!XslLexer.schAllowExpandText || element.contentStart >= element.contentEnd || !text.includes('expand-text')) {
 			return [];
 		}
-		for (let e: XmlElement | undefined = element; e; e = e.parent) {
-			let depth = 0;
+		const name = local(element);
+		const inMessage = (e: XmlElement) => {
 			for (let a = e.parent; a; a = a.parent) {
-				depth++;
+				if (SchExpandText.messages.includes(local(a) ?? '')) {
+					return true;
+				}
 			}
-			if ((local(e) === 'p' && depth > 1) || /(^|:)note$/.test(e.name) && local(e) === undefined) {
-				return [];
-			}
+			return false;
+		};
+		if (!name || !(SchExpandText.messages.includes(name) || (SchExpandText.inMessages.includes(name) && inMessage(element)))) {
+			return [];
+		}
+		const attribute = XslLexer.schXsltPrefix(text) + ':expand-text';
+		let expandText: string | undefined;
+		for (let e: XmlElement | undefined = element; e && expandText === undefined; e = e.parent) {
+			expandText = e.attributes.get(attribute)?.trim();
+		}
+		if (!['yes', 'true', '1'].includes(expandText ?? '')) {
+			return [];
 		}
 		// the element's own text: its content, without its children - and without comments and processing instructions,
 		// and the markup of CDATA sections, as spaces

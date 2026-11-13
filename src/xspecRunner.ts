@@ -18,6 +18,7 @@ import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SyntaxExtensions } from './syntaxExtensions';
 import { SchXslt2Checks } from './schXslt2Checks';
 import { XslLexer } from './xslLexer';
+import { SchExpandText } from './schExpandText';
 import { HrefPaths } from './hrefPaths';
 import { XSpecTaskSettings, XSpecTaskSettingsFinder } from './xspecTaskSettings';
 
@@ -44,6 +45,12 @@ export interface XSpecStepOutcome {
 export class XSpecRunner {
 	public static readonly mainTemplate = '{http://www.jenitennison.com/xslt/xspec}main';
 	public static extensionUri: vscode.Uri | undefined;
+
+	// a string as an XPath string literal, for a stylesheet parameter passed to Saxon as ?name='value' - typed, as Saxon 13
+	// fails for transform()'s stylesheet-params with one passed as text (see xslt-resources/schematron/validate.xsl)
+	public static xpathString(value: string): string {
+		return `'${value.replace(/'/g, "''")}'`;
+	}
 	private static channel: vscode.OutputChannel | undefined;
 
 	public static output(): vscode.OutputChannel {
@@ -129,7 +136,11 @@ export class XSpecRunner {
 		fs.mkdirSync(path.dirname(files.compiled), { recursive: true });
 		const uri = vscode.Uri.file(xspecPath);
 		const home = XSpecRunner.home(uri)!;
-		const toXslt = await XSpecRunner.saxon('Compiling the Schematron to XSLT', uri, ['-s:' + xspecPath, '-xsl:' + path.join(home, 'src', 'schematron', 'schut-to-xslt.xsl'), '-o:' + files.schematronXsl], token);
+		// text value templates in messages, with xsl:expand-text - the non-standard extension, by the setting
+		// XSLT.schematron.allowExpandText: rewritten as sch:value-of, as XSpec's first step - which SchXslt2 doesn't have
+		const expandText = SchExpandText.allowed() && XSpecRunner.extensionUri ?
+			['?STEP1-PREPROCESSOR-URI=' + XSpecRunner.xpathString(vscode.Uri.joinPath(XSpecRunner.extensionUri, 'xslt-resources', 'schematron', 'expand-text.xsl').toString())] : [];
+		const toXslt = await XSpecRunner.saxon('Compiling the Schematron to XSLT', uri, ['-s:' + xspecPath, '-xsl:' + path.join(home, 'src', 'schematron', 'schut-to-xslt.xsl'), '-o:' + files.schematronXsl, ...expandText], token);
 		if (!toXslt.ok) {
 			return { ...toXslt, source: xspecPath };
 		}

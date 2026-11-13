@@ -51,6 +51,9 @@ export interface SchematronCoverage {
 // Once validated, the file is validated again when it, or the schema, is saved
 export class SchematronValidation {
 	public static readonly validateCommand = 'xslt-xpath.validateWithSchematron';
+	public static readonly exportCommand = 'xslt-xpath.exportStandardSchematron';
+	// for testing: where the standard schema is saved
+	public static saveDialog = (options: vscode.SaveDialogOptions) => vscode.window.showSaveDialog(options);
 	public static readonly chooseCommand = 'xslt-xpath.validateWithSchematronChoose';
 	public static readonly showAssertionCommand = 'xslt-xpath.showSchematronAssertion';
 	public static readonly choosePhaseCommand = 'xslt-xpath.validateWithSchematronPhase';
@@ -83,6 +86,7 @@ export class SchematronValidation {
 			vscode.commands.registerCommand(SchematronValidation.validateCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, false)),
 			vscode.commands.registerCommand(SchematronValidation.chooseCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, true)),
 			vscode.commands.registerCommand(SchematronValidation.choosePhaseCommand, (uri?: vscode.Uri) => SchematronValidation.run(uri, false, true)),
+			vscode.commands.registerCommand(SchematronValidation.exportCommand, (uri?: vscode.Uri) => SchematronValidation.exportStandard(uri)),
 			// a code action on a problem: the assertion that reported it, in the schema
 			vscode.commands.registerCommand(SchematronValidation.showAssertionCommand, (location: vscode.Location) =>
 				vscode.window.showTextDocument(location.uri, { selection: location.range })),
@@ -275,11 +279,12 @@ export class SchematronValidation {
 		const transpiler = path.join(XSpecRunner.home(xmlUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
 		const args = ['-cp', XSpecRunner.saxonJar(xmlUri)!, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
 			'-s:' + xmlUri.fsPath, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'validate.xsl'), '-o:' + svrl,
-			'schema=' + vscode.Uri.file(schema).toString(), 'transpiler=' + vscode.Uri.file(transpiler).toString(),
+			// as XPath string literals, not text - with which Saxon 13 fails (see validate.xsl)
+			'?schema=' + XSpecRunner.xpathString(vscode.Uri.file(schema).toString()), '?transpiler=' + XSpecRunner.xpathString(vscode.Uri.file(transpiler).toString()),
 			// a phase that was chosen: not the schema's default phase - if it still has the phase
-			...(phase !== '#DEFAULT' ? ['phase=' + phase] : []),
-			// text value templates in messages: the XSLT.schematron.expandText setting
-			...(SchExpandText.enabled() ? ['?expand-text=true()'] : [])];
+			...(phase !== '#DEFAULT' ? ['?phase=' + XSpecRunner.xpathString(phase)] : []),
+			// text value templates in messages, with xsl:expand-text: the XSLT.schematron.allowExpandText setting
+			...(SchExpandText.allowed() ? ['?allow-expand-text=true()'] : [])];
 		const channel = SchematronValidation.output();
 		channel.appendLine(`Validating ${xmlUri.fsPath} with ${schema}:`);
 		channel.appendLine('java ' + args.map((arg) => /[\s"]/.test(arg) ? `"${arg}"` : arg).join(' '));
@@ -312,6 +317,53 @@ export class SchematronValidation {
 		channel.appendLine(summary);
 		vscode.window.setStatusBarMessage(`$(${results.length === 0 ? 'pass' : 'warning'}) ${summary}`, 6000);
 		return results;
+	}
+
+	// Export as Standard Schematron: a copy of the schema - with the files sch:include brings in - with the text value
+	// templates of xsl:expand-text, a non-standard extension, as sch:value-of: for any Schematron processor
+	public static async exportStandard(uri?: vscode.Uri): Promise<vscode.Uri | undefined> {
+		const schemaUri = uri ?? (vscode.window.activeTextEditor?.document.languageId === 'sch' ? vscode.window.activeTextEditor.document.uri : undefined);
+		if (!schemaUri || schemaUri.scheme !== 'file') {
+			vscode.window.showErrorMessage('Export as Standard Schematron: open a Schematron schema first.');
+			return undefined;
+		}
+		const saxonJar = XSpecRunner.saxonJar(schemaUri);
+		if (!saxonJar || !fs.existsSync(saxonJar)) {
+			vscode.window.showErrorMessage(saxonJar ? `Export as Standard Schematron: the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting.` :
+				'Export as Standard Schematron: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
+			return undefined;
+		}
+		for (const document of vscode.workspace.textDocuments.filter((d) => d.isDirty && d.uri.fsPath === schemaUri.fsPath)) {
+			await document.save();
+		}
+		const target = await SchematronValidation.saveDialog({
+			title: 'Export as Standard Schematron', saveLabel: 'Export', filters: { Schematron: ['sch'] },
+			defaultUri: vscode.Uri.file(schemaUri.fsPath.replace(/(\.sch)?$/, '-standard.sch'))
+		});
+		if (!target) {
+			return undefined;
+		}
+		if (target.fsPath === schemaUri.fsPath) {
+			vscode.window.showErrorMessage('Export as Standard Schematron: choose another file than the schema itself.');
+			return undefined;
+		}
+		const catalog = CatalogSetting.taskOption({});
+		const args = ['-cp', saxonJar, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), '-s:' + schemaUri.fsPath,
+			'-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'expand-text.xsl'), '-o:' + target.fsPath];
+		const channel = SchematronValidation.output();
+		channel.appendLine(`Exporting ${schemaUri.fsPath} as standard Schematron, to ${target.fsPath}:`);
+		channel.appendLine('java ' + args.map((arg) => /[\s"]/.test(arg) ? `"${arg}"` : arg).join(' '));
+		const outcome = await SchematronValidation.java(args, path.dirname(schemaUri.fsPath));
+		channel.append(outcome.output);
+		if (!outcome.ok || !fs.existsSync(target.fsPath)) {
+			const action = await vscode.window.showErrorMessage(`Export as Standard Schematron: ${path.basename(schemaUri.fsPath)} couldn't be exported - see the Schematron output`, 'Show Output');
+			if (action) {
+				channel.show(true);
+			}
+			return undefined;
+		}
+		await vscode.window.showTextDocument(target, { preview: false });
+		return target;
 	}
 
 	// why it can't be validated, if it can't

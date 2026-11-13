@@ -141,6 +141,9 @@ export interface XslToken extends BaseToken {
 
 interface XmlElement {
     expandText: boolean;
+    // Schematron: its text is a message, where text value templates apply - and it's in a message
+    schMessage?: boolean;
+    inSchMessage?: boolean;
     // text content is an XPath expression (xsl:select)
     xpathText?: boolean;
 }
@@ -196,9 +199,13 @@ export interface GlobalInstructionData {
 }
 
 export class XslLexer {
-    // Schematron: whether text value templates are enabled in a schema - SchXslt2's schxslt:expand-text parameter, set by
-    // the XSLT.schematron.expandText setting - for the whole schema, as SchXslt2 sets expand-text on its stylesheet
-    public static schExpandText = false;
+    // Schematron: whether xsl:expand-text on a Schematron element - a non-standard extension - enables text value templates
+    // in the messages within it, as xslt-resources/schematron/expand-text.xsl rewrites them: the XSLT.schematron.allowExpandText
+    // setting. The messages: the text of sch:assert, sch:report, sch:diagnostic and sch:property, and of sch:emph, sch:span
+    // and sch:dir within them
+    public static schAllowExpandText = false;
+    private static readonly schMessages = ['assert', 'report', 'diagnostic', 'property'];
+    private static readonly schInMessages = ['emph', 'span', 'dir'];
     // XSLT 4.0 optional function parameter: xsl:param required="no" (the 'required' attribute may come before or after 'name')
     protected static recordParamRequired(gd: GlobalInstructionData | undefined, requiredValue: string, currentParamNamePushed: boolean): boolean | undefined {
         const isOptional = ['no', 'false', '0'].includes(requiredValue.trim());
@@ -1113,12 +1120,13 @@ export class XslLexer {
                             this.tagIsEmbeddedXslt = !!elementProperties.isEmbeddedXslt;
                             tagGlobalInstructionType = elementProperties.instructionType;
                             tagElementName = elementProperties.nativeName;
-                            if (nextState === XMLCharState.rStNoAtt && xmlElementStack.length > 0 && isNativeElement &&
-                                (tagElementName === 'note' || this.isSchUnreportedText(tagElementName, xmlElementStack.length - 1))) {
-                                // <xsl:note> - its content is ignored, so it has no text value templates - or Schematron's text
-                                // that isn't in the report
-                                xmlElementStack[xmlElementStack.length - 1].expandText = false;
-                                expandTextValue = false;
+                            if (nextState === XMLCharState.rStNoAtt && xmlElementStack.length > 0) {
+                                if (isNativeElement && tagElementName === 'note') {
+                                    // <xsl:note> - its content is ignored, so it has no text value templates
+                                    xmlElementStack[xmlElementStack.length - 1].expandText = false;
+                                    expandTextValue = false;
+                                }
+                                this.markSchMessage(isNativeElement, tagElementName, xmlElementStack);
                             }
                             tagInstructionNameAdded = false;
                             tagMatchToken = null;
@@ -1288,6 +1296,12 @@ export class XslLexer {
                                     isExpandTextAttribute = false;
                                 }
                             }
+                            if (isNativeElement && this.docType === DocumentTypes.SCH && XslLexer.schAllowExpandText && this.embeddedXsltPrefix &&
+                                attName === this.embeddedXsltPrefix + ':expand-text') {
+                                // Schematron: xsl:expand-text, with the non-standard extension allowed
+                                isExpandTextAttribute = true;
+                                isXPathAttribute = false;
+                            }
                             if (!attributeNameTokenAdded) {
                                 this.addNewTokenToResult(tokenStartChar, attributeNameToken, result, nextState);
                             } else if (isXMLNSattribute) {
@@ -1302,7 +1316,8 @@ export class XslLexer {
                                 this.globalInstructionData.push({type: GlobalInstructionType.TemplateMatch, name: `${tagMatchToken.value}#${this.globalInstructionData.length}`, token: tagMatchToken, idNumber: 0});
                             }
                             // the content of xsl:note (XSLT 4.0) is ignored, so it has no text value templates
-                            expandTextValue = this.addToElementStack(isNativeElement && (tagElementName === 'note' || this.isSchUnreportedText(tagElementName, xmlElementStack.length)) ? false : expandTextValue, xmlElementStack);
+                            expandTextValue = this.addToElementStack(isNativeElement && tagElementName === 'note' ? false : expandTextValue, xmlElementStack);
+                            this.markSchMessage(isNativeElement, tagElementName, xmlElementStack);
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             storeToken = false;
                             tokenChars = [];
@@ -1559,7 +1574,9 @@ export class XslLexer {
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlText, result, currentState);
                         case XMLCharState.tvtCdata:
                             let useTvt = xmlElementStack.length > 0 &&
-                            xmlElementStack[xmlElementStack.length - 1].expandText;
+                            xmlElementStack[xmlElementStack.length - 1].expandText &&
+                            // Schematron: only in a message
+                            (this.docType !== DocumentTypes.SCH || !!xmlElementStack[xmlElementStack.length - 1].schMessage);
 
                             if (useTvt) {
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
@@ -1798,10 +1815,15 @@ export class XslLexer {
         result.push(tkn);
     }
 
-    // Schematron: an element whose text SchXslt2 doesn't put in its report, so has no text value templates - sch:p, other
-    // than the schema's: of a phase, pattern or rule. With depth, the number of its ancestors
-    private isSchUnreportedText(nativeName: string, depth: number) {
-        return this.docType === DocumentTypes.SCH && nativeName === 'p' && depth > 1;
+    // Schematron: the element just added to the stack - whether its text is a message, where text value templates apply
+    private markSchMessage(isNative: boolean, nativeName: string, xmlElementStack: XmlElement[]) {
+        if (this.docType !== DocumentTypes.SCH || xmlElementStack.length === 0) {
+            return;
+        }
+        const element = xmlElementStack[xmlElementStack.length - 1];
+        const parent = xmlElementStack.length > 1 ? xmlElementStack[xmlElementStack.length - 2] : undefined;
+        element.schMessage = isNative && (XslLexer.schMessages.includes(nativeName) || (!!parent?.inSchMessage && XslLexer.schInMessages.includes(nativeName)));
+        element.inSchMessage = element.schMessage || !!parent?.inSchMessage;
     }
 
     private addToElementStack(expandTextValue: boolean | null, xmlElementStack: XmlElement[]) {
@@ -1810,7 +1832,7 @@ export class XslLexer {
                 expandTextValue = xmlElementStack[xmlElementStack.length - 1].expandText;
             }
             else {
-                expandTextValue = this.docType === DocumentTypes.SCH && XslLexer.schExpandText;
+                expandTextValue = false;
             }
         }
         xmlElementStack.push({ "expandText": expandTextValue });

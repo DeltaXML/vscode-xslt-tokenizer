@@ -43,7 +43,7 @@ export class SchHover {
 			const content = SchVariables.contentAt(all, offset);
 			const inTvt = content && SchVariables.tvtValues(text, content, local).some((v) => offset >= v.start && offset <= v.end);
 			const variable = inTvt ? document.getWordRangeAtPosition(position, /\$[\w.-]+(?::[\w.-]+)?/) : undefined;
-			const markdown = variable ? SchHover.variableHover(context, content!, document.getText(variable).substring(1), true) : undefined;
+			const markdown = variable ? SchHover.variableHover(context, content!, document.getText(variable).substring(1)) : undefined;
 			return markdown ? new vscode.Hover(markdown) : undefined;
 		}
 		if (local(element) === undefined) {
@@ -226,8 +226,7 @@ export class SchHover {
 
 	// a variable reference: its sch:let or sch:param - in the element's rule, pattern or phase, the schema, or an abstract
 	// rule the rule extends - or in an abstract pattern, its parameter, with the values each pattern with is-a gives it
-	// - in a text value template, inTvt: not an abstract pattern's parameter, which SchXslt2 replaces only in attributes
-	private static variableHover(context: Context, element: XmlElement, name: string, inTvt = false) {
+	private static variableHover(context: Context, element: XmlElement, name: string) {
 		const ancestors: XmlElement[] = [];
 		for (let e: XmlElement | undefined = element; e; e = e.parent) {
 			ancestors.push(e);
@@ -237,7 +236,7 @@ export class SchHover {
 		const all = [ancestors[ancestors.length - 1], ...descendants(ancestors[ancestors.length - 1])];
 		const isParameterOf = (pattern: XmlElement) => SchHover.children(context, pattern, 'param').some((p) => p.attributes.get('name')?.trim() === name) ||
 			all.some((p) => context.local(p) === 'param' && p.attributes.get('name')?.trim() === name && p.parent?.attributes.get('is-a')?.trim() === pattern.attributes.get('id')?.trim());
-		const abstractPattern = inTvt ? undefined : ancestors.find((a) => (context.local(a) === 'pattern' || context.local(a) === 'group') && a.attributes.get('abstract')?.trim() === 'true' && isParameterOf(a));
+		const abstractPattern = ancestors.find((a) => (context.local(a) === 'pattern' || context.local(a) === 'group') && a.attributes.get('abstract')?.trim() === 'true' && isParameterOf(a));
 		if (abstractPattern) {
 			const id = abstractPattern.attributes.get('id')?.trim();
 			const instances = all.filter((p) => p.attributes.get('is-a')?.trim() === id);

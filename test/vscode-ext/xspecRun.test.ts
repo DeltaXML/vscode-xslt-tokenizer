@@ -286,6 +286,35 @@ suite('XSpec: running tests', function () {
 		assert.include(debugged.output, 'the file\'s focused scenarios couldn\'t be run');
 	});
 
+	test('a Schematron\'s XSpec: text value templates in messages, with xsl:expand-text - rewritten as sch:value-of, with the XSLT.schematron.allowExpandText setting', async () => {
+		fs.writeFileSync(path.join(dir, 'tvt.sch'), `<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" queryBinding="xslt3" xsl:expand-text="yes">
+  <sch:pattern><sch:rule context="doc"><sch:assert id="has-title" test="title">the {name()} has no title</sch:assert></sch:rule></sch:pattern>
+</sch:schema>`);
+		const schXspec = path.join(dir, 'tvt.xspec');
+		fs.writeFileSync(schXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" schematron="tvt.sch">
+  <x:scenario label="untitled"><x:context><doc/></x:context><x:expect-assert id="has-title" label="message">the doc has no title</x:expect-assert></x:scenario>
+</x:description>`);
+		const xspec = XSpecTestController.instance!;
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(schXspec));
+		const fileItem = xspec.testController.items.get(document.uri.toString())!;
+		const run = async () => {
+			const outcomes = new Map<string, string>();
+			xspec.createRun = () => recordingRun(outcomes, new Map());
+			await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			return outcomes.get('message assert has-title text: the doc has no title');
+		};
+		// without the setting, the message is as written: {name()}
+		assert.strictEqual(await run(), 'failed');
+		const setting = vscode.workspace.getConfiguration('XSLT.schematron');
+		try {
+			await setting.update('allowExpandText', true, vscode.ConfigurationTarget.Global);
+			assert.strictEqual(await run(), 'passed');
+		} finally {
+			await setting.update('allowExpandText', undefined, vscode.ConfigurationTarget.Global);
+		}
+	});
+
 	test('a Schematron\'s XSpec: compiled with SchXslt2, and its expectations, labelled as XSpec labels them', async () => {
 		fs.writeFileSync(path.join(dir, 'doc.sch'), `<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt3">
   <sch:pattern><sch:rule context="doc"><sch:assert id="has-title" test="title">a doc has a title</sch:assert></sch:rule></sch:pattern>

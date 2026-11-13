@@ -1638,8 +1638,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp' }, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
 	const schSemanticTokensProvider = new XsltSemanticTokensProvider(SchConfiguration.configuration);
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'sch' }, schSemanticTokensProvider, legend));
-	// Schematron text value templates, by the XSLT.schematron.expandText setting: when it changes, the open schemas are
-	// highlighted and checked again
+	// Schematron text value templates, with xsl:expand-text, by the XSLT.schematron.allowExpandText setting: when it
+	// changes, the open schemas are highlighted and checked again
 	SchExpandText.activate(context, () => {
 		schSemanticTokensProvider.refresh();
 		vscode.workspace.textDocuments.filter((doc) => doc.languageId === 'sch' && doc.uri.scheme === 'file').forEach((doc) => schSymbolProvider.getDocumentSymbols(doc, false));

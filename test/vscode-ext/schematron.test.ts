@@ -226,39 +226,60 @@ suite('Schematron', () => {
 		return edits.sort((a, b) => b[0] - a[0]).reduce((text, [start, end, newText]) => text.substring(0, start) + newText + text.substring(end), document.getText());
 	};
 
-	test('SchXslt2: an XSLT attribute of a Schematron element is ignored - e.g. xsl:expand-text, for which there\'s the setting - with a quick fix removing it', async () => {
+	test('SchXslt2: an XSLT attribute of a Schematron element is ignored - xsl:expand-text too, unless the setting allows it - with a quick fix removing it', async () => {
 		const schema = (patternAttributes: string) => `<schema xmlns="http://purl.oclc.org/dsdl/schematron" xmlns:x="http://www.w3.org/1999/XSL/Transform" queryBinding="xslt3" x:version="3.0">
 <pattern id="p"${patternAttributes}><rule context="a"><assert test="b" x:use-when="true()">no b</assert></rule></pattern>
 </schema>`;
 		const messages = await problems(schema(' x:expand-text="yes"'));
 		assert.deepEqual(messages, [
 			'0: SchXslt2: the attribute xsl:version is ignored on sch:schema',
-			'1: SchXslt2: the attribute xsl:expand-text is ignored on sch:pattern - text value templates in messages are enabled for every schema by the XSLT.schematron.expandText setting',
+			'1: SchXslt2: the attribute xsl:expand-text is ignored on sch:pattern - text value templates with it are a non-standard extension, allowed by the XSLT.schematron.allowExpandText setting',
 			'1: SchXslt2: the attribute xsl:use-when is ignored on sch:assert'
 		]);
 		assert.strictEqual(await fixed(schema(' x:expand-text="yes"'), /expand-text/), schema(''));
+		try {
+			XslLexer.schAllowExpandText = true;
+			assert.deepEqual(await problems(schema(' x:expand-text="yes"')), [
+				'0: SchXslt2: the attribute xsl:version is ignored on sch:schema',
+				'1: SchXslt2: the attribute xsl:use-when is ignored on sch:assert'
+			]);
+		} finally {
+			XslLexer.schAllowExpandText = false;
+		}
 	});
 
-	test('text value templates in messages: with the XSLT.schematron.expandText setting, checked as XPath - variables used - and {{ for a brace', async () => {
-		const schema = unprefixed(`<pattern id="p"><rule context="order"><let name="id" value="@id"/>
-<assert test="@date">Order {$id} {{has}} no date: {$undeclared}</assert></rule></pattern>`);
+	// a schema with the xsl prefix declared - and xsl:expand-text on the root, if expandText
+	const withXsl = (body: string, expandText = true) => unprefixed(body).replace('queryBinding="xslt3">',
+		`xmlns:xsl="http://www.w3.org/1999/XSL/Transform" queryBinding="xslt3"${expandText ? ' xsl:expand-text="yes"' : ''}>`);
+
+	test('text value templates in messages: xsl:expand-text, with the XSLT.schematron.allowExpandText setting - checked as XPath, variables used, and {{ for a brace', async () => {
+		const schema = withXsl(`<pattern id="p"><rule context="order"><let name="id" value="@id"/>
+<assert test="@date">Order {$id} {{has}} no date: {$undeclared} <emph>{$u2}</emph></assert></rule></pattern>`);
 		try {
-			XslLexer.schExpandText = true;
-			assert.deepEqual(await problems(schema), ['2: XPath: The variable/parameter $undeclared cannot be resolved']);
+			XslLexer.schAllowExpandText = true;
+			assert.deepEqual(await problems(schema), ['2: XPath: The variable/parameter $undeclared cannot be resolved', '2: XPath: The variable/parameter $u2 cannot be resolved']);
 			// $id is used in the message
 			const file = path.join(dir, `problems${count++}.sch`);
 			fs.writeFileSync(file, schema);
 			const hints = (await moduleDiagnostics.call(XsltSymbolProvider, await vscode.workspace.openTextDocument(vscode.Uri.file(file)), false, SchConfiguration.configuration))
 				.filter((d) => d.severity === vscode.DiagnosticSeverity.Hint);
 			assert.lengthOf(hints, 0, hints.map((d) => d.message).join(', '));
-			// the text SchXslt2 puts in the report - e.g. the schema's sch:p - not that of a phase's, pattern's or rule's sch:p
-			assert.deepEqual(await problems(unprefixed(`<p>Schema {$p1}</p><phase id="ph"><p>{ phase</p><active pattern="p"/></phase>
-<pattern id="p"><p>{ pattern</p><rule context="a"><p>rule {</p><assert test="b">no b</assert></rule></pattern>`)), ['1: XPath: The variable/parameter $p1 cannot be resolved']);
+			// only in messages - the text of assert, report, diagnostic and property, and emph, span and dir within them -
+			// and where the nearest xsl:expand-text is yes
+			assert.deepEqual(await problems(withXsl(`<title>{ title</title><p>{ schema</p><phase id="ph"><p>{ phase</p><active pattern="p"/></phase>
+<pattern id="p"><title>{</title><p>{ pattern</p><rule context="a"><p>rule {</p><assert test="b">no {$a1}</assert><report test="b" xsl:expand-text="no">{ no</report></rule></pattern>
+<pattern id="q" xsl:expand-text="no"><rule context="b"><assert test="b">{</assert><assert test="b" xsl:expand-text="yes">{$a2}</assert></rule></pattern>
+<diagnostics><diagnostic id="d">{$a3}</diagnostic></diagnostics><properties><property id="pr">{$a4}</property></properties>`)), [
+				'2: XPath: The variable/parameter $a1 cannot be resolved', '3: XPath: The variable/parameter $a2 cannot be resolved',
+				'4: XPath: The variable/parameter $a3 cannot be resolved', '4: XPath: The variable/parameter $a4 cannot be resolved'
+			]);
+			// without xsl:expand-text: text
+			assert.deepEqual(await problems(withXsl(`<pattern id="p"><rule context="a"><assert test="b">{ text</assert></rule></pattern>`, false)), []);
 		} finally {
-			XslLexer.schExpandText = false;
+			XslLexer.schAllowExpandText = false;
 		}
-		// without the setting: text, and $id unused
-		assert.deepEqual(await problems(schema), []);
+		// without the setting: text - with a warning that xsl:expand-text is ignored
+		assert.deepEqual(await problems(schema), ['0: SchXslt2: the attribute xsl:expand-text is ignored on sch:schema - text value templates with it are a non-standard extension, allowed by the XSLT.schematron.allowExpandText setting']);
 	});
 
 	test('SchXslt2: XSLT it ignores - a top-level declaration it doesn\'t copy, or in a rule - or doesn\'t run, in a message', async () => {
@@ -686,34 +707,28 @@ suite('Schematron', () => {
 		assert.include(await problems(content), '0: SchXslt2: no phase has the id nophase - no pattern is active');
 	});
 
-	test('text value templates: an abstract pattern\'s parameter isn\'t replaced in them - an error, with a quick fix to sch:value-of, and not renamed', async () => {
-		const schema = (message: string) => unprefixed(`<pattern abstract="true" id="ap"><param name="required"/><rule context="a">
-<assert test="normalize-space($required)">needs {$required} - "{string-length("x")}"</assert>${message}</rule></pattern>
+	test('text value templates: an abstract pattern\'s parameter in them is replaced - as sch:value-of\'s select - renamed with it, and its hover', async () => {
+		const content = withXsl(`<pattern abstract="true" id="ap"><param name="required"/><rule context="a">
+<assert test="normalize-space($required)">needs {$required}</assert></rule></pattern>
 <pattern id="p" is-a="ap"><param name="required" value="@name"/></pattern>`);
-		const content = schema('');
 		try {
-			XslLexer.schExpandText = true;
-			assert.deepEqual(await problems(content), [
-				'2: SchXslt2: $required is a parameter of the abstract pattern, which is replaced only in attributes - in a text value template it\'s a variable that isn\'t declared (XPST0008): use <value-of select="$required"/>'
-			]);
-			assert.strictEqual(await fixed(content, /\$required is a parameter/), content.replace('{$required}', '<value-of select="$required"/>'));
-			// renamed: the parameter, its value and its reference in the test - not the text value template
+			XslLexer.schAllowExpandText = true;
+			assert.deepEqual(await problems(content), []);
+			// the parameter, its value, and its references in the test and the text value template
 			const file = path.join(dir, `tvt-param${count++}.sch`);
 			fs.writeFileSync(file, content);
 			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
 			const edit = SchVariables.rename(document, document.positionAt(content.indexOf('name="required"') + 8), 'attr');
-			assert.lengthOf(edit!.get(document.uri), 3);
+			assert.lengthOf(edit!.get(document.uri), 4);
 			const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, document.positionAt(content.indexOf('{$required}') + 3));
-			assert.notInclude(hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n'), 'Parameter of the abstract');
+			assert.include(hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n'), 'Parameter of the abstract');
 		} finally {
-			XslLexer.schExpandText = false;
+			XslLexer.schAllowExpandText = false;
 		}
-		// without the setting: text
-		assert.deepEqual(await problems(content), []);
 	});
 
-	test('text value templates: Go to Definition, Find All References, Rename and hover for the variables in them - with the XSLT.schematron.expandText setting', async () => {
-		const content = unprefixed(`<let name="limit" value="5"/>
+	test('text value templates: Go to Definition, Find All References, Rename and hover for the variables in them - with xsl:expand-text, and the setting', async () => {
+		const content = withXsl(`<let name="limit" value="5"/>
 <pattern id="p"><p>{$id} isn't a reference here</p><rule context="order"><let name="id" value="@id"/>
 <assert test="@date">Order {$id} has {count(line[@price gt $limit])} lines<!-- {$id} --> {{$id}} {
   string-join(line/@product, '{$id}')}<emph>{$id}</emph></assert>
@@ -728,7 +743,7 @@ suite('Schematron', () => {
 		const hover = async (position: vscode.Position) => (await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', document.uri, position))
 			.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n');
 		try {
-			XslLexer.schExpandText = true;
+			XslLexer.schAllowExpandText = true;
 			// the declaration, the value-of, and two text value templates: not the sch:p of the pattern, a comment, {{ }}, a string literal
 			const references = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, at('{$id}', 'Order'));
 			assert.deepEqual(where(references), ['2:84', '3:29', '4:46', '5:43']);
@@ -741,7 +756,7 @@ suite('Schematron', () => {
 			// not in text that isn't a text value template
 			assert.strictEqual(await hover(at('$id}}')), '');
 		} finally {
-			XslLexer.schExpandText = false;
+			XslLexer.schAllowExpandText = false;
 		}
 		// without the setting: text
 		assert.deepEqual(where(await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, declaration)), ['2:84', '5:43']);
@@ -1002,29 +1017,71 @@ suite('Schematron', () => {
 		}
 	});
 
-	test('validate: text value templates in messages, with the XSLT.schematron.expandText setting - needs a Saxon jar, in XSPEC_SAXON_JAR', async function () {
+	// a schema with text value templates - and an included file without xsl:expand-text, whose braces are text
+	const tvtSchema = () => {
+		fs.writeFileSync(path.join(dir, 'tvt-library.sch'), `<pattern xmlns="http://purl.oclc.org/dsdl/schematron" id="codes"><rule context="code">
+<assert test="matches(., '^[A-Z]{2}$')" id="code">code <value-of select="."/> must match [A-Z]{2}</assert></rule></pattern>`);
+		const schema = path.join(dir, 'tvt.sch');
+		fs.writeFileSync(schema, withXsl(`<ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/><include href="tvt-library.sch"/>
+<pattern abstract="true" id="ap"><param name="required"/><rule context="item"><assert test="normalize-space($required)" id="req">{name()} needs {'$required'}: {$required}</assert></rule></pattern>
+<pattern id="items" is-a="ap"><param name="required" value="@m"/></pattern>
+<pattern id="p"><rule context="item"><assert test="@n castable as xs:integer" id="int">item {@n} {{n}} isn't an integer: {@n} {@n}</assert></rule></pattern>`));
+		return schema;
+	};
+
+	test('validate: text value templates in messages, with xsl:expand-text and the XSLT.schematron.allowExpandText setting - needs a Saxon jar, in XSPEC_SAXON_JAR', async function () {
 		const saxonJar = process.env.XSPEC_SAXON_JAR;
 		if (!saxonJar) {
 			this.skip();
 		}
-		const schema = path.join(dir, 'tvt.sch');
-		fs.writeFileSync(schema, unprefixed(`<pattern id="p"><rule context="item"><assert test="@n castable as xs:integer" id="int">item {@n} {{n}} isn't an integer</assert></rule></pattern>`)
-			.replace('queryBinding="xslt3">', 'queryBinding="xslt3"><ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/>'));
+		const schema = tvtSchema();
 		const xmlPath = path.join(dir, 'tvt.xml');
-		fs.writeFileSync(xmlPath, '<doc><item n="a"/></doc>');
-		const messages = () => vscode.languages.getDiagnostics(vscode.Uri.file(xmlPath)).filter((d) => d.source?.startsWith('Schematron')).map((d) => d.message);
+		fs.writeFileSync(xmlPath, '<doc><item n="a" m=""/><code>abc</code></doc>');
+		const messages = () => vscode.languages.getDiagnostics(vscode.Uri.file(xmlPath)).filter((d) => d.source?.startsWith('Schematron')).map((d) => d.message).sort();
 		const setting = vscode.workspace.getConfiguration('XSLT.schematron');
 		await withSaxon(saxonJar!, undefined, async () => {
 			await SchematronValidation.validate(vscode.Uri.file(xmlPath), schema, false);
-			assert.deepEqual(messages(), ['item {@n} {{n}} isn\'t an integer']);
+			assert.deepEqual(messages(), ['code abc must match [A-Z]{2}', 'item {@n} {{n}} isn\'t an integer: {@n} {@n}', '{name()} needs {\'$required\'}: {$required}']);
 			try {
-				await setting.update('expandText', true, vscode.ConfigurationTarget.Global);
+				await setting.update('allowExpandText', true, vscode.ConfigurationTarget.Global);
 				await SchematronValidation.validate(vscode.Uri.file(xmlPath), schema, false);
-				assert.deepEqual(messages(), ['item a {n} isn\'t an integer']);
+				// the included file's braces are text; an abstract pattern's parameter is replaced; the space between {@n} {@n} kept
+				assert.deepEqual(messages(), ['code abc must match [A-Z]{2}', 'item a {n} isn\'t an integer: a a', 'item needs @m:']);
 			} finally {
-				await setting.update('expandText', undefined, vscode.ConfigurationTarget.Global);
+				await setting.update('allowExpandText', undefined, vscode.ConfigurationTarget.Global);
 			}
 		});
+	});
+
+	test('export as standard Schematron: the text value templates as sch:value-of, with the included file - needs a Saxon jar, in XSPEC_SAXON_JAR', async function () {
+		const saxonJar = process.env.XSPEC_SAXON_JAR;
+		if (!saxonJar) {
+			this.skip();
+		}
+		const schema = tvtSchema();
+		const target = path.join(dir, 'exported', 'tvt-standard.sch');
+		fs.mkdirSync(path.dirname(target), { recursive: true });
+		const dialog = SchematronValidation.saveDialog;
+		let offered: vscode.Uri | undefined;
+		SchematronValidation.saveDialog = async (options) => (offered = options.defaultUri, vscode.Uri.file(target));
+		try {
+			await withSaxon(saxonJar!, undefined, async () => {
+				assert.strictEqual((await SchematronValidation.exportStandard(vscode.Uri.file(schema)))?.fsPath, target);
+			});
+		} finally {
+			SchematronValidation.saveDialog = dialog;
+			await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+		}
+		assert.strictEqual(path.basename(offered!.fsPath), 'tvt-standard.sch');
+		const exported = fs.readFileSync(target, 'utf8');
+		assert.include(exported, `item <value-of select="@n"/> {n} isn't an integer: <value-of select="@n"/><value-of select="' '"/><value-of select="@n"/>`);
+		assert.include(exported, 'must match [A-Z]{2}</assert>');
+		assert.notInclude(exported, 'expand-text');
+		// relative to it: its xml:base, and the included file's
+		assert.include(exported, 'xml:base="../tvt.sch"');
+		assert.include(exported, 'xml:base="../tvt-library.sch"');
+		// standard Schematron: no problems
+		assert.deepEqual(await problems(fs.readFileSync(target, 'utf8')), []);
 	});
 
 	test('completion: variables in scope - the schema\'s, the pattern\'s and the rule\'s', async () => {

@@ -4,24 +4,25 @@
     Order {$id} has an invalid date: {@date}
   instead of
     Order <value-of select="$id"/> has an invalid date: <value-of select="@date"/>
-  They're an option of SchXslt2 - the Schematron processor bundled with XSpec - for every schema: the setting
-  XSLT.schematron.expandText. With it on, 'tvt:on' is in the status bar for this file; without it, the braces are text,
-  and in the report as they're written.
+  They're a non-standard extension: with xsl:expand-text="yes" - on the schema below, as in XSLT - and the setting
+  XSLT.schematron.allowExpandText on. The extension rewrites them as sch:value-of for 'Validate with Schematron' and
+  XSpec tests - and 'XSLT: Export as Standard Schematron...' writes a copy that way, for other Schematron processors.
 
   Things to try:
-  - turn on XSLT.schematron.expandText: the text value templates are highlighted as XPath, and checked as you edit
+  - without the setting: xsl:expand-text below is reported as ignored, and the braces are text
+  - turn on XSLT.schematron.allowExpandText: the text value templates are highlighted as XPath, and checked as you edit
   - with orders.xml in the editor - which is associated with order-rules.sch - 'XSLT: Validate with Schematron (Choose
     Schema)...' and choose this one: the messages are those of order-rules.sch
   - Rename (F2) the id of <let name="id">: its references in the messages are renamed too - and hover over one, or Go
     to Definition (F12)
   - type {$ in a message: the variables in scope - and a brace as text is written {{ or }}
-  - the titles: text value templates are evaluated in them too, e.g. the limit in the 'Order totals' pattern's name in
-    the SVRL report
-  - not everywhere: the abstract pattern in shared/required-attribute.sch keeps <value-of select="'$required'"/>, as
-    SchXslt2 replaces its parameters only in attributes. Change it to {$required}: it's reported, with a quick fix
+  - xsl:expand-text="no" on a pattern, rule or assertion: the braces within it are text
+  - shared/required-attribute-tvt.sch has its own xsl:expand-text: each file included decides for itself
+  - 'XSLT: Export as Standard Schematron...': the copy has sch:value-of, with the abstract pattern included
 -->
 <schema xmlns="http://purl.oclc.org/dsdl/schematron"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xsl:expand-text="yes"
     queryBinding="xslt3" defaultPhase="all-checks">
 
   <title>Order rules</title>
@@ -32,7 +33,7 @@
   <!-- functions in an XSLT module: o:line-total, o:order-total and o:is-email -->
   <xsl:include href="lib/order-functions.xsl"/>
   <!-- an abstract pattern, in another file -->
-  <include href="shared/required-attribute.sch"/>
+  <include href="shared/required-attribute-tvt.sch"/>
 
   <let name="max-order-total" value="150"/>
 
@@ -89,7 +90,7 @@
   </pattern>
 
   <pattern id="order-totals">
-    <title>Order totals - up to {$max-order-total}</title>
+    <title>Order totals</title>
     <rule context="order">
       <assert test="o:order-total(.) le $max-order-total" id="order-limit" severity="warning">Order {@id} totals {o:order-total(.)} - more than the limit of {$max-order-total}</assert>
     </rule>
