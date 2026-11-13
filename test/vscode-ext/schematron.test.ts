@@ -399,6 +399,28 @@ suite('Schematron', () => {
 			["0: SchXslt2: this isn't ISO Schematron, whose namespace is http://purl.oclc.org/dsdl/schematron - SchXslt2 doesn't validate with it"]);
 	});
 
+	test('ISO Schematron with Schematron 1.5\'s pattern name - e.g. its namespace changed by hand: quick fixes replace it with a title, one or each', async () => {
+		const content = unprefixed(`<pattern name="First &amp; 'one'">
+  <rule context="a"><assert test="b">x</assert></rule>
+</pattern>
+<pattern name="Second"/>
+<pattern name="Titled"><title>Kept</title></pattern>`);
+		const file = path.join(dir, `named${count++}.sch`);
+		fs.writeFileSync(file, content);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const diagnostics = (await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration)).filter((d) => /'name'$/.test(d.message));
+		assert.lengthOf(diagnostics, 3, diagnostics.map((d) => d.message).join('\n'));
+		const actions = SchXslt2Checks.codeActions(document, [diagnostics[0]]);
+		assert.deepEqual(actions.map((a) => a.title), ['Replace name with a title - Schematron 1.5\'s name', 'Replace each pattern\'s name with a title (3)']);
+		const applied = (action: vscode.CodeAction) => action.edit!.get(document.uri).map((edit) => [document.offsetAt(edit.range.start), document.offsetAt(edit.range.end), edit.newText] as const)
+			.sort((a, b) => b[0] - a[0]).reduce((text, [start, end, newText]) => text.substring(0, start) + newText + text.substring(end), content);
+		assert.strictEqual(applied(actions[0]), content.replace(`<pattern name="First &amp; 'one'">\n  <rule`, `<pattern>\n  <title>First &amp; 'one'</title>\n  <rule`));
+		const each = applied(actions[1]);
+		assert.include(each, '<pattern><title>Second</title></pattern>');
+		assert.include(each, '<pattern><title>Kept</title></pattern>');
+		assert.deepEqual(await problems(each), []);
+	});
+
 	test('Schematron 1.5: the quick fix converts it to ISO Schematron - the namespace, a pattern\'s name as its title, and sch:key as xsl:key', async () => {
 		const old = `<s:schema xmlns:s="http://www.ascc.net/xml/schematron">
   <s:key name='k' match="item" path='@code = "a"'/>

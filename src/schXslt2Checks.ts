@@ -180,8 +180,29 @@ export class SchXslt2Checks {
 			return descendants(schema.root).find((element) => element.start === offset);
 		};
 		const sch = (local: string) => schema.prefix + local;
+		// ISO Schematron's patterns with Schematron 1.5's name, e.g. after its namespace is changed
+		const namedPatterns = [schema.root, ...descendants(schema.root)].filter((e) => schema.schLocal(e) === 'pattern' && e.attributes.has('name'));
 		return diagnostics.flatMap((diagnostic): vscode.CodeAction[] => {
-			if (diagnostic.code === SchXslt2Checks.ignoredCode || diagnostic.code === SchXslt2Checks.notRunCode) {
+			if (/^XSLT: Invalid attribute on element '(?:[\w.-]+:)?pattern': 'name'$/.test(diagnostic.message)) {
+				const offset = document.offsetAt(diagnostic.range.start);
+				const pattern = namedPatterns.find((p) => p.start < offset && offset < p.contentStart);
+				if (!pattern) {
+					return [];
+				}
+				const one = new vscode.CodeAction('Replace name with a title - Schematron 1.5\'s name', vscode.CodeActionKind.QuickFix);
+				one.diagnostics = [diagnostic];
+				one.isPreferred = true;
+				one.edit = new vscode.WorkspaceEdit();
+				SchXslt2Checks.nameToTitle(one.edit, document, text, schema, pattern);
+				if (namedPatterns.length < 2) {
+					return [one];
+				}
+				const each = new vscode.CodeAction(`Replace each pattern's name with a title (${namedPatterns.length})`, vscode.CodeActionKind.QuickFix);
+				each.diagnostics = [diagnostic];
+				each.edit = new vscode.WorkspaceEdit();
+				namedPatterns.forEach((p) => SchXslt2Checks.nameToTitle(each.edit!, document, text, schema, p));
+				return [one, each];
+			} else if (diagnostic.code === SchXslt2Checks.ignoredCode || diagnostic.code === SchXslt2Checks.notRunCode) {
 				const element = elementAt(diagnostic);
 				const local = element ? schema.xsltLocal(element) : undefined;
 				if (!element || !local) {
@@ -324,28 +345,8 @@ export class SchXslt2Checks {
 			edit.replace(document.uri, range(start, start + oldNamespace.length), SchXslt2Checks.isoNamespace);
 		}
 		const all = [schema.root, ...descendants(schema.root)];
-		const sch = (local: string) => schema.prefix + local;
-		// a pattern's name: its title - the attribute as written, with its references, is the title's text
-		for (const pattern of all.filter((e) => schema.schLocal(e) === 'pattern' && e.attributes.has('name'))) {
-			const startTag = text.substring(pattern.start, pattern.contentStart);
-			const name = /\sname\s*=\s*(["'])([\s\S]*?)\1/.exec(startTag);
-			if (!name) {
-				continue;
-			}
-			edit.delete(document.uri, range(pattern.start + name.index, pattern.start + name.index + name[0].length));
-			if (pattern.children.some((c) => schema.schLocal(c) === 'title')) {
-				continue;
-			}
-			const title = `<${sch('title')}>${name[2]}</${sch('title')}>`;
-			if (pattern.contentStart === pattern.end) {
-				// <pattern name="..."/>
-				edit.replace(document.uri, range(pattern.end - 2, pattern.end), `>${title}</${pattern.name}>`);
-			} else {
-				// before its content, indented as its first child is
-				const indent = /^\s*/.exec(text.substring(pattern.contentStart, pattern.children[0]?.start ?? pattern.contentStart))![0];
-				edit.insert(document.uri, document.positionAt(pattern.contentStart), indent + title);
-			}
-		}
+		// a pattern's name: its title
+		all.filter((e) => schema.schLocal(e) === 'pattern' && e.attributes.has('name')).forEach((pattern) => SchXslt2Checks.nameToTitle(edit, document, text, schema, pattern));
 		// Schematron 1.5's key: xsl:key, with path as use
 		const keys = schema.root.children.filter((e) => schema.schLocal(e) === 'key');
 		if (keys.length > 0) {
@@ -367,6 +368,30 @@ export class SchXslt2Checks {
 			}
 		}
 		return edit;
+	}
+
+	// Schematron 1.5's name of a pattern - not allowed in ISO Schematron - as its title, which SchXslt2 reports: the attribute
+	// as written, with its references, is the title's text. With a title, it's removed
+	private static nameToTitle(edit: vscode.WorkspaceEdit, document: vscode.TextDocument, text: string, schema: NonNullable<ReturnType<typeof SchXslt2Checks.schema>>, pattern: XmlElement) {
+		const range = (start: number, end: number) => new vscode.Range(document.positionAt(start), document.positionAt(end));
+		const startTag = text.substring(pattern.start, pattern.contentStart);
+		const name = /\sname\s*=\s*(["'])([\s\S]*?)\1/.exec(startTag);
+		if (!name) {
+			return;
+		}
+		edit.delete(document.uri, range(pattern.start + name.index, pattern.start + name.index + name[0].length));
+		if (pattern.children.some((c) => schema.schLocal(c) === 'title')) {
+			return;
+		}
+		const title = `<${schema.prefix}title>${name[2]}</${schema.prefix}title>`;
+		if (pattern.contentStart === pattern.end) {
+			// <pattern name="..."/>
+			edit.replace(document.uri, range(pattern.end - 2, pattern.end), `>${title}</${pattern.name}>`);
+		} else {
+			// before its content, indented as its first child is
+			const indent = /^\s*/.exec(text.substring(pattern.contentStart, pattern.children[0]?.start ?? pattern.contentStart))![0];
+			edit.insert(document.uri, document.positionAt(pattern.contentStart), indent + title);
+		}
 	}
 
 	private static schema(text: string) {
