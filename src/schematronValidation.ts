@@ -520,6 +520,14 @@ export class SchematronValidation {
 	}
 
 	// the rules fired and suppressed, their failed assertions and successful reports, and the active patterns, of an SVRL report
+	// the lenses above the schema's rules are for a validation, so not shown while another runs, e.g. while debugging -
+	// shown again with its result
+	public static clearCoverage(schema: string) {
+		if (SchematronValidation.coverage.delete(schema)) {
+			SchematronValidation.coverageChanged.fire();
+		}
+	}
+
 	public static coverageOf(svrl: string): Omit<SchematronCoverage, 'xml' | 'phase'> {
 		const rules = new Map<string, { fired: number, suppressed: number, failed: number, reported: number }>();
 		const activePatterns = new Set<string>();

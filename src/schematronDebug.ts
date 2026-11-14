@@ -47,6 +47,8 @@ export class SchematronDebug {
 		if (problem) {
 			return `Schematron: Debug - ${problem}`;
 		}
+		// the last validation's results above the rules aren't this run's
+		SchematronValidation.clearCoverage(schema);
 		const phaseName = SchematronValidation.phaseName(phase, schemaText);
 		return {
 			type: SchematronDebug.debugType, request: 'launch', name: `Debug ${path.basename(schema)}${phaseName ? ` (phase ${phaseName})` : ''}`,

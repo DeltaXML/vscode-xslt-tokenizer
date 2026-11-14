@@ -285,6 +285,33 @@ suite('Schematron: debugging', () => {
 		XsltNodeRules.clear();
 	});
 
+	test('the results above the rules: the last run\'s - not shown while another runs, e.g. paused - then that one\'s', async () => {
+		const schema = vscode.Uri.file(file('orders.sch'));
+		const document = await vscode.workspace.openTextDocument(schema);
+		const lenses = async () => (await vscode.commands.executeCommand<vscode.CodeLens[]>('vscode.executeCodeLensProvider', schema))
+			.map((l) => l.command?.title ?? '').filter((title) => / fired|never fired/.test(title));
+		const until = async (check: (titles: string[]) => boolean) => {
+			for (let i = 0; i < 50 && !check(await lenses()); i++) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			}
+			return lenses();
+		};
+		let finished = ended();
+		assert.isTrue(await SchematronDebug.debug(schema));
+		await finished;
+		assert.isNotEmpty(await until((titles) => titles.length > 0));
+		// again, paused: not the last run's
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(lineOf('id="valid-date"'), 0)))]);
+		finished = ended();
+		assert.isTrue(await SchematronDebug.debug(schema));
+		const stop = await nextStop();
+		assert.isEmpty(await lenses());
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		await stop.session.customRequest('continue', { threadId: 1 });
+		await finished;
+		assert.isNotEmpty(await until((titles) => titles.length > 0), document.fileName);
+	});
+
 	test('pausing at each failed assertion, or successful report - with its message - for the roles in its condition, if any', async () => {
 		fs.writeFileSync(file('orders.sch'), `<schema ${iso} queryBinding="xslt3">
   <ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/>
