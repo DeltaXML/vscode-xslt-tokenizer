@@ -7,6 +7,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
 import * as vscode from 'vscode';
+import { XsltNodeRules } from '../../src/xsltNodeRules';
 import { XSpecTestController } from '../../src/xspecTestController';
 import { XSpecRunner } from '../../src/xspecRunner';
 import { XSpecTests } from '../../src/xspecTests';
@@ -680,6 +681,44 @@ suite('XSpec: running tests', function () {
 		xspec.createRun = undefined;
 		assert.strictEqual(outcomes.get('is nine'), 'passed', JSON.stringify([...outcomes]));
 		assert.strictEqual(outcomes.get('a box'), 'passed');
+	});
+
+	test('coverage (or debugging): the template rules each node of a context file was processed by - not an inline context\'s', async () => {
+		fs.writeFileSync(path.join(dir, 'nr.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:template match="item"><done/></xsl:template>
+</xsl:stylesheet>`);
+		fs.writeFileSync(path.join(dir, 'nr-data.xml'), `<items>\n  <item n="1"/>\n</items>`);
+		const nrXspec = path.join(dir, 'nr.xspec');
+		fs.writeFileSync(nrXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="nr.xsl">
+  <x:scenario label="from file"><x:context href="nr-data.xml" select="/items/item"/><x:expect label="done from file"><done/></x:expect></x:scenario>
+  <x:scenario label="inline"><x:context><item n="2"/></x:context><x:expect label="done inline"><done/></x:expect></x:scenario>
+</x:description>`);
+		XsltNodeRules.clear();
+		const received = new Promise<void>((resolve) => {
+			const listener = vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
+				if (event.event === 'xsltNodeRules') {
+					listener.dispose();
+					setTimeout(resolve, 100);
+				}
+			});
+		});
+		const xspec = XSpecTestController.instance!;
+		const uri = vscode.Uri.file(nrXspec);
+		await vscode.workspace.openTextDocument(uri);
+		const outcomes = new Map<string, string>();
+		xspec.createRun = () => recordingRun(outcomes, new Map(), []);
+		await xspec.coverageProfile.runHandler(new vscode.TestRunRequest([xspec.testController.items.get(uri.toString())!]), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		await received;
+		assert.strictEqual(outcomes.get('done from file'), 'passed', JSON.stringify([...outcomes]));
+		const data = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'nr-data.xml')));
+		const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', data.uri, data.positionAt(data.getText().indexOf('<item ') + 1));
+		assert.include(hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n'), 'match="item"');
+		// the inline context, and the result, are constructed - so have the location of the instructions that did: not shown
+		const stylesheet = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'nr.xsl')));
+		const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>('vscode.executeCodeLensProvider', stylesheet.uri);
+		assert.deepEqual(lenses.filter((l) => l.command?.command === 'xslt-xpath.showProcessedNodes').map((l) => l.command!.title), ['processed 1 node in nr-data.xml']);
+		XsltNodeRules.clear();
 	});
 
 	test('coverage: the lines of the stylesheet tested that the tests ran, and its functions and templates', async () => {

@@ -14,6 +14,7 @@ import { SchematronContext } from '../../src/schematronContext';
 import { SchIncludes } from '../../src/schIncludes';
 import { XsltEmptySteps } from '../../src/xsltEmptySteps';
 import { XsltDebugAdapterProcess } from '../../src/xsltDebug';
+import { XsltNodeRules } from '../../src/xsltNodeRules';
 
 const iso = 'xmlns="http://purl.oclc.org/dsdl/schematron"';
 const schemaText = `<schema ${iso} queryBinding="xslt3">
@@ -261,6 +262,33 @@ suite('Schematron: debugging', () => {
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		await stop.session.customRequest('continue', { threadId: 1 });
 		await finished;
+	});
+
+	test('when it ends: for each node of the XML file, the rules that fired for it - in a hover, and Go to Definition', async () => {
+		const received = new Promise<void>((resolve) => {
+			const listener = vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
+				if (event.event === 'xsltNodeRules') {
+					listener.dispose();
+					setTimeout(resolve, 100);
+				}
+			});
+		});
+		const finished = ended();
+		assert.isTrue(await SchematronDebug.debug(vscode.Uri.file(file('orders.sch'))));
+		await received;
+		await finished;
+		const xml = await vscode.workspace.openTextDocument(vscode.Uri.file(file('orders.xml')));
+		const at = xml.positionAt(xml.getText().indexOf('<order id="B2"') + 1);
+		const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', xml.uri, at);
+		const text = hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n').replace(/\\([\\`*_{}[\]()#+\-.!<>|~])/g, '$1');
+		// the rule, at its line in the schema - not SchXslt2's own templates, nor the built-in rules
+		const ruleLine = lineOf('<rule') + 1;
+		assert.match(text, new RegExp(`\`order\`: \`rule order\` \\[orders\\.sch:${ruleLine}\\]`), text);
+		assert.notInclude(text, 'built-in');
+		assert.notInclude(text, '.xsl');
+		const definitions = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', xml.uri, at);
+		assert.deepEqual(definitions.map((d) => `${path.basename(d.uri.fsPath)}:${d.range.start.line + 1}`), [`orders.sch:${ruleLine}`]);
+		XsltNodeRules.clear();
 	});
 
 	test('pausing at each failed assertion, or successful report - with its message - for the roles in its condition, if any', async () => {

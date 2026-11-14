@@ -78,6 +78,7 @@ import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
+import { XsltNodeRules } from './xsltNodeRules';
 import { XsltEmptySteps } from './xsltEmptySteps';
 import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
 import { XsltProfile, ProfileDeclaration, ProfileEntry } from './xsltProfile';
@@ -1325,6 +1326,10 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerInlineValuesProvider({ language: 'xslt' }, new XsltInlineValuesProvider()));
 	// while paused, the step in a path (or lookup) after which its value is empty, faded
 	XsltEmptySteps.register(context, XsltDebug.type);
+	// after a run: the template rules each input node was processed by, and the nodes each template rule processed
+	XsltNodeRules.register(context, XsltDebug.type);
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showProcessedNodes', (uri: vscode.Uri, position: vscode.Position) =>
+		vscode.commands.executeCommand('editor.action.showReferences', uri, position, XsltNodeRules.processedLocations(uri, position.line))));
 	// the output written so far, while debugging
 	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(XsltDebugOutputs.scheme, XsltDebugOutputs.get()));
 	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {

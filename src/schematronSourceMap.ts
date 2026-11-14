@@ -293,6 +293,8 @@ export class SchematronSourceMap implements DebugSourceMap {
 	}
 
 	// paused in a rule of an abstract pattern's instance: the instance's parameters, as text, replaced in its copy
+	public readonly hidesBuiltInRules = true;
+
 	public parametersAt(generatedLine: number): { scope: string, variables: { name: string, value: string }[] } | undefined {
 		const template = this.templateAt(generatedLine);
 		return template?.parameters ? { scope: 'Parameters', variables: template.parameters } : undefined;

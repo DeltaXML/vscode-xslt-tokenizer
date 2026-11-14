@@ -2696,6 +2696,54 @@ async function testStepBackReplaysSteps(saxonJar) {
 // with the 'No Template Matched' filter: a pause at the first element of each name (in each mode) that no template
 // rule matched, in a frame of its own with the element as the context item - at the xsl:apply-templates, if any - and
 // a summary at the end. Not for modes whose on-no-match is e.g. shallow-copy - and for deep-skip, only in the summary
+// the template rules each input node was processed by, sent when the run ends: an element at the end of its start tag,
+// other nodes at their element's, with their kind and name - by xsl:apply-templates, xsl:next-match and the built-in
+// rules - and nodes of a document doc() reads, in that file
+async function testNodeRules(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    const event = dap.event('xsltNodeRules');
+    const terminated = dap.event('terminated');
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { noDebug: true, saxonArgs: [`-xsl:${path.join(fixtures, 'node-rules.xsl')}`, `-s:${path.join(fixtures, 'node-rules.xml')}`] });
+    await dap.request('configurationDone', {});
+    const body = await event;
+    await terminated;
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    // 'line:column name -> rule ×count' for each file
+    const decoded = {};
+    for (const [file, flat] of Object.entries(body.files)) {
+        const entries = [];
+        for (let i = 0; i < flat.length;) {
+            const [line, column, n] = flat.slice(i, i + 3);
+            i += 3;
+            for (let k = 0; k < n; k++, i += 3) {
+                const rule = body.rules[flat[i + 1]];
+                // a template by its line: its label (the frame's name) is in Saxon's form for some match patterns, and has no
+                // mode with Saxon 12
+                const ruleText = rule.builtIn ? `built-in ${rule.builtIn} (${rule.mode})` : `${path.basename(rule.path)}:${rule.line}`;
+                entries.push(`${line}:${column} ${body.names[flat[i]]} -> ${ruleText} ×${flat[i + 2]}`);
+            }
+        }
+        decoded[path.basename(file)] = entries.sort();
+    }
+    const orders = decoded['node-rules.xml'];
+    // order A1's start tag ends on line 4: the template, and its attributes, at its position, by built-in rules
+    assert.ok(orders.includes('4:28 element:order -> node-rules.xsl:3 ×1'), orders.join('\n'));
+    assert.ok(orders.some((e) => /^4:28 attribute:id -> built-in shallow-skip/.test(e)), orders.join('\n'));
+    // the line: both templates - the second by xsl:next-match - and its text and attribute at its position
+    assert.ok(orders.includes('5:38 element:line -> node-rules.xsl:6 ×1'), orders.join('\n'));
+    assert.ok(orders.includes('5:38 element:line -> node-rules.xsl:11 ×1'), orders.join('\n'));
+    assert.ok(orders.includes('5:38 text -> node-rules.xsl:15 ×1'), orders.join('\n'));
+    assert.ok(orders.includes('5:38 attribute:product -> node-rules.xsl:14 ×1'), orders.join('\n'));
+    // an empty element: where its tag ends
+    assert.ok(orders.some((e) => /^6:12 element:note -> built-in shallow-skip/.test(e)), orders.join('\n'));
+    // a document read with doc(): its own file - once for each line
+    assert.deepStrictEqual(decoded['node-rules-products.xml'], ['2:22 element:product -> node-rules.xsl:16 ×2']);
+    // not the nodes of a temporary tree, which have the location of the instructions that constructed them
+    assert.deepStrictEqual(Object.keys(decoded).sort(), ['node-rules-products.xml', 'node-rules.xml']);
+}
+
 async function testNoTemplateMatched(saxonJar) {
     let dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -2830,7 +2878,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testCommentBreakpoints, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
+        for (const test of [testDeepRecursion, testNodeRules, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testCommentBreakpoints, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;

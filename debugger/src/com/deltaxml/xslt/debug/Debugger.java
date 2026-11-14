@@ -68,6 +68,8 @@ final class Debugger {
     private boolean noDebug;
     // with "coverage": the number of times each line of each module is arrived at, by path - sent when the run ends
     private Map<String, Map<Integer, Integer>> coverage;
+    // the template rules each input node was processed by - sent when the run ends (see NodeRules)
+    private final NodeRules nodeRules = new NodeRules(this::pathOf);
     private boolean messageEscaping;
 
     // --- breakpoints: normalised file path -> line -> breakpoint (written by the DAP thread at any time)
@@ -518,6 +520,7 @@ final class Debugger {
                 System.err.flush();
                 sendOutputs(null, false);
                 sendCoverage();
+                sendNodeRules();
                 dap.event("exited", Json.obj().with("exitCode", exitCode));
                 dap.event("terminated", Json.obj());
             }
@@ -817,6 +820,12 @@ final class Debugger {
         String element = reportedElement(traceable);
         top.line = lines == null ? reportedLine : lines.displayLine(reportedLine, tagLocation.getColumnNumber(), element);
         top.column = lines == null ? location.getColumnNumber() : lines.displayColumn(reportedLine, tagLocation.getColumnNumber(), element);
+        if (isCall && traceable.getClass().getSimpleName().equals("TemplateRule") && top.owner == traceable) {
+            Item item = context.getContextItem();
+            if (item instanceof net.sf.saxon.om.NodeInfo) {
+                nodeRules.template((net.sf.saxon.om.NodeInfo) item, path, top.line, top.column, top.name);
+            }
+        }
         boolean onStoppedLine = top.line == stoppedLine && path.equals(stoppedPath);
         if (!onStoppedLine) {
             stoppedPath = null;
@@ -1313,6 +1322,13 @@ final class Debugger {
         return className.equals("TemplateRule") || className.equals("NamedTemplate") || className.equals("UserFunction");
     }
 
+    // the template rules each input node was processed by (see NodeRules)
+    private void sendNodeRules() {
+        if (!nodeRules.isEmpty()) {
+            dap.event("xsltNodeRules", nodeRules.toJson());
+        }
+    }
+
     // the coverage collected: the hits of each line, by path, e.g. {"/a.xsl": {"12": 3}}
     private void sendCoverage() {
         if (coverage == null) {
@@ -1607,6 +1623,9 @@ final class Debugger {
             throw new Abandoned();
         }
         boolean dropping = rules.getName().equals("deep-skip");
+        if (Thread.currentThread() == transformThread && !runningTask && item instanceof net.sf.saxon.om.NodeInfo) {
+            nodeRules.builtIn((net.sf.saxon.om.NodeInfo) item, rules.getName(), mode.isUnnamedMode() ? "#default" : mode.getModeName().getDisplayName());
+        }
         if (Thread.currentThread() != transformThread || runningTask || !(rules.getName().startsWith("text-only") || dropping) || mode.isEmpty() ||
                 !(item instanceof net.sf.saxon.om.NodeInfo) || ((net.sf.saxon.om.NodeInfo) item).getNodeKind() != net.sf.saxon.type.Type.ELEMENT) {
             return;

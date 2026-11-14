@@ -37,6 +37,9 @@ export interface DebugSourceMap {
 	// pausing on a kind of outcome, e.g. a Schematron schema's failed assertions: the options (as exception breakpoint
 	// filters), and for each, the generated stylesheet's lines where it happens - with what the paused frame evaluates to
 	// say what happened (its message), and its role
+	// whether the input nodes the built-in template rules processed aren't shown (see XsltNodeRules): e.g. a Schematron
+	// schema's, whose compiled stylesheet applies them to each node no rule is for
+	readonly hidesBuiltInRules?: boolean;
 	outcomes?: { filter: string, label: string, description: string, lines: number[], message: string, role: string, id: (line: number) => string | undefined }[];
 }
 

@@ -4,6 +4,7 @@
  *  Contributors:
  *  DeltaXML Ltd. - XSLT debugger
  */
+import { NodeRulesEvent } from './xsltNodeRules';
 import { XSpecSourceMap } from './xspecSourceMap';
 import { SchematronSourceMap } from './schematronSourceMap';
 import { DebugSourceMap } from './debugSourceMap';
@@ -1247,6 +1248,9 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			if (message.type === 'response') {
 				this.pending.delete(message.request_seq);
 			}
+			if (message.type === 'event' && message.event === 'xsltNodeRules' && this.sourceMap && message.body) {
+				message.body = XsltDebugAdapterProcess.mappedNodeRules(message.body, this.sourceMap);
+			}
 			if (message.type === 'event' && message.event === 'xsltDebugLaunch') {
 				const { saxon, java, javaHome, saxonArgs } = message.body ?? {};
 				XsltDebugLog.info(`Debug session '${this.session.name}': ${saxon}, on Java ${java} at ${javaHome}\n    Saxon options: ${(saxonArgs ?? []).join(' ')}`);
@@ -1277,6 +1281,44 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			}
 			this.messages.fire(message);
 		}
+	}
+
+	// the template rules each input node was processed by (see XsltNodeRules), with those of the generated stylesheet at
+	// their source - e.g. a Schematron rule - and without those it has no source for, e.g. its own catch-all templates
+	public static mappedNodeRules(body: NodeRulesEvent, map: DebugSourceMap): NodeRulesEvent {
+		const rules = (body.rules ?? []).map((rule) => {
+			if (rule.builtIn) {
+				return map.hidesBuiltInRules ? undefined : rule;
+			}
+			if (!rule.path || !rule.line || !XSpecSourceMap.samePath(rule.path, map.generatedPath)) {
+				return rule;
+			}
+			const source = map.sourceOf(rule.line);
+			return source ? { path: source.path, line: source.line, column: 1, label: source.name } : undefined;
+		});
+		const files: { [path: string]: number[] } = {};
+		for (const [file, flat] of Object.entries(body.files ?? {})) {
+			const kept: number[] = [];
+			for (let i = 0; i < flat.length;) {
+				const [line, column, n] = flat.slice(i, i + 3);
+				const triples: number[] = [];
+				for (let k = 0; k < n; k++) {
+					const at = i + 3 + 3 * k;
+					if (rules[flat[at + 1]]) {
+						triples.push(flat[at], flat[at + 1], flat[at + 2]);
+					}
+				}
+				i += 3 + 3 * n;
+				if (triples.length > 0) {
+					kept.push(line, column, triples.length / 3, ...triples);
+				}
+			}
+			if (kept.length > 0) {
+				files[file] = kept;
+			}
+		}
+		// the rules' ids are kept: those left out stay as built-in rules, which nothing refers to now
+		return { ...body, rules: rules.map((rule) => rule ?? { builtIn: 'none' }), files };
 	}
 
 	// how long the response to 'disconnect' is held back: at least, and at most while requests are unanswered
