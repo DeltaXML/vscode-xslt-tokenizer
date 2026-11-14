@@ -12,6 +12,7 @@ import { SchConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration, XslLexer } from '../../src/xslLexer';
 import { SchXslt2Checks } from '../../src/schXslt2Checks';
 import { SchReferences } from '../../src/schReferences';
+import { SchIncludes } from '../../src/schIncludes';
 import { SchRequired } from '../../src/schRequired';
 import { SchSnippets } from '../../src/schSnippets';
 import { XSpecRunner } from '../../src/xspecRunner';
@@ -681,6 +682,13 @@ suite('Schematron', () => {
 		assert.include(isA, 'rule `item`');
 		assert.include(isA, 'report `@x`');
 		assert.include(await hover('f:double'), 'f:double($n)');
+		// in the included file: the values the including schema's patterns give its parameter
+		SchIncludes.instance.buildFrom([file, path.join(dir, 'hover-included.sch')]);
+		const included = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'hover-included.sch')));
+		const parameter = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', included.uri, included.positionAt(included.getText().indexOf('$c') + 1));
+		const parameterText = parameter.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n').replace(/\\([\\`*_{}[\]()#+\-.!<>|~])/g, '$1');
+		assert.include(parameterText, 'Parameter of the abstract pattern `inc`');
+		assert.include(parameterText, `\`i\` in \`${vscode.workspace.asRelativePath(file)}\`: \`item\``);
 	});
 
 	// with the Saxon jar setting, and XSpec's setting for syntax extensions, as given - restored afterwards

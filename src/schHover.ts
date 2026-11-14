@@ -235,17 +235,24 @@ export class SchHover {
 		const markdown = new vscode.MarkdownString();
 		// an abstract pattern's parameter - a name it declares, or a pattern with is-a for it supplies: SchXslt2 replaces only those
 		const all = [ancestors[ancestors.length - 1], ...descendants(ancestors[ancestors.length - 1])];
+		// the patterns that could have is-a for it: in this file, and in the schemas that include it and the files they
+		// bring in - an abstract pattern is often in a file of its own
+		const inAbstract = ancestors.some((a) => (context.local(a) === 'pattern' || context.local(a) === 'group') && a.attributes.get('abstract')?.trim() === 'true');
+		const patterns = [{ context, elements: all, file: '' }, ...(inAbstract ? SchHover.relatedFiles(context.document) : []).flatMap((file) => {
+			const text = SchIncludes.textOf(file)!;
+			const root = parseXml(text);
+			return root ? [{ context: SchHover.context(context.document, text, SchHover.prefixOf(root)), elements: [root, ...descendants(root)], file: vscode.workspace.asRelativePath(file) }] : [];
+		})];
 		const isParameterOf = (pattern: XmlElement) => SchHover.children(context, pattern, 'param').some((p) => p.attributes.get('name')?.trim() === name) ||
-			all.some((p) => context.local(p) === 'param' && p.attributes.get('name')?.trim() === name && p.parent?.attributes.get('is-a')?.trim() === pattern.attributes.get('id')?.trim());
+			patterns.some((f) => f.elements.some((p) => f.context.local(p) === 'param' && p.attributes.get('name')?.trim() === name && p.parent?.attributes.get('is-a')?.trim() === pattern.attributes.get('id')?.trim()));
 		const abstractPattern = ancestors.find((a) => (context.local(a) === 'pattern' || context.local(a) === 'group') && a.attributes.get('abstract')?.trim() === 'true' && isParameterOf(a));
 		if (abstractPattern) {
 			const id = abstractPattern.attributes.get('id')?.trim();
-			const instances = all.filter((p) => p.attributes.get('is-a')?.trim() === id);
 			markdown.appendCodeblock(`$${name}`, 'xml').appendMarkdown(`Parameter of the abstract ${context.local(abstractPattern)} \`${id}\` - replaced, as text, by each value:\n`);
-			const lines = instances.map((instance) => {
-				const value = SchHover.children(context, instance, 'param').find((p) => p.attributes.get('name')?.trim() === name)?.attributes.get('value');
-				return `- \`${instance.attributes.get('id') ?? context.local(instance)}\`: ${value !== undefined ? `\`${SchHover.inline(value)}\`` : 'not supplied'}`;
-			});
+			const lines = patterns.flatMap((f) => f.elements.filter((p) => p.attributes.get('is-a')?.trim() === id).map((instance) => {
+				const value = SchHover.children(f.context, instance, 'param').find((p) => p.attributes.get('name')?.trim() === name)?.attributes.get('value');
+				return `- \`${instance.attributes.get('id') ?? f.context.local(instance)}\`${f.file ? ` in \`${f.file}\`` : ''}: ${value !== undefined ? `\`${SchHover.inline(value)}\`` : 'not supplied'}`;
+			}));
 			SchHover.limited(lines.length > 0 ? lines : ['- no pattern has is-a for it']).forEach((line) => markdown.appendMarkdown(line + '\n'));
 			return markdown;
 		}
@@ -330,6 +337,32 @@ export class SchHover {
 		}
 		const colon = root.name.indexOf(':');
 		return colon > 0 ? root.name.substring(0, colon + 1) : '';
+	}
+
+	// the other Schematron files of the document's schemas: those that include it, directly or not, and the files they
+	// bring in with sch:include or sch:extends href - not the document itself, nor XSLT modules
+	private static relatedFiles(document: vscode.TextDocument): string[] {
+		if (document.uri.scheme !== 'file') {
+			return [];
+		}
+		const includes = SchIncludes.instance;
+		const files = new Set<string>([document.fileName]);
+		const up = (file: string) => includes.includersOf(file).forEach((includer) => {
+			if (!files.has(includer)) {
+				files.add(includer);
+				up(includer);
+			}
+		});
+		up(document.fileName);
+		const down = (file: string) => (includes.referencesOf(file) ?? []).filter((r) => r.kind === 'sch:include' || r.kind === 'sch:extends').forEach((r) => {
+			if (!files.has(r.path) && SchIncludes.textOf(r.path) !== undefined) {
+				files.add(r.path);
+				down(r.path);
+			}
+		});
+		[...files].forEach(down);
+		files.delete(document.fileName);
+		return [...files].filter((file) => SchIncludes.textOf(file) !== undefined);
 	}
 
 	// a file's text, with its prefix for Schematron and the local names of its Schematron elements
