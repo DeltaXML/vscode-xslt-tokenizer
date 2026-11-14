@@ -24,6 +24,9 @@ export class DocumentChangeHandler {
 	// true when the user deliberately chose 'None' as the XML context file - unlike the initial unset state,
 	// this is not replaced by the next XML file viewed
 	public static contextFileIsNone = false;
+	// Schematron: the status bar item for a Schematron file - its schema's XML context file (set by the extension, see
+	// SchematronContext.showIn)
+	public static schematronStatus: ((item: vscode.StatusBarItem, document: vscode.TextDocument) => void) | undefined;
 	// the XML context file last picked (or 'None') - or the first XML file viewed, when none has been picked yet. It's
 	// used for a stylesheet with no context file of its own, and for XPath and DCP files
 	private static lastPickedUri: vscode.Uri | null = null;
@@ -395,7 +398,7 @@ export class DocumentChangeHandler {
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.getXPathDocumentChangeHandler().onDocumentChange(e));
 		}
 		let isDCPDocument = document.languageId === 'dcp';
-		if (isXPathDocument || isXSLTDocument || isDCPDocument) {
+		if (isXPathDocument || isXSLTDocument || isDCPDocument || document.languageId === 'sch') {
 			DocumentChangeHandler.refreshStatusBarItem();
 		} else {
 			DocumentChangeHandler.updateStatusBarItem(false);
@@ -422,6 +425,8 @@ export class DocumentChangeHandler {
 					'XML context file - used for XPath auto-completion and as the source for Quick Run';
 			DocumentChangeHandler.contextStatusBarItem.tooltip = DocumentChangeHandler.statusBarTooltip(tooltip, isXslt);
 			DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
+			// the item is a Schematron file's too, which chooses its schema's context file
+			DocumentChangeHandler.contextStatusBarItem.command = 'xslt-xpath.pickXsltContextFile';
 			DocumentChangeHandler.contextStatusBarItem.show();
 			// the context file isn't shared by a stylesheet that runs on itself: shown for that stylesheet alone
 			if (!docUri && isXslt && DocumentChangeHandler.selfSourceTask) {
@@ -455,6 +460,10 @@ export class DocumentChangeHandler {
 	public static refreshStatusBarItem(): void {
 		const document = vscode.window.activeTextEditor?.document;
 		const languageId = document?.languageId;
+		if (languageId === 'sch' && DocumentChangeHandler.schematronStatus) {
+			DocumentChangeHandler.schematronStatus(DocumentChangeHandler.contextStatusBarItem, document!);
+			return;
+		}
 		const show = languageId === 'xslt' || languageId === 'xpath' || languageId === 'dcp';
 		// an XPath or DCP file uses the last one picked
 		const lookup = show ? DocumentChangeHandler.useContextFor(languageId === 'xslt' ? document : undefined) : Promise.resolve();

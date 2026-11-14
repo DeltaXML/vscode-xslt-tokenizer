@@ -18,6 +18,7 @@ import { CatalogSetting } from './catalogSetting';
 import { HrefPaths } from './hrefPaths';
 import { SchReferences } from './schReferences';
 import { SchExpandText } from './schExpandText';
+import { SchematronContext } from './schematronContext';
 
 // a failed assertion or successful report, from the SVRL report
 export interface SchematronResult {
@@ -130,10 +131,12 @@ export class SchematronValidation {
 		}
 		const pairs = SchematronValidation.pairs();
 		if (/\.sch$/i.test(target.fsPath)) {
-			// a schema: the file last validated with it - else one to choose
-			const xml = Object.keys(pairs).reverse().find((file) => pairs[file] === target.fsPath && fs.existsSync(file)) ?? await SchematronValidation.pickXml();
-			if (xml && (!choosePhase || await SchematronValidation.setPhase(xml, target.fsPath))) {
-				await SchematronValidation.validate(vscode.Uri.file(xml), target.fsPath, true);
+			// a Schematron file: its schema's XML context file - chosen, else inferred - else one to choose (see
+			// SchematronContext); for a file sch:include brings in, the schema that includes it
+			const schema = SchematronContext.schemaOf(target) ?? target.fsPath;
+			const xml = SchematronContext.contextFor(schema)?.file ?? await SchematronContext.pick(schema);
+			if (xml && (!choosePhase || await SchematronValidation.setPhase(xml, schema))) {
+				await SchematronValidation.validate(vscode.Uri.file(xml), schema, true);
 			}
 			return;
 		}
@@ -249,11 +252,6 @@ export class SchematronValidation {
 			return chosen?.[0]?.fsPath;
 		}
 		return picked?.file;
-	}
-
-	private static async pickXml(): Promise<string | undefined> {
-		const chosen = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'XML': ['xml'], 'All files': ['*'] }, openLabel: 'Validate' });
-		return chosen?.[0]?.fsPath;
 	}
 
 	// the file validated with the schema - its problems, in the Problems view - after saving either if it has changes

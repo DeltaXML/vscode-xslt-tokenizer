@@ -115,6 +115,11 @@ export class FileSelection {
     return contextFiles?.[stylesheetFsPath];
   }
 
+  // the XML files viewed or picked recently, the last first - e.g. for a Schematron schema's context file
+  public recentXmlFiles(): string[] {
+    return this.context.workspaceState.get<string[]>(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL) ?? [];
+  }
+
   public addToRecentlyUsedPickFile(workspaceLabel: string, pickedFsPath: string) {
     let fileListForLabel: string[] | undefined = this.context.workspaceState.get(workspaceLabel);
     if (!fileListForLabel) { fileListForLabel = []; }

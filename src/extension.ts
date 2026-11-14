@@ -71,6 +71,7 @@ import { HrefPaths } from './hrefPaths';
 import { ImportTreeProvider } from './importTreeProvider';
 import { SchIncludes } from './schIncludes';
 import { SchematronFunctions } from './schematronFunctions';
+import { SchematronContext } from './schematronContext';
 import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
@@ -1740,6 +1741,12 @@ export function activate(context: vscode.ExtensionContext) {
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 	// Schematron: Validate: an XML file validated with a schema, by SchXslt2 (see SchematronValidation)
 	SchematronValidation.register(context);
+	// Schematron: a schema's XML context file - in the status bar, for auto-completion, and validated by Quick Run with a
+	// Schematron file in the editor (see SchematronContext)
+	SchematronContext.activate(context);
+	DocumentChangeHandler.schematronStatus = (item, document) => SchematronContext.showIn(item, document);
+	SchematronContext.onChange = () => DocumentChangeHandler.refreshStatusBarItem();
+	DocumentChangeHandler.refreshStatusBarItem();
 	// Schematron: Go to Definition from is-a, extends' rule, active's pattern, and diagnostics and properties (see SchReferences)
 	// - and of a function call, e.g. of an XSLT module the schema includes, or one that includes the file (see SchIncludes)
 	const schDefinitionProvider = new XsltDefinitionProvider(SchConfiguration.configuration);

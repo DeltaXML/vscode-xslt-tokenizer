@@ -366,6 +366,17 @@
 				"category": "Schematron"
 			},
 			{
+				"command": "xslt-xpath.quickRunSchematron",
+				"title": "Quick Run: Validate the XML Context File",
+				"category": "Schematron",
+				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.pickSchematronContextFile",
+				"title": "Choose XML Context File...",
+				"category": "Schematron"
+			},
+			{
 				"command": "xslt-xpath.exportStandardSchematron",
 				"title": "Export Standard Copy...",
 				"category": "Schematron"
@@ -630,6 +641,11 @@
 					"group": "navigation@2"
 				},
 				{
+					"command": "xslt-xpath.quickRunSchematron",
+					"when": "resourceLangId == sch",
+					"group": "navigation@1"
+				},
+				{
 					"command": "xslt-xpath.editQuickRunTaskSaxonJS",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
 					"group": "1_xslt@1"
@@ -755,6 +771,14 @@
 				},
 				{
 					"command": "xslt-xpath.exportStandardSchematron",
+					"when": "editorLangId == sch"
+				},
+				{
+					"command": "xslt-xpath.quickRunSchematron",
+					"when": "editorLangId == sch"
+				},
+				{
+					"command": "xslt-xpath.pickSchematronContextFile",
 					"when": "editorLangId == sch"
 				},
 				{

@@ -4,6 +4,8 @@
   bundled with XSpec) runs it.
 
   Things to try:
+  - Quick Run (the editor title's Run button): validates orders.xml - this schema's XML context file, in the status bar,
+    inferred from its xml-model - with the schema in the editor. Click the status bar item to choose another file
   - validate: with orders.xml in the editor, 'Schematron: Validate' - the problems are in the
     Problems view, at the elements they're about; click a problem's id to come back to its assertion here
   - after validating: above each rule, the nodes it fired for - and 'Schematron: Validate (Choose Phase)...' to

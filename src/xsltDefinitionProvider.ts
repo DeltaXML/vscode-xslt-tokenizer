@@ -1,4 +1,5 @@
 import { SchIncludes } from './schIncludes';
+import { SchematronContext } from './schematronContext';
 import { XSpecScenario } from './xspecScenario';
 import { XSpecLike } from './xspecLike';
 import { XSpecVariables } from './xspecVariables';
@@ -31,7 +32,6 @@ import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XPathVersion } from './xpathVersion';
 import { XSpecNodeNames } from './xspecNodeNames';
 import { SchReferences } from './schReferences';
-import { SchematronValidation } from './schematronValidation';
 import { XSpecSchematron } from './xspecSchematron';
 
 interface ImportedGlobals {
@@ -480,9 +480,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					uri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
 				}
 			} else if (this.docType === DocumentTypes.SCH) {
-				// Schematron: the names of the data it validates - the XML file last validated with the schema, else one
-				// whose xml-model associates it with the schema, else the last XML file viewed - not the schema's own
-				const dataFile = document.uri.scheme === 'file' ? SchematronValidation.dataFileFor(document.fileName) : undefined;
+				// Schematron: the names of the data it validates - its schema's XML context file, chosen or inferred (see
+				// SchematronContext) - else the last XML file viewed, not a schema
+				const schema = SchematronContext.schemaOf(document.uri);
+				const dataFile = schema ? SchematronContext.contextFor(schema)?.file : undefined;
 				const lastXml = DocumentChangeHandler.lastActiveXMLNonXSLUri;
 				uri = dataFile ? vscode.Uri.file(dataFile) : lastXml && !/\.sch$/i.test(lastXml.fsPath) ? lastXml : undefined;
 			} else {
