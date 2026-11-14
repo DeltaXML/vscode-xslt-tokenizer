@@ -93,3 +93,8 @@ code --user-data-dir /Users/Shared/vscode-demo/data --extensions-dir /Users/Shar
 
 Its settings are in `/Users/Shared/vscode-demo/data/User/settings.json`, e.g. `XSLT.tasks.saxonJar` set to a Saxon jar
 outside the home folder.
+
+Reset the workspace for a demo:
+```
+/Users/phil.fearon/dev/vscode-xslt-tokenizer/scripts/demo/reset-workspace.sh
+```
