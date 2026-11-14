@@ -28,7 +28,7 @@ const schemaText = `<schema ${iso} queryBinding="xslt3">
 </schema>`;
 const dataText = `<orders>
   <order id="A1" date="2026-11-02"><line/></order>
-  <order id="B2" date="2026-11-31"/>
+  <order id="B2" date="2026-11-31"><note/></order>
 </orders>`;
 
 suite('Schematron: debugging - the paths checked for empty steps', () => {
@@ -204,7 +204,9 @@ suite('Schematron: debugging', () => {
 		}
 		const faded = XsltEmptySteps.lastFaded;
 		assert.deepStrictEqual(faded.map((f) => `${f.line}: ${f.text}`), [`${lineOf('id="has-lines"')}: line`]);
-		assert.include(faded[0].hover, 'no `line` - 0 child elements');
+		// what there is instead - after a pause whose Locals had the same reference as this evaluation's result
+		assert.include(faded[0].hover, 'no `line` - 1 child element in all');
+		assert.include(faded[0].hover, 'Names: `note`');
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		await stop.session.customRequest('continue', { threadId: 1 });
 		await finished;

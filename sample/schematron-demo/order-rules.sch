@@ -8,8 +8,20 @@
     inferred from its xml-model - with the schema in the editor. Click the status bar item to choose another file
   - validate: with orders.xml in the editor, 'Schematron: Validate' - the problems are in the
     Problems view, at the elements they're about; click a problem's id to come back to its assertion here
-  - after validating: above each rule, the nodes it fired for - and 'Schematron: Validate (Choose Phase)...' to
-    validate with the 'structure' phase only
+  - after validating: above each rule, the nodes it fired for
+  - the phase, in the status bar - 'phase: all-checks (default)': click it to choose 'structure', which leaves out the
+    lines and totals - Quick Run, Validate and Debug all use it
+
+  Debugging - the editor title's Debug button validates orders.xml in the XSLT debugger, at this schema's lines:
+  - in the Breakpoints view, check 'Failed Assertions': it pauses at each failure, on its node, with its message - the
+    first is order A1's id, which another order has too. Edit its condition (the pencil) to 'error' to skip the warnings
+  - a breakpoint on has-email's line, below: for Grace Hopper, @email is faded - empty for her node - and its hover
+    lists the attributes she has
+  - a breakpoint on the customer-names pattern: it pauses in the abstract pattern's rule, in shared/, named for this
+    pattern - with $element and $required in the Variables view's Parameters
+  - while paused: Step Over goes to the rule's next let or assertion; Watch and the Debug Console evaluate XPath on the
+    rule's node, e.g. o:order-total(..)
+  - when it ends: the problems are in the Problems view, as for Validate
   - hover over is-a="required-attribute": the abstract pattern's rules, with this pattern's values in place
   - hover over a rule's name, an assertion's name, extends' rule, or $max-order-total
   - Find All References on id="positive-quantity": the XSpec test in order-rules.xspec uses it too

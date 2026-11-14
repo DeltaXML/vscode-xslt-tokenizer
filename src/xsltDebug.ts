@@ -1212,6 +1212,10 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			if (raw.type === 'event' && raw.event === 'stopped') {
 				// kept until the next pause: VS Code may ask for it after carrying on
 				this.outcomePause = undefined;
+				// the adapter's references are its paused state's - numbered again at each pause - so a scope's reference
+				// at the last pause may now be, e.g., an evaluated sequence's, whose items aren't to be filtered
+				this.filteredReferences.clear();
+				this.sourceFrames.clear();
 				if (raw.body?.reason === 'breakpoint' && this.outcomeFilters.size > 0) {
 					this.pausedAtOutcome(raw);
 					continue;
