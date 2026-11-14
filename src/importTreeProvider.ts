@@ -136,7 +136,8 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 			notes.push('current');
 		}
 		if (node.ancestors.length === 0 && chain.length > 1) {
-			notes.push(inSchema ? 'includes it' : current && index.isChosen(current.fileName) ? 'chosen top-level stylesheet' : 'inferred top-level stylesheet');
+			notes.push(inSchema ? (current && SchIncludes.instance.isChosen(current.fileName) ? 'chosen - includes it' : 'includes it') :
+				current && index.isChosen(current.fileName) ? 'chosen top-level stylesheet' : 'inferred top-level stylesheet');
 		}
 		if (isCycle) {
 			notes.push('cycle');
@@ -150,7 +151,11 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 			node.ancestors.length === 0 ? (inSchema ? 'Schematron schema' : 'top-level stylesheet') : node.kind ?? (node.isInclude ? 'xsl:include' : 'xsl:import');
 		const otherImporters = (inSchema && isSchematron(node.path) ? SchIncludes.instance.includersOf(node.path) : index.importersOf(node.path))
 			.filter((importer) => importer !== node.ancestors[node.ancestors.length - 1]);
-		item.tooltip = (pkg && !exists ? kind : `${node.path}\n${kind}`) + (otherImporters.length > 0 ? `\nalso imported or included by: ${otherImporters.map((p) => vscode.workspace.asRelativePath(p)).join(', ')}` : '');
+		// a schema that includes the current file: the others that do - one of which can be chosen
+		const otherSchemas = inSchema && node.ancestors.length === 0 && current && current.fileName !== node.path ?
+			SchIncludes.instance.topLevelCandidates(current.fileName).filter((schema) => schema !== node.path) : [];
+		item.tooltip = (pkg && !exists ? kind : `${node.path}\n${kind}`) + (otherImporters.length > 0 ? `\nalso imported or included by: ${otherImporters.map((p) => vscode.workspace.asRelativePath(p)).join(', ')}` : '') +
+			(otherSchemas.length > 0 ? `\n${path.basename(current!.fileName)} is also included by: ${otherSchemas.map((p) => vscode.workspace.asRelativePath(p)).join(', ')} - 'Choose Including Schema...' chooses which` : '');
 		item.iconPath = new vscode.ThemeIcon(isCurrent ? 'arrow-right' : node.ancestors.length === 0 ? 'root-folder' : pkg ? 'package' : node.isInclude ? 'file-symlink-file' : 'file-code');
 		if (exists) {
 			item.command = { command: 'vscode.open', title: 'Open', arguments: [vscode.Uri.file(node.path)] };

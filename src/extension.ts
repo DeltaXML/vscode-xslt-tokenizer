@@ -719,11 +719,54 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		await saveTopLevelChoices();
 	}));
-	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.resetTopLevelStylesheets', async () => {
-		const count = ImportIndex.instance.resetChoices();
-		await saveTopLevelChoices();
-		vscode.window.showInformationMessage(count === 0 ? 'There are no top-level stylesheet choices to clear.' : `Cleared ${count} top-level stylesheet choice${count === 1 ? '' : 's'}.`);
+	// Schematron: the schemas chosen for the files sch:include brings in, saved for the workspace (see SchIncludes.chain)
+	const includingSchemaChoicesKey = 'xslt-xpath.includingSchemaChoices';
+	SchIncludes.instance.setChoices(context.workspaceState.get(includingSchemaChoicesKey));
+	const saveIncludingSchemaChoices = () => context.workspaceState.update(includingSchemaChoicesKey, SchIncludes.instance.choices);
+	context.subscriptions.push(vscode.commands.registerCommand(SchIncludes.chooseCommand, async () => {
+		const document = vscode.window.activeTextEditor?.document;
+		if (!document || document.languageId !== 'sch' || document.uri.scheme !== 'file') {
+			vscode.window.showErrorMessage('Choose Including Schema: open a Schematron file that a schema includes first.');
+			return;
+		}
+		const includes = SchIncludes.instance;
+		await includes.whenBuilt();
+		const file = document.fileName;
+		const candidates = includes.topLevelCandidates(file);
+		if (candidates.length === 0) {
+			vscode.window.showInformationMessage(`Choose Including Schema: no schema in the workspace includes ${path.basename(file)}.`);
+			return;
+		}
+		const current = includes.chain(file)[0];
+		const isChosen = includes.isChosen(file);
+		type Item = vscode.QuickPickItem & { schema?: string, automatic?: boolean };
+		const items: Item[] = candidates.map((schema) => ({
+			label: path.basename(schema),
+			description: vscode.workspace.asRelativePath(path.dirname(schema)) + (schema === current ? (isChosen ? ' · chosen' : ' · automatic') : ''),
+			schema
+		}));
+		items.push({ label: 'Automatic (nearest folder)', description: isChosen ? '' : 'current', automatic: true });
+		const picked = await vscode.window.showQuickPick(items, { placeHolder: `The schema that includes ${path.basename(file)} - for its XML context file, and what's in scope where it's included` });
+		if (!picked) {
+			return;
+		}
+		if (picked.schema) {
+			includes.chooseSchema(picked.schema, file);
+		} else {
+			includes.clearChoice(file);
+		}
+		await saveIncludingSchemaChoices();
 	}));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.resetTopLevelStylesheets', async () => {
+		const count = ImportIndex.instance.resetChoices() + SchIncludes.instance.resetChoices();
+		await saveTopLevelChoices();
+		await saveIncludingSchemaChoices();
+		vscode.window.showInformationMessage(count === 0 ? 'There are no top-level stylesheet or including schema choices to clear.' : `Cleared ${count} top-level stylesheet or including schema choice${count === 1 ? '' : 's'}.`);
+	}));
+	// the Imports view's title button: choosing the top-level stylesheet - or for a Schematron file, the including schema
+	const setImportsContext = () => vscode.commands.executeCommand('setContext', 'xslt-xpath.importsForSchematron', vscode.window.activeTextEditor?.document.languageId === 'sch');
+	setImportsContext();
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(setImportsContext));
 	// Quick Run for a module in the 'XSLT Imports' view, e.g. the top-level stylesheet
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunModule', async (node?: { path: string }) => {
 		if (node?.path) {
@@ -818,6 +861,8 @@ export function activate(context: vscode.ExtensionContext) {
 		// and the open Schematron files are checked again: a file sch:include brings in is checked with what's in scope
 		// where it's included (see SchIncludes.contextOf)
 		vscode.workspace.textDocuments.filter((doc) => doc.languageId === 'sch' && doc.uri.scheme === 'file').forEach((doc) => schSymbolProvider.getDocumentSymbols(doc, false));
+		// and the XML context file shown: the including schema's, which may be another
+		DocumentChangeHandler.refreshStatusBarItem();
 	}), SchIncludes.instance);
 	// a module's context file is its top-level stylesheet's, which the index may only now know
 	context.subscriptions.push(ImportIndex.instance.onDidChange(() => DocumentChangeHandler.refreshStatusBarItem()));

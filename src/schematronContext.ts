@@ -145,12 +145,17 @@ export class SchematronContext {
 			return;
 		}
 		const context = SchematronContext.contextFor(schema);
-		const forSchema = schema === document.fileName ? path.basename(schema) : `${path.basename(schema)}, which includes this file`;
+		const includes = SchIncludes.instance;
+		const forSchema = schema === document.fileName ? path.basename(schema) :
+			`${path.basename(schema)}, which includes this file${includes.isChosen(document.fileName) ? ' - chosen' : ''}`;
+		// with more than one schema that includes the file: the others, and how to choose
+		const others = schema === document.fileName ? [] : includes.topLevelCandidates(document.fileName).filter((s) => s !== schema);
+		const alsoIncluded = others.length > 0 ? `\n\nAlso included by ${others.map((s) => `\`${vscode.workspace.asRelativePath(s)}\``).join(', ')} - choose which with **Schematron: Choose Including Schema...**, or the Schematron Includes view.` : '';
 		item.text = `$(file-code) ${context ? path.basename(context.file) : '[XML context file]'}`;
 		item.tooltip = new vscode.MarkdownString(context ?
 			`XML context file for ${forSchema}: \`${vscode.workspace.asRelativePath(context.file)}\` - ${context.chosen ? 'chosen' : 'inferred: the file last validated with the schema, or one whose `xml-model` names it'}.\n\n` +
-			'Used for the element and attribute names of XPath auto-completion, and validated with the schema by Quick Run. Click to choose another.' :
-			`No XML context file for ${forSchema} yet - click to choose one: it's used for XPath auto-completion, and validated with the schema by Quick Run.`);
+			'Used for the element and attribute names of XPath auto-completion, and validated with the schema by Quick Run. Click to choose another.' + alsoIncluded :
+			`No XML context file for ${forSchema} yet - click to choose one: it's used for XPath auto-completion, and validated with the schema by Quick Run.` + alsoIncluded);
 		item.command = SchematronContext.pickCommand;
 		item.show();
 	}

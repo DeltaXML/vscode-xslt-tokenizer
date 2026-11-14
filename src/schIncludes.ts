@@ -9,6 +9,7 @@
  */
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import { parseXml, descendants, XmlElement } from './xspecXml';
 import { HrefPaths } from './hrefPaths';
 import { XslLexer } from './xslLexer';
@@ -23,12 +24,16 @@ export interface SchReference {
 // index of the workspace's .sch files, built when it's first needed and kept up to date as files change
 export class SchIncludes {
 	public static readonly instance = new SchIncludes();
+	public static readonly chooseCommand = 'xslt-xpath.chooseIncludingSchema';
 	private references = new Map<string, SchReference[]>();
 	private building: Promise<void> | undefined;
 	private isBuilt = false;
 	private readonly changed = new vscode.EventEmitter<void>();
 	public readonly onDidChange = this.changed.event;
 	private watcher: vscode.FileSystemWatcher | undefined;
+	// the including schemas chosen: for a schema's tree, the first that includes a file - and for a file alone
+	private preferred: string[] = [];
+	private moduleChoices = new Map<string, string>();
 
 	// the files the Schematron text refers to, resolved against its file - as SchXslt2 resolves them, with the XML catalog:
 	// not those in an XSLT element, e.g. xsl:include in xsl:function, nor in a foreign element
@@ -132,19 +137,134 @@ export class SchIncludes {
 		return [...users];
 	}
 
-	// the file's chain of includers, from the schema that includes it, directly or not, down to the file - its first
-	// includer at each step, not in a cycle. Just the file, when nothing includes it
+	// the file's chain of includers, from the schema that includes it, directly or not, down to the file. As for an XSLT
+	// module's top-level stylesheet (see ImportIndex.importChain): the schema chosen for the file, else at each step the
+	// includer nearest its folder - of those that lead to a schema preferred for its tree, if one does. Not in a cycle.
+	// Just the file, when nothing includes it
 	public chain(filePath: string): string[] {
-		const chain = [filePath];
-		for (let includers = this.includersOf(filePath); includers.length > 0;) {
-			const next = includers.find((includer) => !chain.includes(includer));
-			if (!next) {
-				break;
-			}
-			chain.unshift(next);
-			includers = this.includersOf(next);
+		const choice = this.moduleChoices.get(filePath);
+		const chosen = choice ? this.pathFrom(choice, filePath) : undefined;
+		if (chosen) {
+			return chosen;
 		}
-		return chain;
+		const target = this.preferred.find((schema) => this.topLevelCandidates(filePath).includes(schema));
+		const chain = [filePath];
+		for (let current = filePath; ;) {
+			let includers = this.includersOf(current).filter((includer) => !chain.includes(includer));
+			if (target && includers.some((includer) => this.reaches(includer, target, chain))) {
+				includers = includers.filter((includer) => this.reaches(includer, target, chain));
+			}
+			if (includers.length === 0) {
+				return chain;
+			}
+			const distance = (includer: string) => path.relative(path.dirname(current), path.dirname(includer)).split(path.sep).filter((part) => part !== '').length;
+			current = includers.reduce((best, candidate) => distance(candidate) < distance(best) ? candidate : best);
+			chain.unshift(current);
+		}
+	}
+
+	// whether the target is the includer, or includes it, directly or not - not through the files to avoid
+	private reaches(includer: string, target: string, avoid: string[]): boolean {
+		const visited = new Set(avoid);
+		const visit = (file: string): boolean => {
+			if (file === target) {
+				return true;
+			}
+			visited.add(file);
+			return this.includersOf(file).some((next) => !visited.has(next) && visit(next));
+		};
+		return visit(includer);
+	}
+
+	// the files from the schema down to the file it includes, directly or not - undefined if it doesn't
+	private pathFrom(schema: string, filePath: string): string[] | undefined {
+		const previous = new Map<string, string>();
+		const queue = [schema];
+		const seen = new Set([schema]);
+		while (queue.length > 0) {
+			const file = queue.shift()!;
+			if (file === filePath) {
+				const result = [file];
+				for (let f = file; previous.has(f);) {
+					f = previous.get(f)!;
+					result.unshift(f);
+				}
+				return result.length > 1 ? result : undefined;
+			}
+			(this.references.get(file) ?? []).forEach((r) => {
+				if (!seen.has(r.path)) {
+					seen.add(r.path);
+					previous.set(r.path, file);
+					queue.push(r.path);
+				}
+			});
+		}
+		return undefined;
+	}
+
+	// the schemas that include the file, directly or not, that nothing includes
+	public topLevelCandidates(filePath: string): string[] {
+		const result = new Set<string>();
+		const visited = new Set<string>([filePath]);
+		const visit = (file: string) => {
+			const includers = this.includersOf(file).filter((includer) => !visited.has(includer));
+			if (this.includersOf(file).length === 0 && file !== filePath) {
+				result.add(file);
+			}
+			includers.forEach((includer) => {
+				visited.add(includer);
+				visit(includer);
+			});
+		};
+		visit(filePath);
+		return [...result];
+	}
+
+	// the including schema for the file is a choice, not the nearest
+	public isChosen(filePath: string): boolean {
+		const chain = this.chain(filePath);
+		return (this.moduleChoices.has(filePath) && chain[0] === this.moduleChoices.get(filePath)) || (chain.length > 1 && this.preferred.includes(chain[0]));
+	}
+
+	// the choices, for saving - and restoring them
+	public get choices(): { preferred: string[], files: [string, string][] } {
+		return { preferred: [...this.preferred], files: [...this.moduleChoices.entries()] };
+	}
+
+	public setChoices(choices: { preferred?: string[], files?: [string, string][] } | undefined) {
+		this.preferred = choices?.preferred ?? [];
+		this.moduleChoices = new Map(choices?.files ?? []);
+		this.changed.fire();
+	}
+
+	// chooses a schema for its tree - it's used for the files it includes
+	public chooseSchema(schema: string, filePath: string) {
+		this.moduleChoices.delete(filePath);
+		this.preferred = [schema].concat(this.preferred.filter((p) => p !== schema));
+		this.changed.fire();
+	}
+
+	// chooses a schema for the file alone
+	public chooseForFile(filePath: string, schema: string) {
+		this.moduleChoices.set(filePath, schema);
+		this.changed.fire();
+	}
+
+	// the nearest for the file: no choice for it, nor for the schemas that include it
+	public clearChoice(filePath: string) {
+		const candidates = this.topLevelCandidates(filePath);
+		this.moduleChoices.delete(filePath);
+		this.preferred = this.preferred.filter((p) => !candidates.includes(p));
+		this.changed.fire();
+	}
+
+	// clears all the choices, returning how many there were
+	public resetChoices(): number {
+		const count = this.preferred.length + this.moduleChoices.size;
+		this.preferred = [];
+		this.moduleChoices.clear();
+		this.changed.fire();
+		return count;
 	}
 
 	// for a file sch:include brings in - or sch:extends href - what's in scope where it's included, as SchXslt2 has it in

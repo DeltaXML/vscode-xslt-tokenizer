@@ -30,6 +30,10 @@ const files: { [name: string]: string } = {
 	'rules/abstract.sch': `<rule ${iso} abstract="true" id="r"><assert test="@b">y</assert></rule>`,
 	'lib/functions.xsl': `<xsl:stylesheet ${xsl} version="3.0"><xsl:import href="more.xsl"/></xsl:stylesheet>`,
 	'lib/more.xsl': `<xsl:stylesheet ${xsl} version="3.0"/>`,
+	// a pattern file two schemas include: one in its folder, one in another - the other first in the index
+	'multi/far/far.sch': `<schema ${iso}><include href="../shared/common.sch"/></schema>`,
+	'multi/shared/near.sch': `<schema ${iso}><include href="common.sch"/></schema>`,
+	'multi/shared/common.sch': `<pattern ${iso} id="common"><rule context="a"><assert test="b">x</assert></rule></pattern>`,
 	'cycle-a.sch': `<schema ${iso}><include href="cycle-b.sch"/></schema>`,
 	// a schema whose included files use its sch:ns prefixes, variables and the functions of its XSLT module
 	'ctx/main.sch': `<schema ${iso} ${xsl} queryBinding="xslt3">
@@ -84,6 +88,43 @@ suite('Schematron includes', () => {
 		assert.deepEqual(SchIncludes.instance.chain(file('rules/abstract.sch')), [file('main.sch'), file('rules/abstract.sch')]);
 		assert.deepEqual(SchIncludes.instance.chain(file('main.sch')), [file('main.sch')]);
 		assert.deepEqual(SchIncludes.instance.chain(file('cycle-b.sch')), [file('cycle-a.sch'), file('cycle-b.sch')]);
+	});
+
+	test('a file more than one schema includes: the nearest, unless one is chosen - for its tree, or the file alone - shown in the view', async () => {
+		const includes = SchIncludes.instance;
+		const common = file('multi/shared/common.sch');
+		try {
+			assert.deepEqual(includes.chain(common), [file('multi/shared/near.sch'), common]);
+			assert.isFalse(includes.isChosen(common));
+			assert.deepEqual(includes.topLevelCandidates(common).sort(), [file('multi/far/far.sch'), file('multi/shared/near.sch')]);
+			// chosen for its tree
+			includes.chooseSchema(file('multi/far/far.sch'), common);
+			assert.deepEqual(includes.chain(common), [file('multi/far/far.sch'), common]);
+			assert.isTrue(includes.isChosen(common));
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(common));
+			const provider = new ImportTreeProvider(() => document);
+			const [root] = provider.getChildren();
+			const item = provider.getTreeItem(root);
+			assert.deepEqual([item.label, item.description], ['far.sch', 'chosen - includes it']);
+			assert.include(item.tooltip as string, 'common.sch is also included by: ');
+			assert.include(item.tooltip as string, 'near.sch');
+			// for the file alone, then the nearest again
+			includes.chooseForFile(common, file('multi/shared/near.sch'));
+			assert.deepEqual(includes.chain(common), [file('multi/shared/near.sch'), common]);
+			assert.isTrue(includes.isChosen(common));
+			includes.clearChoice(common);
+			assert.deepEqual(includes.chain(common), [file('multi/shared/near.sch'), common]);
+			assert.isFalse(includes.isChosen(common));
+			// saved and restored
+			includes.chooseSchema(file('multi/far/far.sch'), common);
+			const saved = includes.choices;
+			includes.resetChoices();
+			assert.deepEqual(includes.chain(common)[0], file('multi/shared/near.sch'));
+			includes.setChoices(saved);
+			assert.deepEqual(includes.chain(common)[0], file('multi/far/far.sch'));
+		} finally {
+			includes.resetChoices();
+		}
 	});
 
 	test('the view, for an included file: the schema that includes it, with the path to the file expanded - and the XSLT modules\' own imports', async () => {

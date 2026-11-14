@@ -270,6 +270,12 @@
 				"icon": "$(list-selection)"
 			},
 			{
+				"command": "xslt-xpath.chooseIncludingSchema",
+				"title": "Choose Including Schema...",
+				"category": "Schematron",
+				"icon": "$(list-selection)"
+			},
+			{
 				"command": "xslt-xpath.resetTopLevelStylesheets",
 				"title": "Reset Top-Level Stylesheet Choices",
 				"category": "XSLT"
@@ -684,7 +690,12 @@
 			"view/title": [
 				{
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
-					"when": "view == xslt-xpath.imports",
+					"when": "view == xslt-xpath.imports && !xslt-xpath.importsForSchematron",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.chooseIncludingSchema",
+					"when": "view == xslt-xpath.imports && xslt-xpath.importsForSchematron",
 					"group": "navigation"
 				},
 				{
@@ -748,6 +759,10 @@
 				{
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
 					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.chooseIncludingSchema",
+					"when": "editorLangId == sch"
 				},
 				{
 					"command": "xslt-xpath.profileXslt",
