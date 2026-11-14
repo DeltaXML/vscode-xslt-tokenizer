@@ -1007,6 +1007,14 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		}
 	}
 
+	// an expression with an abstract pattern's parameters ($name) replaced by their values, as SchXslt2 replaces them in its
+	// copy of the pattern: as text, the longest name first, with no check of what follows the name. A parameter with no
+	// value isn't replaced, as SchXslt2 leaves it
+	public static withParameters(expression: string, parameters: { name: string, value: string }[]) {
+		return parameters.filter((p) => p.value !== '(not supplied)').sort((a, b) => b.name.length - a.name.length)
+			.reduce((result, p) => result.split(p.name).join(p.value), expression);
+	}
+
 	// for a source file's breakpoints: the generated stylesheet's breakpoints for them - with those of the other source
 	// files - and a line with no step in it, e.g. in an x:context's content, has none, and isn't verified
 	private mappedRequest(message: vscode.DebugProtocolMessage): vscode.DebugProtocolMessage {
@@ -1023,6 +1031,19 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 				this.scopesRequests.set(request.seq, args.frameId);
 			} else if (request.command === 'variables' && args?.variablesReference !== undefined && this.filteredReferences.has(args.variablesReference)) {
 				this.variablesRequests.set(request.seq, args.variablesReference);
+			}
+		}
+		if (map?.parametersAt && request.type === 'request' && request.command === 'evaluate') {
+			// paused in a rule of an abstract pattern's instance: its parameters, replaced as text - as in the rule's copy, where
+			// they aren't variables - e.g. for Watch, the Debug Console and a hover
+			const args = (request as { arguments?: { expression?: string, frameId?: number } }).arguments;
+			const line = args?.frameId !== undefined ? this.sourceFrames.get(args.frameId) : undefined;
+			const parameters = line !== undefined ? map.parametersAt(line) : undefined;
+			if (parameters && args?.expression) {
+				const expression = XsltDebugAdapterProcess.withParameters(args.expression, parameters.variables);
+				if (expression !== args.expression) {
+					return { ...request, arguments: { ...args, expression } } as vscode.DebugProtocolMessage;
+				}
 			}
 		}
 		if (map?.outcomes && request.type === 'request' && request.command === 'setExceptionBreakpoints') {

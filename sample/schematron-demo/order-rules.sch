@@ -18,7 +18,8 @@
   - a breakpoint on has-email's line, below: for Grace Hopper, @email is faded - empty for her node - and its hover
     lists the attributes she has
   - a breakpoint on the customer-names pattern: it pauses in the abstract pattern's rule, in shared/, named for this
-    pattern - with $element and $required in the Variables view's Parameters
+    pattern - with $element and $required in the Variables view's Parameters. Watch $required: it's replaced by @name,
+    as SchXslt2 replaces it, so it gives the customer's name attribute
   - while paused: Step Over goes to the rule's next let or assertion; Watch and the Debug Console evaluate XPath on the
     rule's node, e.g. o:order-total(..)
   - when it ends: the problems are in the Problems view, as for Validate

@@ -35,6 +35,9 @@ export interface PathChain {
 	line: number;
 	// the variable it starts with, if any - not checked when Saxon hasn't evaluated it yet
 	variable?: string;
+	// in a Schematron abstract pattern's rule: the variable it starts with is the pattern's parameter, replaced by its
+	// value as text - it's checked alone too, as its value is often a path, e.g. @name
+	parameter?: boolean;
 	points: ChainPoint[];
 }
 
@@ -135,11 +138,18 @@ export class XsltEmptySteps {
 		const evaluate = async (expression: string) => session.customRequest('evaluate', { expression, frameId: item.frameId, context: 'watch' });
 		// variables Saxon hasn't evaluated yet aren't evaluated for this: it could run stylesheet code
 		const notEvaluated = new Set<string>();
+		// in a Schematron abstract pattern's rule: its parameters' values (by name, with no $), as the debugger replaces them
+		const parameterValues = new Map<string, string>();
 		try {
 			const { scopes } = await session.customRequest('scopes', { frameId: item.frameId });
 			const locals = (scopes ?? []).find((s: { name: string }) => s.name === 'Locals');
 			const { variables } = locals ? await session.customRequest('variables', { variablesReference: locals.variablesReference }) : { variables: [] };
 			(variables ?? []).filter((v: { value: string }) => v.value === '(not evaluated yet)').forEach((v: { name: string }) => notEvaluated.add(v.name));
+			const parameters = (scopes ?? []).find((s: { name: string }) => s.name === 'Parameters');
+			if (parameters && chains.some((c) => c.parameter)) {
+				const { variables: values } = await session.customRequest('variables', { variablesReference: parameters.variablesReference });
+				(values ?? []).forEach((v: { name: string, value: string }) => parameterValues.set(v.name.replace(/^\$/, ''), v.value));
+			}
 		} catch {
 			// as if all were evaluated
 		}
@@ -167,6 +177,11 @@ export class XsltEmptySteps {
 			if (chain.variable && notEvaluated.has(chain.variable)) {
 				continue;
 			}
+			// a parameter: only with a value that, put in its place as text, is still what the chain starts with
+			const parameterValue = chain.parameter ? parameterValues.get(chain.variable!.replace(/^\$/, '')) : undefined;
+			if (chain.parameter && (parameterValue === undefined || !XsltEmptySteps.isPrimary(parameterValue))) {
+				continue;
+			}
 			// whether each of its points has a value (1 or 0), all at once, each step evaluated once - exists() only
 			// needs a step's first item, as the stylesheet may, where count() would need them all
 			const bindings = XsltEmptySteps.bindings(text, chain);
@@ -178,7 +193,7 @@ export class XsltEmptySteps {
 			if (empty >= 0) {
 				const point = chain.points[empty];
 				const range = new vscode.Range(document.positionAt(point.markStart), document.positionAt(point.markEnd));
-				decorations.push({ range, hoverMessage: await XsltEmptySteps.hover(point, bindings.slice(0, empty), strings) });
+				decorations.push({ range, hoverMessage: await XsltEmptySteps.hover(point, bindings.slice(0, empty), strings, empty === 0 ? parameterValue : undefined) });
 			}
 		}
 		if (generation === XsltEmptySteps.generation && decorations.length > 0) {
@@ -228,7 +243,7 @@ export class XsltEmptySteps {
 	}
 
 	// why it's empty there - given the bindings of the points before it, and how to evaluate a sequence of strings
-	private static async hover(point: ChainPoint, bindings: string[], strings: (expression: string) => Promise<string[] | undefined>) {
+	private static async hover(point: ChainPoint, bindings: string[], strings: (expression: string) => Promise<string[] | undefined>, parameterValue?: string) {
 		const markdown = new vscode.MarkdownString();
 		const code = (s: string) => '`' + s.replace(/`/g, '\'') + '`';
 		// the value before this point: the context item, or the root, for a path's first step
@@ -236,7 +251,7 @@ export class XsltEmptySteps {
 		const lets = bindings.length > 0 ? `let ${bindings.join(', ')} return ` : '';
 		switch (point.kind) {
 			case 'root':
-				markdown.appendMarkdown(`${code(point.test!)} is empty here`);
+				markdown.appendMarkdown(parameterValue !== undefined ? `${code(point.test!)} - the parameter's value, ${code(parameterValue)} - is empty here` : `${code(point.test!)} is empty here`);
 				break;
 			case 'predicate': {
 				const counted = (await strings(`${lets}string(count(${before}))`))?.[0];
@@ -245,7 +260,7 @@ export class XsltEmptySteps {
 				break;
 			}
 			case 'lookup': {
-				const keys = await strings(`${lets}let $v := (${before}) return (string(count($v)), distinct-values($v!(if (. instance of map(*)) then Q{http://www.w3.org/2005/xpath-functions/map}keys(.)!string() ` +
+				const keys = await strings(`${lets}let $_v := (${before}) return (string(count($_v)), distinct-values($_v!(if (. instance of map(*)) then Q{http://www.w3.org/2005/xpath-functions/map}keys(.)!string() ` +
 					`else if (. instance of array(*)) then '#array ' || Q{http://www.w3.org/2005/xpath-functions/array}size(.) else ()))[position() le 50])`);
 				const arrays = (keys ?? []).slice(1).filter((k) => k.startsWith('#array '));
 				const mapKeys = (keys ?? []).slice(1).filter((k) => !k.startsWith('#array '));
@@ -269,7 +284,7 @@ export class XsltEmptySteps {
 				const axis = point.separator === '//' ? '//' : '/';
 				const candidates = isAttribute ? `${axis}@*` : point.axis ? `${axis}${point.axis}::*` : `${axis}*`;
 				const what = isAttribute ? 'attributes' : point.separator === '//' ? 'descendant elements' : point.axis ? `elements on the ${point.axis} axis` : 'child elements';
-				const names = await strings(`${lets}let $all := (${before})${candidates} return (string(count($all)), distinct-values($all!(name() || ' ' || local-name() || ' ' || namespace-uri()))[position() le 50])`);
+				const names = await strings(`${lets}let $_all := (${before})${candidates} return (string(count($_all)), distinct-values($_all!(name() || ' ' || local-name() || ' ' || namespace-uri()))[position() le 50])`);
 				if (!names) {
 					markdown.appendMarkdown(`Empty here: no ${code(test)} nodes`);
 					break;
@@ -291,6 +306,20 @@ export class XsltEmptySteps {
 			}
 		}
 		return markdown;
+	}
+
+	/**
+	 * Whether an abstract pattern's parameter value, put in place of the parameter as text (as SchXslt2 does), is what a
+	 * chain starting with the parameter starts with: e.g. @name, customer, order/line or f(x) - not a | b or $x + 1,
+	 * where $p/c would become a | b/c. Not a value with no text, nor one the pattern didn't supply
+	 */
+	public static isPrimary(value: string) {
+		let outer = value.trim().replace(/"[^"]*"|'[^']*'/g, '""');
+		for (let previous = ''; previous !== outer;) {
+			previous = outer;
+			outer = outer.replace(/\([^()[\]]*\)|\[[^()[\]]*\]/g, '');
+		}
+		return value.trim() !== '' && value !== '(not supplied)' && !/[\s|,!+=<>]/.test(outer) && !/^[-/]|-$/.test(outer);
 	}
 
 	public static unescape(xml: string) {
@@ -400,9 +429,9 @@ export class XsltEmptySteps {
 	 * In a Schematron schema, paused in a rule - at the rule, a let, an assert or report, or a value-of in its message -
 	 * the paths of the rule's lets, tests and messages on lines up to the one paused at (its lets all, when paused at
 	 * the rule), relative ones too: they're all evaluated with the rule's node as the context item. Not the rule's
-	 * context (a match pattern), and not paths with a variable an abstract pattern's rule has as a parameter (replaced
-	 * by the instance's text). Paused elsewhere - e.g. at a global let - only that element's paths from a variable or
-	 * the root
+	 * context (a match pattern). In an abstract pattern's rule, a path may start with a parameter, which is checked
+	 * alone too (see PathChain.parameter). Paused elsewhere - e.g. at a global let - only that element's paths from a
+	 * variable or the root
 	 */
 	public static schematronChains(text: string, stopLine: number): PathChain[] {
 		const tokens = new XslLexer(SchConfiguration.configuration).analyse(text);
@@ -501,15 +530,14 @@ export class XsltEmptySteps {
 			} else {
 				continue;
 			}
-			if (group.abstract && group.tokens.some((t) => t.tokenType === TokenLevelState.variable && !declared.has(t.value.replace(/^\$/, '')))) {
-				continue;
-			}
-			chains.push(...XsltEmptySteps.groupChains(group.tokens, text, offset, relativeAllowed));
+			// in an abstract pattern, a variable no let declares is a parameter
+			const isParameter = (name: string) => group.abstract && !declared.has(name.replace(/^\$/, ''));
+			chains.push(...XsltEmptySteps.groupChains(group.tokens, text, offset, relativeAllowed, isParameter));
 		}
 		return chains;
 	}
 
-	private static groupChains(t: BaseToken[], text: string, offset: (token: BaseToken) => number, relativeAllowed: boolean): PathChain[] {
+	private static groupChains(t: BaseToken[], text: string, offset: (token: BaseToken) => number, relativeAllowed: boolean, isParameter?: (name: string) => boolean): PathChain[] {
 		const op = (i: number, ...values: string[]) => i >= 0 && i < t.length && t[i].tokenType === TokenLevelState.operator && values.includes(t[i].value);
 		const end = (i: number) => offset(t[i]) + t[i].length;
 		const isStepStart = (i: number) => i < t.length && (t[i].tokenType === TokenLevelState.axisName || t[i].tokenType === TokenLevelState.nodeNameTest ||
@@ -659,10 +687,11 @@ export class XsltEmptySteps {
 					break;
 				}
 			}
-			// a variable (or other expression it starts with) alone isn't a path
+			// a variable (or other expression it starts with) alone isn't a path - unless it's a parameter
 			const checked = points.slice(0, safe);
-			if (checked.length > (checked[0]?.kind === 'root' ? 1 : 0)) {
-				chains.push({ start, line: t[i].line, variable, points: checked });
+			const parameter = variable !== undefined && isParameter?.(variable) === true;
+			if (checked.length > (checked[0]?.kind === 'root' && !parameter ? 1 : 0)) {
+				chains.push({ start, line: t[i].line, variable, points: checked, ...(parameter ? { parameter } : {}) });
 			}
 		}
 		return chains;

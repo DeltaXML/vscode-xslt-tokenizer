@@ -13,6 +13,7 @@ import { SchematronDebug } from '../../src/schematronDebug';
 import { SchematronContext } from '../../src/schematronContext';
 import { SchIncludes } from '../../src/schIncludes';
 import { XsltEmptySteps } from '../../src/xsltEmptySteps';
+import { XsltDebugAdapterProcess } from '../../src/xsltDebug';
 
 const iso = 'xmlns="http://purl.oclc.org/dsdl/schematron"';
 const schemaText = `<schema ${iso} queryBinding="xslt3">
@@ -32,7 +33,7 @@ const dataText = `<orders>
 </orders>`;
 
 suite('Schematron: debugging - the paths checked for empty steps', () => {
-	test('in the rule paused in: its lets, tests and messages up to the line - all its lets at the rule - not its context, nor an abstract pattern\'s parameters', () => {
+	test('in the rule paused in: its lets, tests and messages up to the line - all its lets at the rule - not its context - an abstract pattern\'s parameters alone too', () => {
 		const text = [
 			`<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt3">`,
 			'  <sch:let name="g" value="/orders/order"/>',
@@ -54,8 +55,20 @@ suite('Schematron: debugging - the paths checked for empty steps', () => {
 		assert.deepStrictEqual(chains(6), ['name first', 'price amount', '.. code', '$n x', 'note']);
 		// a global let: from the root or a variable only
 		assert.deepStrictEqual(chains(1), ['orders order']);
-		// $attr is the abstract pattern's parameter - $v is its let
-		assert.deepStrictEqual(chains(10), []);
+		// $attr and $v2 are the abstract pattern's parameters, checked alone too - $v is its let
+		assert.deepStrictEqual(chains(10), ['$v2', '$attr x', '$v y', 'q r']);
+		assert.deepStrictEqual(XsltEmptySteps.schematronChains(text, 10).map((c) => c.parameter === true), [true, true, false, false]);
+	});
+
+	test('a parameter\'s value is checked as the start of a path only if, put in its place as text, it still is', () => {
+		['@name', 'customer', 'order/line', 'f(a, b)', '*', 'item[@x = 1]', '(a | b)', '"a b"', 'order-line'].forEach((value) => assert.isTrue(XsltEmptySteps.isPrimary(value), value));
+		['a | b', '$x + 1', 'a, b', 'a and b', '', '(not supplied)', '-1', 'a!b'].forEach((value) => assert.isFalse(XsltEmptySteps.isPrimary(value), value));
+	});
+
+	test('an expression evaluated in an abstract pattern\'s rule: its parameters replaced as SchXslt2 replaces them - as text, the longest name first', () => {
+		const parameters = [{ name: '$a', value: 'x' }, { name: '$ab', value: '@y' }, { name: '$c', value: '(not supplied)' }];
+		assert.strictEqual(XsltDebugAdapterProcess.withParameters('$ab and $a and $c', parameters), '@y and x and $c');
+		assert.strictEqual(XsltDebugAdapterProcess.withParameters('count(*)', parameters), 'count(*)');
 	});
 });
 
@@ -66,6 +79,7 @@ suite('Schematron: debugging', () => {
 	let stops: { session: vscode.DebugSession; reason: string; body?: any }[] = [];
 	let onStop: (() => void) | undefined;
 	const disposables: vscode.Disposable[] = [];
+	let saveBeforeStart: string | undefined;
 	// the responses to setBreakpoints for the schema, as VS Code gets them
 	const breakpointResponses: { session: vscode.DebugSession, body: any }[] = [];
 
@@ -75,6 +89,10 @@ suite('Schematron: debugging', () => {
 		}
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
 		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', saxonJar, vscode.ConfigurationTarget.Global);
+		// starting a session saves unsaved editors (debug.saveBeforeStart): an untitled one another suite left open would
+		// get a Save As dialog, which waits for an answer
+		saveBeforeStart = vscode.workspace.getConfiguration('debug').inspect<string>('saveBeforeStart')?.globalValue;
+		await vscode.workspace.getConfiguration('debug').update('saveBeforeStart', 'none', vscode.ConfigurationTarget.Global);
 		disposables.push(vscode.debug.registerDebugAdapterTrackerFactory(SchematronDebug.debugType, {
 			createDebugAdapterTracker: (session) => ({
 				onDidSendMessage: (message: any) => {
@@ -99,12 +117,15 @@ suite('Schematron: debugging', () => {
 	teardown(async () => {
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		await SchematronContext.setContextFile(file('orders.sch'), undefined);
-		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		// this suite's editors only: closing another suite's unsaved one, e.g. an untitled stylesheet, would ask to save it
+		const ours = vscode.window.tabGroups.all.flatMap((group) => group.tabs).filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath.startsWith(folder));
+		await vscode.window.tabGroups.close(ours);
 		fs.rmSync(folder, { recursive: true, force: true });
 	});
 	suiteTeardown(async () => {
 		disposables.forEach((d) => d.dispose());
 		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', undefined, vscode.ConfigurationTarget.Global);
+		await vscode.workspace.getConfiguration('debug').update('saveBeforeStart', saveBeforeStart, vscode.ConfigurationTarget.Global);
 	});
 
 	const nextStop = () => new Promise<{ session: vscode.DebugSession; reason: string; body?: any }>((resolve) => {
@@ -212,6 +233,36 @@ suite('Schematron: debugging', () => {
 		await finished;
 	});
 
+	test('in an abstract pattern\'s rule: a path starting with a parameter is checked with its value', async () => {
+		fs.writeFileSync(file('orders.sch'), `<schema ${iso} queryBinding="xslt3">
+  <pattern abstract="true" id="required">
+    <param name="element"/>
+    <param name="attribute"/>
+    <rule context="$element">
+      <assert test="normalize-space($attribute)" id="required-attribute">needs it</assert>
+    </rule>
+  </pattern>
+  <pattern id="order-refs" is-a="required"><param name="element" value="order"/><param name="attribute" value="@ref"/></pattern>
+</schema>`);
+		const text = fs.readFileSync(file('orders.sch'), 'utf8');
+		const schema = vscode.Uri.file(file('orders.sch'));
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(schema));
+		const assertLine = text.split('\n').findIndex((l) => l.includes('id="required-attribute"'));
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(assertLine, 0)))]);
+		const finished = ended();
+		assert.isTrue(await SchematronDebug.debug(schema));
+		const stop = await nextStop();
+		for (let i = 0; i < 100 && XsltEmptySteps.lastFaded.length === 0; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		const faded = XsltEmptySteps.lastFaded;
+		assert.deepStrictEqual(faded.map((f) => `${f.line}: ${f.text}`), [`${assertLine}: $attribute`]);
+		assert.include(faded[0].hover, 'the parameter\'s value, `@ref` - is empty here');
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		await stop.session.customRequest('continue', { threadId: 1 });
+		await finished;
+	});
+
 	test('pausing at each failed assertion, or successful report - with its message - for the roles in its condition, if any', async () => {
 		fs.writeFileSync(file('orders.sch'), `<schema ${iso} queryBinding="xslt3">
   <ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/>
@@ -307,6 +358,7 @@ suite('Schematron: debugging', () => {
 		assert.isTrue(await SchematronDebug.debug(schema));
 		const names: string[] = [];
 		let parameters: string[] = [];
+		const evaluated: string[] = [];
 		for (let i = 0; i < 2; i++) {
 			const stop = await nextStop();
 			const frame = (await stop.session.customRequest('stackTrace', { threadId: 1 })).stackFrames[0];
@@ -314,9 +366,12 @@ suite('Schematron: debugging', () => {
 			const { scopes } = await stop.session.customRequest('scopes', { frameId: frame.id });
 			const scope = scopes.find((s: any) => s.name === 'Parameters');
 			parameters = (await stop.session.customRequest('variables', { variablesReference: scope.variablesReference })).variables.map((v: any) => `${v.name}=${v.value}`);
+			// Watch, the Debug Console and a hover: the parameters replaced by their values, as in the copy
+			evaluated.push((await stop.session.customRequest('evaluate', { expression: 'name($attribute) || \' \' || name(self::$element)', frameId: frame.id, context: 'watch' })).result);
 			await stop.session.customRequest('continue', { threadId: 1 });
 		}
 		await finished;
+		assert.deepEqual(evaluated, ['"date order"', '"date order"']);
 		// the rule of the abstract pattern, for each order - order-dates' copy only
 		const ruleLine = text.split('\n').findIndex((l) => l.includes('<rule context="$element">')) + 1;
 		assert.deepEqual(names, [`rule order - order-dates (is-a required) @${ruleLine}`, `rule order - order-dates (is-a required) @${ruleLine}`]);
