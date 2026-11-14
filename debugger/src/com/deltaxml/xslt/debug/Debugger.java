@@ -70,6 +70,9 @@ final class Debugger {
     private Map<String, Map<Integer, Integer>> coverage;
     // the template rules each input node was processed by - sent when the run ends (see NodeRules)
     private final NodeRules nodeRules = new NodeRules(this::pathOf);
+    // whether the input nodes are mapped - to the template rules that processed them, and from the output (the launch
+    // request's 'mapInputs', on unless false)
+    private boolean mapInputs = true;
     // for the output map's input: the element instructions entered whose start tag hasn't been written yet - Saxon writes
     // it with the element's first content, by when another template may be running - with the context item each was
     // entered with, by the instruction's location, oldest first. Start tags are written in the order their instructions
@@ -218,6 +221,7 @@ final class Debugger {
         this.breakpoints = before.breakpoints;
         saxonArgs.addAll(before.saxonArgs);
         messageEscaping = before.messageEscaping;
+        mapInputs = before.mapInputs;
         functionBreakpoints = before.functionBreakpoints;
         nextFunctionBreakpointId = before.nextFunctionBreakpointId;
         breakOnErrors = before.breakOnErrors;
@@ -265,7 +269,7 @@ final class Debugger {
             // the frame's context item - the frames are only read on the transform thread - or for a start tag, its
             // instruction's when it was entered
             public Object currentContext(Location startTag) {
-                if (Thread.currentThread() != transformThread) {
+                if (!mapInputs || Thread.currentThread() != transformThread) {
                     return null;
                 }
                 Deque<Object[]> entries = startTag == null ? null : unwrittenElements.get(locationKey(startTag));
@@ -308,6 +312,7 @@ final class Debugger {
         stopOnEntry = Json.bool(args, "stopOnEntry");
         noDebug = Json.bool(args, "noDebug");
         coverage = Json.bool(args, "coverage") ? new HashMap<String, Map<Integer, Integer>>() : null;
+        mapInputs = !Boolean.FALSE.equals(args.get("mapInputs"));
         // an XSpec test run: the test runner's globals aren't shown with those of the stylesheet tested
         values.hideXSpecGlobals = Json.string(args, "xspecFile") != null;
         // as for an 'xslt' task: "on" keeps Saxon's own xsl:message output, which escapes characters XML doesn't allow
@@ -800,7 +805,7 @@ final class Debugger {
         }
         // entered again: a result of stepping through its expression that wasn't used is out of date
         SteppedResult.discard(traceable);
-        if (isElementConstructor(traceable)) {
+        if (mapInputs && isElementConstructor(traceable)) {
             Item item = context.getContextItem();
             // [context item, instruction location key, written]
             Object[] entry = new Object[] { item instanceof net.sf.saxon.om.NodeInfo ? item : null, locationKey(traceable.getLocation()), Boolean.FALSE };
@@ -861,7 +866,7 @@ final class Debugger {
         String element = reportedElement(traceable);
         top.line = lines == null ? reportedLine : lines.displayLine(reportedLine, tagLocation.getColumnNumber(), element);
         top.column = lines == null ? location.getColumnNumber() : lines.displayColumn(reportedLine, tagLocation.getColumnNumber(), element);
-        if (isCall && traceable.getClass().getSimpleName().equals("TemplateRule") && top.owner == traceable) {
+        if (mapInputs && isCall && traceable.getClass().getSimpleName().equals("TemplateRule") && top.owner == traceable) {
             Item item = context.getContextItem();
             if (item instanceof net.sf.saxon.om.NodeInfo) {
                 nodeRules.template((net.sf.saxon.om.NodeInfo) item, path, top.line, top.column, top.name);
@@ -1324,7 +1329,7 @@ final class Debugger {
             unwindTo(tryDepths.pop().getValue());
             return;
         }
-        if (isElementConstructor(traceable) && !enteredElements.isEmpty()) {
+        if (mapInputs && isElementConstructor(traceable) && !enteredElements.isEmpty()) {
             Object[] entry = enteredElements.pop();
             if (entry[2] == Boolean.FALSE) {
                 Deque<Object[]> entries = unwrittenElements.get((String) entry[1]);
@@ -1685,7 +1690,7 @@ final class Debugger {
             throw new Abandoned();
         }
         boolean dropping = rules.getName().equals("deep-skip");
-        if (Thread.currentThread() == transformThread && !runningTask && item instanceof net.sf.saxon.om.NodeInfo) {
+        if (mapInputs && Thread.currentThread() == transformThread && !runningTask && item instanceof net.sf.saxon.om.NodeInfo) {
             nodeRules.builtIn((net.sf.saxon.om.NodeInfo) item, rules.getName(), mode.isUnnamedMode() ? "#default" : mode.getModeName().getDisplayName());
         }
         if (Thread.currentThread() != transformThread || runningTask || !(rules.getName().startsWith("text-only") || dropping) || mode.isEmpty() ||

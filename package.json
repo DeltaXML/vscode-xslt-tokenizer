@@ -1111,6 +1111,12 @@
 					"scope": "resource",
 					"markdownDescription": "Prefixes of functions that the stylesheet's processing system provides, e.g. Java extension functions, such as `ext` for `ext:lookup()`. Calls of functions with these prefixes aren't checked. The quick fix for a function that isn't found adds its prefix here, in the workspace's settings."
 				},
+				"XSLT.debug.mapInputNodes": {
+					"type": "boolean",
+					"default": true,
+					"scope": "window",
+					"description": "When debugging with SaxonJ (or running without debugging), record which input nodes each template rule processed - for the hover and Go to Definition on an input file's elements, and the counts above template rules - and which input node each part of the output was written for ('Go to XSLT Input'). Turn it off to save time and memory with very large inputs or outputs."
+				},
 				"XSLT.debug.openOutput": {
 					"type": "boolean",
 					"default": false,

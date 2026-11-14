@@ -2584,24 +2584,33 @@ async function testOutputMapInput(saxonJar) {
     assert.strictEqual(nested.input('<para>'), 'output-input-nested.xml:4:10 element:p');
     assert.strictEqual(nested.input('<m/>'), 'output-input-nested.xml:3:22 element:section');
     assert.strictEqual(nested.input('<m/>', 2), 'output-input-nested.xml:2:20 element:section');
+
+    // with mapInputs false: none
+    const off = await outputInputs(saxonJar, 'node-rules.xsl', 'node-rules.xml', { mapInputs: false });
+    assert.deepStrictEqual(off.inputRuns, []);
 }
 
-// a run's output text, and for the nth occurrence of a text in it, the input it was written for
-async function outputInputs(saxonJar, xsl, xml) {
+// a run's output text, and for the nth occurrence of a text in it, the input it was written for: from the input runs,
+// [offset, input id, ...], and the inputs, [file, line, column, node, ...] - indexes into the files and nodes
+async function outputInputs(saxonJar, xsl, xml, launch = {}) {
     const dap = new DapClient(saxonJar);
     const terminated = dap.event('terminated');
-    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, xsl)}`, `-s:${path.join(fixtures, xml)}`] }, {});
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, xsl)}`, `-s:${path.join(fixtures, xml)}`], ...launch }, {});
     await terminated;
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
     let text = '';
-    const runs = [];
-    const locations = new Map();
+    const inputRuns = [];
+    const inputs = [];
+    let files = [];
+    let nodes = [];
     for (const e of dap.events.filter((e) => e.event === 'xsltOutputs')) {
         for (const o of e.body.outputs) {
             text = text.substring(0, o.offset) + o.text;
-            (o.locations ?? []).forEach((l) => locations.set(l.id, l));
-            runs.push(...(o.runs ?? []));
+            inputRuns.push(...(o.inputRuns ?? []));
+            inputs.push(...(o.inputs ?? []));
+            files = o.inputFiles ?? files;
+            nodes = o.inputNodes ?? nodes;
         }
     }
     const input = (found, nth = 1) => {
@@ -2610,14 +2619,17 @@ async function outputInputs(saxonJar, xsl, xml) {
             offset = text.indexOf(found, offset + 1);
         }
         assert.ok(offset > -1, `${found} in ${text}`);
-        let location;
-        for (let i = 0; i < runs.length && runs[i] <= offset; i += 2) {
-            location = locations.get(runs[i + 1]);
+        let id = -1;
+        for (let i = 0; i < inputRuns.length && inputRuns[i] <= offset; i += 2) {
+            id = inputRuns[i + 1];
         }
-        assert.ok(location, `a location for ${found}`);
-        return location.input ? `${path.basename(location.input.path)}:${location.input.line}:${location.input.column} ${location.input.node}` : 'none';
+        if (id < 0 || inputs[id * 4] < 0) {
+            return 'none';
+        }
+        const [file, line, column, node] = inputs.slice(id * 4, id * 4 + 4);
+        return `${path.basename(files[file])}:${line}:${column} ${nodes[node]}`;
     };
-    return { text, input };
+    return { text, input, inputRuns };
 }
 
 // with no xsl:output, Saxon decides the output method from the first element (an 'uncommitted' serializer): the copy's

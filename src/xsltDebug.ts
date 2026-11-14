@@ -355,7 +355,8 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 			if (!forActiveEditor) {
 				return undefined;
 			}
-			config = { ...forActiveEditor, ...(config.stopOnEntry !== undefined ? { stopOnEntry: config.stopOnEntry } : {}) };
+			// with what VS Code adds: e.g. noDebug, for Run Without Debugging
+			config = { ...forActiveEditor, ...(config.stopOnEntry !== undefined ? { stopOnEntry: config.stopOnEntry } : {}), ...(config.noDebug ? { noDebug: true } : {}) };
 		}
 		const tasksObject = config.task !== undefined ? await SaxonJsTaskProvider.getTasksObject() : { tasks: [] };
 		const withTask = XsltDebug.withTaskProperties(config, tasksObject.tasks || []);
@@ -495,9 +496,17 @@ export interface XsltOutputLocation {
 	line?: number;
 	column?: number;
 	kind?: 'instruction' | 'source' | 'text';
-	// the input node that was the context item when it was written, if it was one in a file: its element's position (where
-	// its start tag ends), and the node - e.g. 'element:order', 'attribute:id', 'text' (see NodeRules)
-	input?: { path: string; line: number; column: number; node: string };
+}
+
+// the input each part of an XML output was written for - the context item, when it was a node of an input file (from the
+// adapter's OutputCapture): runs of [offset, input id, ...], -1 for none, and the inputs, [file, line, column, node, ...]
+// - the position where its element's start tag ends, the file and node (e.g. 'element:order', 'attribute:id', 'text')
+// as indexes into the tables of them
+interface OutputInputs {
+	runs: number[];
+	inputs: number[];
+	files: string[];
+	nodes: string[];
 }
 
 export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vscode.DefinitionProvider, vscode.InlayHintsProvider {
@@ -505,7 +514,7 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 	private static instance: XsltDebugOutputs | undefined;
 	private readonly changed = new vscode.EventEmitter<vscode.Uri>();
 	public readonly onDidChange = this.changed.event;
-	private readonly outputs = new Map<string, { text: string; method: string; truncated: boolean; uri?: string; runs: number[]; locations: Map<number, XsltOutputLocation> }>();
+	private readonly outputs = new Map<string, { text: string; method: string; truncated: boolean; uri?: string; runs: number[]; locations: Map<number, XsltOutputLocation>; inputs: OutputInputs }>();
 	// the output being written to at the last pause, and whether the output has been opened this session
 	private current: string | undefined;
 	private openedThisSession = false;
@@ -559,9 +568,10 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 	}
 
 	// an 'xsltOutputs' event from the adapter: each output's text from an offset
-	public update(body: { outputs?: { name: string; method: string; offset: number; text: string; truncated?: boolean; uri?: string; runs?: number[]; locations?: XsltOutputLocation[] }[]; current?: string }) {
+	public update(body: { outputs?: { name: string; method: string; offset: number; text: string; truncated?: boolean; uri?: string; runs?: number[]; locations?: XsltOutputLocation[];
+		inputRuns?: number[]; inputs?: number[]; inputFiles?: string[]; inputNodes?: string[] }[]; current?: string }) {
 		for (const update of body.outputs ?? []) {
-			const output = this.outputs.get(update.name) ?? { text: '', method: update.method, truncated: false, runs: [], locations: new Map<number, XsltOutputLocation>() };
+			const output = this.outputs.get(update.name) ?? { text: '', method: update.method, truncated: false, runs: [], locations: new Map<number, XsltOutputLocation>(), inputs: { runs: [], inputs: [], files: [], nodes: [] } };
 			const isReplaced = !(update.offset > 0 && update.offset <= output.text.length);
 			output.text = isReplaced ? update.text : output.text.substring(0, update.offset) + update.text;
 			// the runs within the text that's been replaced no longer apply
@@ -571,6 +581,19 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 			}
 			output.runs.push(...(update.runs ?? []));
 			(update.locations ?? []).forEach((location) => output.locations.set(location.id, location));
+			// the input runs too: those within the replaced text no longer apply - the inputs are only added to
+			const keptInputs = output.inputs.runs.findIndex((offset, i) => i % 2 === 0 && offset >= (isReplaced ? 0 : update.offset));
+			if (keptInputs > -1) {
+				output.inputs.runs.length = keptInputs;
+			}
+			for (const value of update.inputRuns ?? []) {
+				output.inputs.runs.push(value);
+			}
+			for (const value of update.inputs ?? []) {
+				output.inputs.inputs.push(value);
+			}
+			output.inputs.files = update.inputFiles ?? output.inputs.files;
+			output.inputs.nodes = update.inputNodes ?? output.inputs.nodes;
 			output.method = update.method;
 			output.truncated = !!update.truncated;
 			output.uri = update.uri ?? output.uri;
@@ -697,8 +720,7 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 	// whose attribute or text was - in the file as it is now. With the node, e.g. 'element:order'
 	public async inputLocationAt(name: string, offset: number): Promise<{ location: vscode.Location, node: string } | undefined> {
 		const output = this.outputs.get(name);
-		const found = output && offset < output.text.length ? XsltDebugOutputs.locationAt(output.text, output.runs, output.locations, offset) : undefined;
-		const input = found?.location.input;
+		const input = output && offset < output.text.length ? XsltDebugOutputs.inputAt(output.text, output.inputs, offset) : undefined;
 		if (!input) {
 			return undefined;
 		}
@@ -713,6 +735,31 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		} catch {
 			return undefined;
 		}
+	}
+
+	// the input the output at the offset was written for - for the end of a tag ('>' or '/>'), the tag's, as for locationAt
+	public static inputAt(text: string, inputs: OutputInputs, offset: number): { path: string; line: number; column: number; node: string } | undefined {
+		const tagStart = text.lastIndexOf('<', offset);
+		const isTagEnd = text.charAt(offset) === '>' || text.startsWith('/>', offset);
+		const at = isTagEnd && tagStart > text.lastIndexOf('>', offset - 1) ? tagStart : offset;
+		let low = 0;
+		let high = inputs.runs.length / 2 - 1;
+		let found = -1;
+		while (low <= high) {
+			const mid = (low + high) >> 1;
+			if (inputs.runs[mid * 2] <= at) {
+				found = mid;
+				low = mid + 1;
+			} else {
+				high = mid - 1;
+			}
+		}
+		const id = found > -1 ? inputs.runs[found * 2 + 1] : -1;
+		const file = id > -1 ? inputs.inputs[id * 4] : undefined;
+		if (file === undefined || file < 0 || !inputs.files[file]) {
+			return undefined;
+		}
+		return { path: inputs.files[file], line: inputs.inputs[id * 4 + 1], column: inputs.inputs[id * 4 + 2], node: inputs.nodes[inputs.inputs[id * 4 + 3]] ?? '' };
 	}
 
 	// e.g. 'order', '@id', 'text()'
@@ -1072,7 +1119,12 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	// for a source file's breakpoints: the generated stylesheet's breakpoints for them - with those of the other source
 	// files - and a line with no step in it, e.g. in an x:context's content, has none, and isn't verified
 	private mappedRequest(message: vscode.DebugProtocolMessage): vscode.DebugProtocolMessage {
-		const request = message as { type?: string; command?: string; seq: number; arguments?: { source?: { path?: string }, breakpoints?: DebugBreakpoint[], lines?: number[] } };
+		const request = message as { type?: string; command?: string; seq: number; arguments?: { source?: { path?: string }, breakpoints?: DebugBreakpoint[], lines?: number[], mapInputs?: boolean } };
+		if (request.type === 'request' && request.command === 'launch' && request.arguments?.mapInputs === undefined) {
+			// the input nodes mapped, unless the setting is off - or the configuration says otherwise
+			message = { ...request, arguments: { ...request.arguments, mapInputs: vscode.workspace.getConfiguration('XSLT.debug').get<boolean>('mapInputNodes', true) } } as vscode.DebugProtocolMessage;
+			return this.mappedRequest(message);
+		}
 		const map = this.sourceMap;
 		if (map && request.type === 'request' && request.command === 'launch') {
 			// a step in the generated stylesheet stops only at its lines for the source files' steps (with stepSkip, from

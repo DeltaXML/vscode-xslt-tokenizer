@@ -520,6 +520,35 @@ suite('XSLT debugger - debug sessions', function () {
 		}
 	});
 
+	test('Run Without Debugging, with no launch.json: the active stylesheet, run to the end - no pause at its breakpoint or error', async () => {
+		stops = [];
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', saxonJar, vscode.ConfigurationTarget.Global);
+		const context = await DocumentChangeHandler.contextFor(undefined);
+		DocumentChangeHandler.setLastPicked(null, false);
+		const errorXsl = vscode.Uri.file(path.join(fixtures, 'error.xsl'));
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(errorXsl, new vscode.Position(2, 0)))]);
+		try {
+			await vscode.window.showTextDocument(errorXsl);
+			const ended = new Promise<vscode.DebugSession>((resolve) => {
+				const listener = vscode.debug.onDidTerminateDebugSession((session) => {
+					listener.dispose();
+					resolve(session);
+				});
+			});
+			// as VS Code starts it for Ctrl+F5 with no launch.json: an empty configuration
+			assert.isTrue(await vscode.debug.startDebugging(undefined, { type: '', request: '', name: '' }, { noDebug: true }));
+			const session = await ended;
+			assert.strictEqual(path.basename(session.configuration.xsltFile), 'error.xsl');
+			assert.isTrue(session.configuration.noDebug);
+			assert.deepEqual(stops.map((s) => s.reason), []);
+		} finally {
+			vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+			DocumentChangeHandler.setLastPicked(context.uri, context.isNone);
+			await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', undefined, vscode.ConfigurationTarget.Global);
+		}
+	});
+
 	test('a dynamic error: pauses there, and is in the Problems view', async () => {
 		stops = [];
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);

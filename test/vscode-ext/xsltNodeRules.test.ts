@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
-import { XsltDebug } from '../../src/xsltDebug';
+import { XsltDebug, XsltDebugOutputs } from '../../src/xsltDebug';
 import { XsltNodeRules } from '../../src/xsltNodeRules';
 import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 
@@ -96,6 +96,46 @@ suite('XSLT debugger: the template rules each input node was processed by', func
 		assert.includeMembers(titles, ['3: processed 2 nodes in node-rules.xml', '6: processed 2 nodes in node-rules.xml', '16: processed 1 node (2 times) in node-rules-products.xml']);
 		const orders = XsltNodeRules.processedLocations(stylesheet.uri, 2).map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line + 1}`);
 		assert.deepStrictEqual(orders, ['node-rules.xml:3', 'node-rules.xml:8']);
+
+		// and from the output: the input each part was written for - <l> for the first line
+		const outputs = XsltDebugOutputs.get();
+		const name = outputs.names()[0];
+		const lOffset = outputs.text(name)!.indexOf('<l>');
+		const written = await outputs.inputLocationAt(name, lOffset + 1);
+		assert.strictEqual(written?.node, 'element:line');
+		assert.strictEqual(`${path.basename(written!.location.uri.fsPath)}:${written!.location.range.start.line + 1}`, 'node-rules.xml:5');
+	});
+
+	test('with XSLT.debug.mapInputNodes off: not recorded', async function () {
+		const saxonJar = process.env.XSLT_TEST_SAXON_JAR ?? process.env.XSPEC_SAXON_JAR;
+		if (!saxonJar) {
+			this.skip();
+		}
+		const settings = vscode.workspace.getConfiguration('XSLT.debug');
+		await settings.update('mapInputNodes', false, vscode.ConfigurationTarget.Global);
+		try {
+			let received = false;
+			const listener = vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
+				received ||= event.event === 'xsltNodeRules';
+			});
+			const ended = new Promise<void>((resolve) => {
+				const done = vscode.debug.onDidTerminateDebugSession(() => {
+					done.dispose();
+					resolve();
+				});
+			});
+			assert.isTrue(await vscode.debug.startDebugging(undefined, {
+				type: XsltDebug.type, request: 'launch', name: 'node rules off', noDebug: true, saxonJar, xsltFile: file('node-rules.xsl'), xmlSource: file('node-rules.xml')
+			}, { noDebug: true }));
+			await ended;
+			listener.dispose();
+			assert.isFalse(received);
+			const outputs = XsltDebugOutputs.get();
+			const name = outputs.names()[0];
+			assert.isUndefined(await outputs.inputLocationAt(name, outputs.text(name)!.indexOf('<l>') + 1));
+		} finally {
+			await settings.update('mapInputNodes', undefined, vscode.ConfigurationTarget.Global);
+		}
 	});
 
 	test('the input file edited or formatted since: an element found by its position among the elements - not if its name differs', async () => {

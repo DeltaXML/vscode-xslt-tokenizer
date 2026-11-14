@@ -64,14 +64,24 @@ final class OutputCapture {
         // the locations, by id, and whether each was for text (characters) - a location may be both
         private final List<Location> locations = new ArrayList<Location>();
         private final List<Boolean> locationIsText = new ArrayList<Boolean>();
-        // and the context item each was written with, if it was a node: the input it was written for (see Debugger)
-        private final List<Object> locationContexts = new ArrayList<Object>();
-        // by location, then context item (NO_CONTEXT for none)
-        private final Map<Location, Map<Object, Integer>> instructionIds = new java.util.IdentityHashMap<Location, Map<Object, Integer>>();
-        private final Map<Location, Map<Object, Integer>> textIds = new java.util.IdentityHashMap<Location, Map<Object, Integer>>();
+        private final Map<Location, Integer> instructionIds = new java.util.IdentityHashMap<Location, Integer>();
+        private final Map<Location, Integer> textIds = new java.util.IdentityHashMap<Location, Integer>();
         // how many runs and locations have been sent
         int sentRuns;
         int sentLocations;
+        // the input each part was written for - the context item, if it was a node (see Debugger): runs of [offset, input
+        // id], -1 for none, and the context items, by id. Each input is sent as [file, line, column, node], the file and
+        // node as indexes into tables of their names, sent whole when they change
+        private int[] inputRuns = new int[64];
+        private int inputRunLength;
+        private final List<Object> inputs = new ArrayList<Object>();
+        private final Map<Object, Integer> inputIds = new java.util.HashMap<Object, Integer>();
+        int sentInputRuns;
+        int sentInputs;
+        private final List<String> inputFiles = new ArrayList<String>();
+        private final List<String> inputNodes = new ArrayList<String>();
+        private int sentInputFiles;
+        private int sentInputNodes;
         // the location of the event being written, and whether it's text - null: as for the text before
         Location current;
         boolean currentIsText;
@@ -93,13 +103,23 @@ final class OutputCapture {
                 return;
             }
             if (mapped && current != null && length > 0) {
-                int locationId = locationId(current, currentIsText, currentContext);
+                int locationId = locationId(current, currentIsText);
                 if (runLength == 0 || runs[runLength - 1] != locationId) {
                     if (runLength == runs.length) {
                         runs = java.util.Arrays.copyOf(runs, runs.length * 2);
                     }
                     runs[runLength++] = text.length();
                     runs[runLength++] = locationId;
+                }
+                int inputId = currentContext == null ? -1 : inputId(currentContext);
+                if (inputId >= 0 || inputRunLength > 0) {
+                    if (inputRunLength == 0 || inputRuns[inputRunLength - 1] != inputId) {
+                        if (inputRunLength == inputRuns.length) {
+                            inputRuns = java.util.Arrays.copyOf(inputRuns, inputRuns.length * 2);
+                        }
+                        inputRuns[inputRunLength++] = text.length();
+                        inputRuns[inputRunLength++] = inputId;
+                    }
                 }
             }
             text.append(chars, offset, Math.min(length, room));
@@ -122,23 +142,72 @@ final class OutputCapture {
             return truncated;
         }
 
-        private int locationId(Location location, boolean isText, Object context) {
-            Map<Location, Map<Object, Integer>> ids = isText ? textIds : instructionIds;
-            Map<Object, Integer> byContext = ids.get(location);
-            if (byContext == null) {
-                byContext = new java.util.HashMap<Object, Integer>();
-                ids.put(location, byContext);
-            }
-            Object key = context == null ? NO_CONTEXT : context;
-            Integer locationId = byContext.get(key);
+        private int locationId(Location location, boolean isText) {
+            Map<Location, Integer> ids = isText ? textIds : instructionIds;
+            Integer locationId = ids.get(location);
             if (locationId == null) {
                 locationId = locations.size();
                 locations.add(location);
                 locationIsText.add(isText);
-                locationContexts.add(context);
-                byContext.put(key, locationId);
+                ids.put(location, locationId);
             }
             return locationId;
+        }
+
+        private int inputId(Object context) {
+            Integer inputId = inputIds.get(context);
+            if (inputId == null) {
+                inputId = inputs.size();
+                inputs.add(context);
+                inputIds.put(context, inputId);
+            }
+            return inputId;
+        }
+
+        // the input runs not yet sent, as [offset, input id, ...]
+        synchronized List<Object> unsentInputRuns() {
+            List<Object> result = new ArrayList<Object>();
+            for (int i = sentInputRuns; i < inputRunLength; i++) {
+                result.add(inputRuns[i]);
+            }
+            sentInputRuns = inputRunLength;
+            return result;
+        }
+
+        // the inputs not yet sent, as [file, line, column, node, ...] - -1 for one that isn't in an input file - with the
+        // tables of files and nodes, if they've changed
+        synchronized void addUnsentInputs(Json.Obj changes, LocationResolver resolver) {
+            List<Object> flat = new ArrayList<Object>();
+            for (int i = sentInputs; i < inputs.size(); i++) {
+                Map<String, Object> input = resolver == null ? null : resolver.inputOf(inputs.get(i));
+                if (input == null) {
+                    flat.add(-1);
+                    flat.add(0);
+                    flat.add(0);
+                    flat.add(0);
+                    continue;
+                }
+                flat.add(index(inputFiles, (String) input.get("path")));
+                flat.add(input.get("line"));
+                flat.add(input.get("column"));
+                flat.add(index(inputNodes, (String) input.get("node")));
+            }
+            sentInputs = inputs.size();
+            changes.with("inputs", flat).with("inputRuns", unsentInputRuns());
+            if (inputFiles.size() > sentInputFiles || inputNodes.size() > sentInputNodes) {
+                changes.with("inputFiles", new ArrayList<Object>(inputFiles)).with("inputNodes", new ArrayList<Object>(inputNodes));
+                sentInputFiles = inputFiles.size();
+                sentInputNodes = inputNodes.size();
+            }
+        }
+
+        private static int index(List<String> names, String name) {
+            int index = names.indexOf(name);
+            if (index < 0) {
+                index = names.size();
+                names.add(name);
+            }
+            return index;
         }
 
         // the runs not yet sent, as [offset, location id, ...]
@@ -159,11 +228,6 @@ final class OutputCapture {
                 Json.Obj location = Json.obj().with("id", i);
                 if (resolved != null) {
                     location.putAll(resolved);
-                    // and the input node it was written for - not for a node copied from the input, which is its location
-                    Object context = locationContexts.get(i);
-                    if (context != null && !"source".equals(resolved.get("kind"))) {
-                        location.with("input", resolver.inputOf(context));
-                    }
                 }
                 result.add(location);
             }
@@ -191,7 +255,6 @@ final class OutputCapture {
         Map<String, Object> inputOf(Object context);
     }
 
-    private static final Object NO_CONTEXT = new Object();
 
     private LocationResolver resolver;
     // the XML result whose copy's serializer is being created
@@ -331,6 +394,7 @@ final class OutputCapture {
                         .with("truncated", output.isTruncated());
                 if (output.mapped) {
                     changes.with("locations", output.unsentLocations(resolver)).with("runs", output.unsentRuns());
+                    output.addUnsentInputs(changes, resolver);
                 }
                 changed.add(changes);
                 output.sent = length;

@@ -265,8 +265,10 @@ suite('XSLT debugger: from the output to its source', () => {
 		const inputText = '<orders>\n  <order id="A1"\n    date="x">\n  </order>\n</orders>';
 		fs.writeFileSync(inputFile, inputText);
 		const name = 'inputs.xml';
-		const withInput = locations(file).map((l) => l.id === 1 ? { ...l, input: { path: inputFile, line: 3, column: 14, node: 'element:order' } } : l);
-		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'xml', offset: 0, text: output, runs, locations: withInput }] });
+		// as the adapter sends them: <made> and its content written for the order (input 0) - the rest for none
+		const inputRuns = [0, -1, output.indexOf('<made'), 0, output.indexOf('</made>') + '</made>'.length, -1];
+		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'xml', offset: 0, text: output, runs, locations: locations(file),
+			inputRuns, inputs: [0, 3, 14, 0], inputFiles: [inputFile], inputNodes: ['element:order'] }] });
 		const found = await XsltDebugOutputs.get().inputLocationAt(name, output.indexOf('<made') + 1);
 		assert.strictEqual(found?.node, 'element:order');
 		assert.strictEqual(found?.location.uri.fsPath, vscode.Uri.file(inputFile).fsPath);
