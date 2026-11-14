@@ -366,6 +366,46 @@ export class SchematronValidation {
 		return target;
 	}
 
+	// the schema's SVRL reports for documents - by their files, or as their text - with one run of Saxon, the schema compiled
+	// once, as for validation: with its files sch:include brings in included, each rule's id, and a report always reported
+	// for each rule that isn't abstract, with the id vscode-fired: and the rule's id (see xslt-resources/schematron/xspec-data.xsl).
+	// With its default phase, as XSpec tests it. Undefined if it can't be run - with a reason
+	public static async schemaResults(schema: string, documents: ({ file: string } | { text: string })[]): Promise<{ reports?: string[], problem?: string }> {
+		const settingsUri = vscode.Uri.file(schema);
+		const saxonJar = XSpecRunner.saxonJar(settingsUri);
+		if (!saxonJar || !fs.existsSync(saxonJar)) {
+			return { problem: saxonJar ? `the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting` : 'there\'s no Saxon jar - set the "XSLT.tasks.saxonJar" setting' };
+		}
+		const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'schematron-tests-'));
+		try {
+			const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+			const list = path.join(folder, 'documents.xml');
+			fs.writeFileSync(list, '<documents>' + documents.map((d) => 'file' in d ? `<document href="${escape(vscode.Uri.file(d.file).toString())}"/>` :
+				`<fragment>${d.text.replace(/^\s*<\?xml[^?]*\?>/, '')}</fragment>`).join('\n') + '</documents>');
+			const output = path.join(folder, 'results.xml');
+			const schemaText = fs.readFileSync(schema, 'utf8');
+			const extensions = XSpecRunner.schematronSyntaxExtensions(settingsUri, schema, schemaText);
+			const catalog = CatalogSetting.taskOption({});
+			const transpiler = path.join(XSpecRunner.home(settingsUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
+			const args = ['-cp', saxonJar, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
+				'-s:' + list, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'xspec-data.xsl'), '-o:' + output,
+				'?schema=' + XSpecRunner.xpathString(vscode.Uri.file(schema).toString()), '?transpiler=' + XSpecRunner.xpathString(vscode.Uri.file(transpiler).toString()),
+				...(SchExpandText.allowed() ? ['?allow-expand-text=true()'] : [])];
+			const outcome = await SchematronValidation.java(args, path.dirname(schema));
+			if (!outcome.ok || !fs.existsSync(output)) {
+				const channel = SchematronValidation.output();
+				channel.appendLine(`Running ${schema} for XSpec tests:`);
+				channel.append(outcome.output);
+				return { problem: 'the schema couldn\'t be run - see the Schematron output' };
+			}
+			const results = fs.readFileSync(output, 'utf8');
+			const root = parseXml(results);
+			return { reports: (root?.children ?? []).map((result) => results.substring(result.contentStart, result.contentEnd)) };
+		} finally {
+			fs.rmSync(folder, { recursive: true, force: true });
+		}
+	}
+
 	// why it can't be validated, if it can't
 	private static problem(xmlUri: vscode.Uri, schema: string) {
 		const saxonJar = XSpecRunner.saxonJar(xmlUri);

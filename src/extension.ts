@@ -72,6 +72,7 @@ import { ImportTreeProvider } from './importTreeProvider';
 import { SchIncludes } from './schIncludes';
 import { SchematronFunctions } from './schematronFunctions';
 import { SchematronContext } from './schematronContext';
+import { SchematronTests } from './schematronTests';
 import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
@@ -1789,6 +1790,10 @@ export function activate(context: vscode.ExtensionContext) {
 	// Schematron: a schema's XML context file - in the status bar, for auto-completion, and validated by Quick Run with a
 	// Schematron file in the editor (see SchematronContext)
 	SchematronContext.activate(context);
+	// Schematron: XSpec tests generated from the XML context file, for a rule, an assertion or each rule (see SchematronTests)
+	context.subscriptions.push(vscode.commands.registerCommand(SchematronTests.command, (uri: vscode.Uri, offset?: number) => SchematronTests.create(uri, offset)),
+		vscode.languages.registerCodeActionsProvider('sch', { provideCodeActions: (document, range) => SchematronTests.codeActions(document, range) },
+			{ providedCodeActionKinds: [vscode.CodeActionKind.Refactor] }));
 	DocumentChangeHandler.schematronStatus = (item, document) => SchematronContext.showIn(item, document);
 	SchematronContext.onChange = () => DocumentChangeHandler.refreshStatusBarItem();
 	DocumentChangeHandler.refreshStatusBarItem();
