@@ -38,6 +38,28 @@ export class SchematronSourceMap implements DebugSourceMap {
 	private readonly inactive: { path: string, first: number, last: number, id: string }[] = [];
 	// the phase's id - the one the schema's defaultPhase names, for '#DEFAULT'
 	private phaseId: string | undefined;
+	// where each assertion fails, and each report succeeds - its xsl:sequence of the SVRL element - with the id
+	private readonly failedAsserts = new Map<number, string>();
+	private readonly successfulReports = new Map<number, string>();
+	// what's said when paused at one: its message, and its severity - else role - as the validation's problem has it
+	private static readonly outcomeMessage = (variable: string) => `normalize-space(string-join($${variable}/*[local-name() = 'text']))`;
+	private static readonly outcomeRole = (variable: string) => `string(($${variable}/@severity, $${variable}/@role)[1])`;
+	public readonly outcomes = [
+		{
+			filter: 'schematronFailedAssert', label: 'Failed Assertions', description: 'Pause at each Schematron assertion that fails - for those with the roles or severities in the condition (e.g. error fatal), if any',
+			map: this.failedAsserts, variable: 'failed-assert'
+		},
+		{
+			filter: 'schematronSuccessfulReport', label: 'Successful Reports', description: 'Pause at each Schematron report that succeeds - for those with the roles or severities in the condition (e.g. warning), if any',
+			map: this.successfulReports, variable: 'successful-report'
+		}
+	].map((o) => ({
+		filter: o.filter, label: o.label, description: o.description, message: SchematronSourceMap.outcomeMessage(o.variable), role: SchematronSourceMap.outcomeRole(o.variable),
+		get lines() {
+			return [...o.map.keys()];
+		},
+		id: (line: number) => o.map.get(line)
+	}));
 
 	// phase: the phase the schema is compiled with - its id, '#ALL' or '#DEFAULT'
 	constructor(public readonly schemaPath: string, public readonly generatedPath: string, generatedText: string, private readonly phase = '#DEFAULT') {
@@ -186,6 +208,12 @@ export class SchematronSourceMap implements DebugSourceMap {
 				return;
 			}
 			add(assertion.file, assertion.element, test);
+			// where it's reported - having failed, or succeeded for a report - with its SVRL element, as a variable
+			const variable = reported.name === 'svrl:failed-assert' ? 'failed-assert' : 'successful-report';
+			const output = test.children.find((c) => isXslt(c) && local(c) === 'sequence' && c.attributes.get('select')?.trim() === '$' + variable);
+			if (output) {
+				(variable === 'failed-assert' ? this.failedAsserts : this.successfulReports).set(generatedLine(output.start), reported.attributes.get('id')!);
+			}
 			const message = reported.children.find((c) => c.name === 'svrl:text');
 			const generatedValues = message ? descendants(message).filter((v) => isXslt(v) && local(v) === 'value-of') : [];
 			const values = descendants(assertion.element).filter((v) => assertion.local(v) === 'value-of');

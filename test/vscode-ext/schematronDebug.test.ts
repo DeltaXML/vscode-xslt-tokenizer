@@ -63,7 +63,7 @@ suite('Schematron: debugging', () => {
 	const saxonJar = process.env.XSLT_TEST_SAXON_JAR ?? process.env.XSPEC_SAXON_JAR;
 	let folder = '';
 	const file = (name: string) => path.join(folder, name);
-	let stops: { session: vscode.DebugSession; reason: string }[] = [];
+	let stops: { session: vscode.DebugSession; reason: string; body?: any }[] = [];
 	let onStop: (() => void) | undefined;
 	const disposables: vscode.Disposable[] = [];
 	// the responses to setBreakpoints for the schema, as VS Code gets them
@@ -79,7 +79,7 @@ suite('Schematron: debugging', () => {
 			createDebugAdapterTracker: (session) => ({
 				onDidSendMessage: (message: any) => {
 					if (message.type === 'event' && message.event === 'stopped') {
-						stops.push({ session, reason: message.body.reason });
+						stops.push({ session, reason: message.body.reason, body: message.body });
 						onStop?.();
 					} else if (message.type === 'response' && message.command === 'setBreakpoints') {
 						breakpointResponses.push({ session, body: message.body });
@@ -107,7 +107,7 @@ suite('Schematron: debugging', () => {
 		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', undefined, vscode.ConfigurationTarget.Global);
 	});
 
-	const nextStop = () => new Promise<{ session: vscode.DebugSession; reason: string }>((resolve) => {
+	const nextStop = () => new Promise<{ session: vscode.DebugSession; reason: string; body?: any }>((resolve) => {
 		const check = () => {
 			if (stops.length > 0) {
 				onStop = undefined;
@@ -208,6 +208,48 @@ suite('Schematron: debugging', () => {
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		await stop.session.customRequest('continue', { threadId: 1 });
 		await finished;
+	});
+
+	test('pausing at each failed assertion, or successful report - with its message - for the roles in its condition, if any', async () => {
+		fs.writeFileSync(file('orders.sch'), `<schema ${iso} queryBinding="xslt3">
+  <ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/>
+  <pattern id="orders">
+    <rule context="order">
+      <let name="id" value="@id"/>
+      <report test="@id = 'A1'" role="info" id="first">Order <value-of select="$id"/> is the first</report>
+      <assert test="@date castable as xs:date" role="warning" id="valid-date">Order <value-of select="$id"/> has an invalid date</assert>
+      <assert test="line">Order <value-of select="$id"/> has no lines</assert>
+    </rule>
+  </pattern>
+</schema>`);
+		const text = fs.readFileSync(file('orders.sch'), 'utf8');
+		const line = (t: string) => text.split('\n').findIndex((l) => l.includes(t)) + 1;
+		const schema = vscode.Uri.file(file('orders.sch'));
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(line('<rule') - 1, 0)))]);
+		const finished = ended();
+		assert.isTrue(await SchematronDebug.debug(schema));
+		let stop = await nextStop();
+		// failed assertions: errors only - one with no role or severity is an error; successful reports: all
+		await stop.session.customRequest('setExceptionBreakpoints', { filters: ['errors'], filterOptions: [{ filterId: 'schematronFailedAssert', condition: 'error' }, { filterId: 'schematronSuccessfulReport' }] });
+		const outcomes: string[] = [];
+		for (let i = 0; i < 10; i++) {
+			await stop.session.customRequest('continue', { threadId: 1 });
+			const next = await Promise.race([nextStop(), finished.then(() => undefined)]);
+			if (!next) {
+				break;
+			}
+			stop = next;
+			if (stop.reason === 'breakpoint') {
+				continue;
+			}
+			const frame = (await stop.session.customRequest('stackTrace', { threadId: 1 })).stackFrames[0];
+			const info = await stop.session.customRequest('exceptionInfo', { threadId: 1 });
+			outcomes.push(`${stop.reason} ${stop.body.description} @${frame.line}: ${info.exceptionId} - ${info.description} (${path.basename(frame.source.path)})`);
+		}
+		await finished;
+		assert.deepEqual(outcomes, [
+			`exception Successful report @${line('id="first"')}: Successful report: first - Order A1 is the first (orders.sch)`,
+			`exception Failed assertion @${line('test="line"')}: Failed assertion - Order B2 has no lines (orders.sch)`]);
 	});
 
 	test('the phase: a breakpoint in a pattern that isn\'t active in it isn\'t verified, and says why', async () => {

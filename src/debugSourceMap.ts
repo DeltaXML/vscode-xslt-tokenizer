@@ -34,6 +34,10 @@ export interface DebugSourceMap {
 	// whether a variable shown when paused in a source file - in its Locals or Globals - is the generated stylesheet's own,
 	// not the source's, so hidden
 	isHiddenVariable?(name: string): boolean;
+	// pausing on a kind of outcome, e.g. a Schematron schema's failed assertions: the options (as exception breakpoint
+	// filters), and for each, the generated stylesheet's lines where it happens - with what the paused frame evaluates to
+	// say what happened (its message), and its role
+	outcomes?: { filter: string, label: string, description: string, lines: number[], message: string, role: string, id: (line: number) => string | undefined }[];
 }
 
 // a function for the 1-based line of an offset in the text

@@ -920,6 +920,13 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	private readonly scopesRequests = new Map<number, number>();
 	private readonly variablesRequests = new Map<number, number>();
 	private readonly filteredReferences = new Set<number>();
+	// pausing on outcomes, e.g. a Schematron schema's failed assertions (see DebugSourceMap.outcomes): the options turned
+	// on, with the roles in each one's condition (none: all) - and, paused at one, what the exception widget says
+	private readonly outcomeFilters = new Map<string, string[]>();
+	private outcomePause: { exceptionId: string, description: string } | undefined;
+	// requests of the proxy's own, by seq: their responses aren't VS Code's
+	private ownSeq = 1000000000;
+	private readonly ownResponses = new Map<number, (message: any) => void>();
 
 	constructor(private session: vscode.DebugSession, command: string, args: string[], cwd: string | undefined) {
 		const quote = (arg: string) => /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
@@ -961,6 +968,11 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			// a scope of the proxy's own: its values, as variables
 			const variables = this.ownScopes.get(own.arguments.variablesReference)!.map((v) => ({ name: v.name, value: v.value, variablesReference: 0 }));
 			this.messages.fire({ seq: 0, type: 'response', request_seq: own.seq, success: true, command: 'variables', body: { variables } } as vscode.DebugProtocolMessage);
+			return;
+		}
+		if (own.type === 'request' && own.command === 'exceptionInfo' && this.outcomePause) {
+			// paused at an outcome, e.g. a failed assertion: it, and its message
+			this.messages.fire({ seq: 0, type: 'response', request_seq: own.seq, success: true, command: 'exceptionInfo', body: { ...this.outcomePause, breakMode: 'always' } } as vscode.DebugProtocolMessage);
 			return;
 		}
 		message = this.mappedRequest(message);
@@ -1006,16 +1018,30 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 				this.variablesRequests.set(request.seq, args.variablesReference);
 			}
 		}
+		if (map?.outcomes && request.type === 'request' && request.command === 'setExceptionBreakpoints') {
+			// the outcomes' options are the proxy's: breakpoints at their lines, if any are on
+			const args = (request as { arguments?: { filters?: string[], filterOptions?: { filterId: string, condition?: string }[] } }).arguments ?? {};
+			const ids = new Set(map.outcomes.map((o) => o.filter));
+			const before = JSON.stringify([...this.outcomeFilters]);
+			this.outcomeFilters.clear();
+			(args.filters ?? []).filter((f) => ids.has(f)).forEach((f) => this.outcomeFilters.set(f, []));
+			(args.filterOptions ?? []).filter((o) => ids.has(o.filterId)).forEach((o) =>
+				this.outcomeFilters.set(o.filterId, (o.condition ?? '').toLowerCase().split(/[\s,]+/).filter((role) => role)));
+			if (JSON.stringify([...this.outcomeFilters]) !== before) {
+				this.ownRequest('setBreakpoints', this.generatedBreakpointsArguments(map, this.generatedBreakpoints(map)), () => undefined);
+			}
+			// the adapter's own options, as filters: it doesn't take conditions (filterOptions, which VS Code sends as the
+			// proxy says it supports them)
+			const filters = [...new Set([...(args.filters ?? []), ...(args.filterOptions ?? []).map((o) => o.filterId)])].filter((f) => !ids.has(f));
+			return { ...request, arguments: { filters } } as vscode.DebugProtocolMessage;
+		}
 		const sourcePath = request.arguments?.source?.path;
 		if (!map || request.type !== 'request' || request.command !== 'setBreakpoints' || !sourcePath || !map.isSource(sourcePath)) {
 			return message;
 		}
 		const key = [...this.sourceBreakpoints.keys()].find((file) => XSpecSourceMap.samePath(file, sourcePath)) ?? sourcePath;
 		this.sourceBreakpoints.set(key, request.arguments?.breakpoints ?? []);
-		// the generated stylesheet's breakpoints, for each source file's - one source line may have more than one
-		const generated: { file: string, index: number, breakpoint: DebugBreakpoint }[] = [];
-		this.sourceBreakpoints.forEach((breakpoints, file) => breakpoints.forEach((breakpoint, index) =>
-			(map.generatedLines(file, breakpoint.line) ?? []).forEach((line) => generated.push({ file, index, breakpoint: { ...breakpoint, line } }))));
+		const generated = this.generatedBreakpoints(map);
 		const requested = this.sourceBreakpoints.get(key)!;
 		this.mappedResponses.set(request.seq, (breakpoints) => requested.map((breakpoint, index) => {
 			const responses = generated.map((g, i) => ({ g, response: breakpoints[i] })).filter(({ g }) => g.file === key && g.index === index).map(({ response }) => response);
@@ -1025,8 +1051,66 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			const verified = responses.find((response) => response?.verified);
 			return { ...(verified ?? responses[0] ?? {}), verified: !!verified, line: breakpoint.line, source: { path: sourcePath } };
 		}));
-		const breakpoints = generated.map((g) => g.breakpoint);
-		return { ...request, arguments: { ...request.arguments, source: { path: map.generatedPath }, breakpoints, lines: breakpoints.map((breakpoint) => breakpoint.line) } } as vscode.DebugProtocolMessage;
+		return { ...request, arguments: { ...request.arguments, ...this.generatedBreakpointsArguments(map, generated) } } as vscode.DebugProtocolMessage;
+	}
+
+	// the generated stylesheet's breakpoints, for each source file's - one source line may have more than one
+	private generatedBreakpoints(map: DebugSourceMap) {
+		const generated: { file: string, index: number, breakpoint: DebugBreakpoint }[] = [];
+		this.sourceBreakpoints.forEach((breakpoints, file) => breakpoints.forEach((breakpoint, index) =>
+			(map.generatedLines(file, breakpoint.line) ?? []).forEach((line) => generated.push({ file, index, breakpoint: { ...breakpoint, line } }))));
+		return generated;
+	}
+
+	// a setBreakpoints request's arguments for the generated stylesheet: those breakpoints, then those at the lines of
+	// the outcomes paused on, e.g. failed assertions - after them, so the responses for the source files' come first
+	private generatedBreakpointsArguments(map: DebugSourceMap, generated: { breakpoint: DebugBreakpoint }[]) {
+		const outcomeLines = (map.outcomes ?? []).filter((o) => this.outcomeFilters.has(o.filter)).flatMap((o) => o.lines);
+		const breakpoints = [...generated.map((g) => g.breakpoint), ...outcomeLines.map((line) => ({ line }))];
+		return { source: { path: map.generatedPath }, breakpoints, lines: breakpoints.map((breakpoint) => breakpoint.line) };
+	}
+
+	// a request of the proxy's own to the adapter, with what to do with its response
+	private ownRequest(command: string, args: object, onResponse: (message: any) => void) {
+		if (this.disconnected || this.exited) {
+			return;
+		}
+		const seq = this.ownSeq++;
+		this.ownResponses.set(seq, onResponse);
+		const json = JSON.stringify({ seq, type: 'request', command, arguments: args });
+		this.process.stdin?.write(`Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`, 'utf8');
+	}
+
+	// paused at a breakpoint, with outcomes paused on: if it's at one - not a breakpoint of VS Code's - a pause for it,
+	// e.g. 'Failed assertion', with its message - or, if its role isn't one of those asked for, carrying on
+	private pausedAtOutcome(stopped: any) {
+		const map = this.sourceMap!;
+		const threadId = stopped.body?.threadId;
+		this.ownRequest('stackTrace', { threadId, startFrame: 0, levels: 1 }, (response) => {
+			const frame = response.body?.stackFrames?.[0];
+			const outcome = frame?.source?.path && XSpecSourceMap.samePath(frame.source.path, map.generatedPath) ?
+				(map.outcomes ?? []).find((o) => this.outcomeFilters.has(o.filter) && o.id(frame.line) !== undefined) : undefined;
+			if (!outcome) {
+				this.messages.fire(stopped);
+				return;
+			}
+			this.ownRequest('evaluate', { expression: `${outcome.role} || ' ' || ${outcome.message}`, frameId: frame.id, context: 'watch' }, (evaluated) => {
+				const text = evaluated.success ? String(evaluated.body?.result ?? '').replace(/^"|"$/g, '') : ' ';
+				const space = text.indexOf(' ');
+				const role = (space < 0 ? text : text.substring(0, space)).toLowerCase() || 'error';
+				const messageText = space < 0 ? '' : text.substring(space + 1);
+				const roles = this.outcomeFilters.get(outcome.filter) ?? [];
+				if (roles.length > 0 && !roles.includes(role)) {
+					this.ownRequest('continue', { threadId }, () => undefined);
+					return;
+				}
+				const label = outcome.label.replace(/s$/, '');
+				const kind = label.charAt(0) + label.substring(1).toLowerCase();
+				const id = outcome.id(frame.line)!;
+				this.outcomePause = { exceptionId: id.startsWith('vscode-') ? kind : `${kind}: ${id}`, description: messageText };
+				this.messages.fire({ ...stopped, body: { ...stopped.body, reason: 'exception', description: kind, text: messageText } });
+			});
+		});
 	}
 
 	// for the generated stylesheet's breakpoints and stack frames: the source files' - and not its own variables
@@ -1034,6 +1118,11 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		const map = this.sourceMap;
 		if (!map || message.type !== 'response' || !message.body) {
 			return message;
+		}
+		if (message.command === 'initialize' && map.outcomes) {
+			const filters = map.outcomes.map((o) => ({ filter: o.filter, label: o.label, description: o.description, default: false, supportsCondition: true,
+				conditionDescription: 'Roles or severities to pause for, e.g. error fatal - all, if none' }));
+			return { ...message, body: { ...message.body, supportsExceptionFilterOptions: true, exceptionBreakpointFilters: [...(message.body.exceptionBreakpointFilters ?? []), ...filters] } };
 		}
 		const breakpoints = message.request_seq !== undefined ? this.mappedResponses.get(message.request_seq) : undefined;
 		if (breakpoints) {
@@ -1095,7 +1184,22 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			}
 			const body = this.buffer.subarray(headerEnd + 4, headerEnd + 4 + Number(length)).toString('utf8');
 			this.buffer = this.buffer.subarray(headerEnd + 4 + Number(length));
-			const message = this.mappedResponse(JSON.parse(body));
+			const raw = JSON.parse(body);
+			if (raw.type === 'response' && this.ownResponses.has(raw.request_seq)) {
+				const onResponse = this.ownResponses.get(raw.request_seq)!;
+				this.ownResponses.delete(raw.request_seq);
+				onResponse(raw);
+				continue;
+			}
+			if (raw.type === 'event' && raw.event === 'stopped') {
+				// kept until the next pause: VS Code may ask for it after carrying on
+				this.outcomePause = undefined;
+				if (raw.body?.reason === 'breakpoint' && this.outcomeFilters.size > 0) {
+					this.pausedAtOutcome(raw);
+					continue;
+				}
+			}
+			const message = this.mappedResponse(raw);
 			if (message.type === 'response') {
 				this.pending.delete(message.request_seq);
 			}
