@@ -225,31 +225,42 @@ suite('Schematron: debugging', () => {
 		const text = fs.readFileSync(file('orders.sch'), 'utf8');
 		const line = (t: string) => text.split('\n').findIndex((l) => l.includes(t)) + 1;
 		const schema = vscode.Uri.file(file('orders.sch'));
-		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(line('<rule') - 1, 0)))]);
-		const finished = ended();
-		assert.isTrue(await SchematronDebug.debug(schema));
-		let stop = await nextStop();
-		// failed assertions: errors only - one with no role or severity is an error; successful reports: all
-		await stop.session.customRequest('setExceptionBreakpoints', { filters: ['errors'], filterOptions: [{ filterId: 'schematronFailedAssert', condition: 'error' }, { filterId: 'schematronSuccessfulReport' }] });
-		const outcomes: string[] = [];
-		for (let i = 0; i < 10; i++) {
-			await stop.session.customRequest('continue', { threadId: 1 });
-			const next = await Promise.race([nextStop(), finished.then(() => undefined)]);
-			if (!next) {
-				break;
+		// the outcomes paused at - with a breakpoint on the rule, and maybe on the last assertion too, resumed from with
+		// 'continue' or 'next'
+		const outcomesOf = async (onAssertion?: 'continue' | 'next') => {
+			stops = [];
+			vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+			vscode.debug.addBreakpoints([line('<rule'), ...(onAssertion ? [line('test="line"')] : [])].map((l) => new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(l - 1, 0)))));
+			const finished = ended();
+			assert.isTrue(await SchematronDebug.debug(schema));
+			let stop = await nextStop();
+			// failed assertions: errors only - one with no role or severity is an error; successful reports: all
+			await stop.session.customRequest('setExceptionBreakpoints', { filters: ['errors'], filterOptions: [{ filterId: 'schematronFailedAssert', condition: 'error' }, { filterId: 'schematronSuccessfulReport' }] });
+			const outcomes: string[] = [];
+			let resume = 'continue';
+			for (let i = 0; i < 20; i++) {
+				await stop.session.customRequest(resume, { threadId: 1 });
+				const next = await Promise.race([nextStop(), finished.then(() => undefined)]);
+				if (!next) {
+					break;
+				}
+				stop = next;
+				const frame = (await stop.session.customRequest('stackTrace', { threadId: 1 })).stackFrames[0];
+				resume = stop.reason === 'breakpoint' && frame.line === line('test="line"') ? onAssertion! : 'continue';
+				if (stop.reason === 'exception') {
+					const info = await stop.session.customRequest('exceptionInfo', { threadId: 1 });
+					outcomes.push(`${stop.reason} ${stop.body.description} @${frame.line}: ${info.exceptionId} - ${info.description} (${path.basename(frame.source.path)})`);
+				}
 			}
-			stop = next;
-			if (stop.reason === 'breakpoint') {
-				continue;
-			}
-			const frame = (await stop.session.customRequest('stackTrace', { threadId: 1 })).stackFrames[0];
-			const info = await stop.session.customRequest('exceptionInfo', { threadId: 1 });
-			outcomes.push(`${stop.reason} ${stop.body.description} @${frame.line}: ${info.exceptionId} - ${info.description} (${path.basename(frame.source.path)})`);
-		}
-		await finished;
-		assert.deepEqual(outcomes, [
-			`exception Successful report @${line('id="first"')}: Successful report: first - Order A1 is the first (orders.sch)`,
-			`exception Failed assertion @${line('test="line"')}: Failed assertion - Order B2 has no lines (orders.sch)`]);
+			await finished;
+			return outcomes;
+		};
+		const report = `exception Successful report @${line('id="first"')}: Successful report: first - Order A1 is the first (orders.sch)`;
+		const failed = `exception Failed assertion @${line('test="line"')}: Failed assertion - Order B2 has no lines (orders.sch)`;
+		assert.deepEqual(await outcomesOf(), [report, failed]);
+		// continuing from a breakpoint on the assertion: not paused again there, for its failure - stepping from it is
+		assert.deepEqual(await outcomesOf('continue'), [report]);
+		assert.deepEqual(await outcomesOf('next'), [report, failed]);
 	});
 
 	test('the phase: a breakpoint in a pattern that isn\'t active in it isn\'t verified, and says why', async () => {

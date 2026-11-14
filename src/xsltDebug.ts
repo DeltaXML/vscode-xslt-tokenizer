@@ -924,6 +924,10 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	// on, with the roles in each one's condition (none: all) - and, paused at one, what the exception widget says
 	private readonly outcomeFilters = new Map<string, string[]>();
 	private outcomePause: { exceptionId: string, description: string } | undefined;
+	// the source line of the last pause at one of VS Code's breakpoints, while outcomes are paused on - and how execution
+	// was last resumed ('continue', 'next', ...)
+	private breakpointAt: string | undefined;
+	private resumedBy: string | undefined;
 	// requests of the proxy's own, by seq: their responses aren't VS Code's
 	private ownSeq = 1000000000;
 	private readonly ownResponses = new Map<number, (message: any) => void>();
@@ -969,6 +973,9 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			const variables = this.ownScopes.get(own.arguments.variablesReference)!.map((v) => ({ name: v.name, value: v.value, variablesReference: 0 }));
 			this.messages.fire({ seq: 0, type: 'response', request_seq: own.seq, success: true, command: 'variables', body: { variables } } as vscode.DebugProtocolMessage);
 			return;
+		}
+		if (own.type === 'request' && ['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue'].includes(own.command ?? '')) {
+			this.resumedBy = own.command;
 		}
 		if (own.type === 'request' && own.command === 'exceptionInfo' && this.outcomePause) {
 			// paused at an outcome, e.g. a failed assertion: it, and its message
@@ -1090,10 +1097,21 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			const frame = response.body?.stackFrames?.[0];
 			const outcome = frame?.source?.path && XSpecSourceMap.samePath(frame.source.path, map.generatedPath) ?
 				(map.outcomes ?? []).find((o) => this.outcomeFilters.has(o.filter) && o.id(frame.line) !== undefined) : undefined;
+			const source = frame?.source?.path && XSpecSourceMap.samePath(frame.source.path, map.generatedPath) ? map.sourceOf(frame.line) : undefined;
+			const at = source ? `${source.path}:${source.line}` : undefined;
 			if (!outcome) {
+				this.breakpointAt = at;
 				this.messages.fire(stopped);
 				return;
 			}
+			// continuing from a breakpoint on the assertion, at its test: not paused again for its outcome - stepping from
+			// it is, to show it
+			if (at !== undefined && at === this.breakpointAt && this.resumedBy === 'continue') {
+				this.breakpointAt = undefined;
+				this.ownRequest('continue', { threadId }, () => undefined);
+				return;
+			}
+			this.breakpointAt = undefined;
 			this.ownRequest('evaluate', { expression: `${outcome.role} || ' ' || ${outcome.message}`, frameId: frame.id, context: 'watch' }, (evaluated) => {
 				const text = evaluated.success ? String(evaluated.body?.result ?? '').replace(/^"|"$/g, '') : ' ';
 				const space = text.indexOf(' ');
@@ -1198,6 +1216,7 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 					this.pausedAtOutcome(raw);
 					continue;
 				}
+				this.breakpointAt = undefined;
 			}
 			const message = this.mappedResponse(raw);
 			if (message.type === 'response') {
