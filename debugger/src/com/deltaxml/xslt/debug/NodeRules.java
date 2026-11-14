@@ -70,28 +70,45 @@ final class NodeRules {
         record(node, id);
     }
 
-    private void record(NodeInfo node, int ruleId) {
+    // where a node is: its element (itself, or its parent), that element's file and position, and the node's kind and
+    // name - null if it isn't in a document read from a file
+    private Object[] place(NodeInfo node) {
         int kind = node.getNodeKind();
         // by s9api: NodeInfo.getParent() returns another type in Saxon 13
         net.sf.saxon.s9api.XdmNode parent = kind == Type.ELEMENT ? null : new net.sf.saxon.s9api.XdmNode(node).getParent();
         NodeInfo element = kind == Type.ELEMENT ? node : parent == null ? null : parent.getUnderlyingNode();
         if (element == null || element.getNodeKind() != Type.ELEMENT || element.getSystemId() == null || element.getLineNumber() <= 0) {
-            return;
+            return null;
         }
         String path = paths.pathOf(element.getSystemId());
-        if (path == null) {
-            return;
-        }
         // only a document's that was read from a file: a node the stylesheet constructs - e.g. in a temporary tree, a
         // parentless element, or an XSpec test's inline context - has the location of the instruction that constructed it
-        if (!isFromFile(element)) {
-            return;
+        if (path == null || !isFromFile(element)) {
+            return null;
         }
         String name = kind == Type.ELEMENT ? "element:" + node.getDisplayName() : kind == Type.ATTRIBUTE ? "attribute:" + node.getDisplayName() :
                 kind == Type.TEXT ? (isWhitespace(node) ? "whitespace" : "text") : kind == Type.COMMENT ? "comment" : kind == Type.PROCESSING_INSTRUCTION ? "pi:" + node.getDisplayName() : null;
-        if (name == null) {
+        return name == null ? null : new Object[] { element, path, name };
+    }
+
+    // for the output mapping: the input node that was the context item - {path, line, column, node}, as for a node here
+    Map<String, Object> position(NodeInfo node) {
+        Object[] place = place(node);
+        if (place == null) {
+            return null;
+        }
+        NodeInfo element = (NodeInfo) place[0];
+        return Json.obj().with("path", place[1]).with("line", element.getLineNumber()).with("column", element.getColumnNumber()).with("node", place[2]);
+    }
+
+    private void record(NodeInfo node, int ruleId) {
+        Object[] place = place(node);
+        if (place == null) {
             return;
         }
+        NodeInfo element = (NodeInfo) place[0];
+        String path = (String) place[1];
+        String name = (String) place[2];
         Integer nameId = nameIds.get(name);
         if (nameId == null) {
             nameId = names.size();

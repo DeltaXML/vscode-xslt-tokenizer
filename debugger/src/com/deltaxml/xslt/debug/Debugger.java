@@ -70,6 +70,14 @@ final class Debugger {
     private Map<String, Map<Integer, Integer>> coverage;
     // the template rules each input node was processed by - sent when the run ends (see NodeRules)
     private final NodeRules nodeRules = new NodeRules(this::pathOf);
+    // for the output map's input: the element instructions entered whose start tag hasn't been written yet - Saxon writes
+    // it with the element's first content, by when another template may be running - with the context item each was
+    // entered with, by the instruction's location, oldest first. Start tags are written in the order their instructions
+    // were entered, so the oldest is the one being written, even where the instruction is nested in itself, e.g. by a
+    // recursive template. An entry is removed when its instruction is left: one whose element wasn't written to an
+    // output, e.g. in a variable's temporary tree, never will be
+    private final Map<String, Deque<Object[]>> unwrittenElements = new HashMap<String, Deque<Object[]>>();
+    private final Deque<Object[]> enteredElements = new ArrayDeque<Object[]>();
     private boolean messageEscaping;
 
     // --- breakpoints: normalised file path -> line -> breakpoint (written by the DAP thread at any time)
@@ -252,6 +260,27 @@ final class Debugger {
             public Location currentInstruction() {
                 Traceable traceable = lastEntered;
                 return traceable == null ? null : traceable.getLocation();
+            }
+
+            // the frame's context item - the frames are only read on the transform thread - or for a start tag, its
+            // instruction's when it was entered
+            public Object currentContext(Location startTag) {
+                if (Thread.currentThread() != transformThread) {
+                    return null;
+                }
+                Deque<Object[]> entries = startTag == null ? null : unwrittenElements.get(locationKey(startTag));
+                Object[] entry = entries == null ? null : entries.pollFirst();
+                if (entry != null) {
+                    entry[2] = Boolean.TRUE;
+                    return entry[0];
+                }
+                Frame top = frames.peek();
+                Item item = top == null || top.context == null ? null : top.context.getContextItem();
+                return item instanceof net.sf.saxon.om.NodeInfo ? item : null;
+            }
+
+            public Map<String, Object> inputOf(Object context) {
+                return context instanceof net.sf.saxon.om.NodeInfo ? nodeRules.position((net.sf.saxon.om.NodeInfo) context) : null;
             }
         });
         // a global variable's frame: it's being evaluated (only read on the transform thread, as are the frames)
@@ -771,6 +800,18 @@ final class Debugger {
         }
         // entered again: a result of stepping through its expression that wasn't used is out of date
         SteppedResult.discard(traceable);
+        if (isElementConstructor(traceable)) {
+            Item item = context.getContextItem();
+            // [context item, instruction location key, written]
+            Object[] entry = new Object[] { item instanceof net.sf.saxon.om.NodeInfo ? item : null, locationKey(traceable.getLocation()), Boolean.FALSE };
+            Deque<Object[]> entries = unwrittenElements.get((String) entry[1]);
+            if (entries == null) {
+                entries = new ArrayDeque<Object[]>();
+                unwrittenElements.put((String) entry[1], entries);
+            }
+            entries.addLast(entry);
+            enteredElements.push(entry);
+        }
         if (isSequenceConstructor(traceable)) {
             // which Saxon 12 traces at its first instruction's location (Saxon 13 doesn't) - not an instruction of
             // its own: stopping at it would stop twice where the first instruction is
@@ -1283,6 +1324,15 @@ final class Debugger {
             unwindTo(tryDepths.pop().getValue());
             return;
         }
+        if (isElementConstructor(traceable) && !enteredElements.isEmpty()) {
+            Object[] entry = enteredElements.pop();
+            if (entry[2] == Boolean.FALSE) {
+                Deque<Object[]> entries = unwrittenElements.get((String) entry[1]);
+                if (entries != null) {
+                    entries.remove(entry);
+                }
+            }
+        }
         Frame top = frames.peek();
         if (top != null && top.owner == traceable) {
             frames.pop();
@@ -1314,6 +1364,18 @@ final class Debugger {
             case OUT: return callDepth < stepCallDepth;
             default: return false;
         }
+    }
+
+    // a literal result element, xsl:element or xsl:copy: an instruction that may write a start tag
+    private static boolean isElementConstructor(Traceable traceable) {
+        String className = traceable.getClass().getSimpleName();
+        return className.equals("FixedElement") || className.equals("ComputedElement") || className.equals("Copy");
+    }
+
+    // an instruction's location, as given to the output's start tag: where its start tag ends (see startTagLocation)
+    private String locationKey(Location location) {
+        Location tag = location == null ? null : startTagLocation(location);
+        return tag == null ? "" : tag.getSystemId() + ':' + tag.getLineNumber() + ':' + tag.getColumnNumber();
     }
 
     // a template rule, named template or function - not a focus instruction, e.g. xsl:for-each

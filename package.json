@@ -462,6 +462,11 @@
 				"category": "XSLT"
 			},
 			{
+				"command": "xslt-xpath.goToDebugOutputInput",
+				"title": "Go to XSLT Input",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.tabToIndentation",
 				"title": "Tab: Indent an Empty Line for Its Context",
 				"category": "XSLT"
@@ -573,6 +578,11 @@
 					"command": "xslt-xpath.goToDebugOutputSource",
 					"when": "resourceScheme == xslt-debug-output",
 					"group": "navigation@1"
+				},
+				{
+					"command": "xslt-xpath.goToDebugOutputInput",
+					"when": "resourceScheme == xslt-debug-output",
+					"group": "navigation@2"
 				},
 				{
 					"submenu": "xslt-xpath.xmlSelection",
@@ -825,6 +835,10 @@
 				},
 				{
 					"command": "xslt-xpath.goToDebugOutputSource",
+					"when": "resourceScheme == xslt-debug-output"
+				},
+				{
+					"command": "xslt-xpath.goToDebugOutputInput",
 					"when": "resourceScheme == xslt-debug-output"
 				},
 				{

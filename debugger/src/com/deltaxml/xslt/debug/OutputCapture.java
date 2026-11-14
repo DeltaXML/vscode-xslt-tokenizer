@@ -64,14 +64,19 @@ final class OutputCapture {
         // the locations, by id, and whether each was for text (characters) - a location may be both
         private final List<Location> locations = new ArrayList<Location>();
         private final List<Boolean> locationIsText = new ArrayList<Boolean>();
-        private final Map<Location, Integer> instructionIds = new java.util.IdentityHashMap<Location, Integer>();
-        private final Map<Location, Integer> textIds = new java.util.IdentityHashMap<Location, Integer>();
+        // and the context item each was written with, if it was a node: the input it was written for (see Debugger)
+        private final List<Object> locationContexts = new ArrayList<Object>();
+        // by location, then context item (NO_CONTEXT for none)
+        private final Map<Location, Map<Object, Integer>> instructionIds = new java.util.IdentityHashMap<Location, Map<Object, Integer>>();
+        private final Map<Location, Map<Object, Integer>> textIds = new java.util.IdentityHashMap<Location, Map<Object, Integer>>();
         // how many runs and locations have been sent
         int sentRuns;
         int sentLocations;
         // the location of the event being written, and whether it's text - null: as for the text before
         Location current;
         boolean currentIsText;
+        // the context item it's written with, if it's a node - null if not
+        Object currentContext;
 
         Output(int id, String name, String uri, String method) {
             this.id = id;
@@ -88,7 +93,7 @@ final class OutputCapture {
                 return;
             }
             if (mapped && current != null && length > 0) {
-                int locationId = locationId(current, currentIsText);
+                int locationId = locationId(current, currentIsText, currentContext);
                 if (runLength == 0 || runs[runLength - 1] != locationId) {
                     if (runLength == runs.length) {
                         runs = java.util.Arrays.copyOf(runs, runs.length * 2);
@@ -117,14 +122,21 @@ final class OutputCapture {
             return truncated;
         }
 
-        private int locationId(Location location, boolean isText) {
-            Map<Location, Integer> ids = isText ? textIds : instructionIds;
-            Integer locationId = ids.get(location);
+        private int locationId(Location location, boolean isText, Object context) {
+            Map<Location, Map<Object, Integer>> ids = isText ? textIds : instructionIds;
+            Map<Object, Integer> byContext = ids.get(location);
+            if (byContext == null) {
+                byContext = new java.util.HashMap<Object, Integer>();
+                ids.put(location, byContext);
+            }
+            Object key = context == null ? NO_CONTEXT : context;
+            Integer locationId = byContext.get(key);
             if (locationId == null) {
                 locationId = locations.size();
                 locations.add(location);
                 locationIsText.add(isText);
-                ids.put(location, locationId);
+                locationContexts.add(context);
+                byContext.put(key, locationId);
             }
             return locationId;
         }
@@ -147,6 +159,11 @@ final class OutputCapture {
                 Json.Obj location = Json.obj().with("id", i);
                 if (resolved != null) {
                     location.putAll(resolved);
+                    // and the input node it was written for - not for a node copied from the input, which is its location
+                    Object context = locationContexts.get(i);
+                    if (context != null && !"source".equals(resolved.get("kind"))) {
+                        location.with("input", resolver.inputOf(context));
+                    }
                 }
                 result.add(location);
             }
@@ -165,7 +182,16 @@ final class OutputCapture {
 
         // the location of the instruction being executed - null if there's none
         Location currentInstruction();
+
+        // the context item of the instruction being executed, if it's a node - null if not - or for a start tag (its
+        // location), the context item its instruction was entered with
+        Object currentContext(Location startTag);
+
+        // where the context item was in an input file: {path, line, column, node} - null if it wasn't in one
+        Map<String, Object> inputOf(Object context);
     }
+
+    private static final Object NO_CONTEXT = new Object();
 
     private LocationResolver resolver;
     // the XML result whose copy's serializer is being created
@@ -362,17 +388,26 @@ final class OutputCapture {
         // an event with no location, e.g. the indenter's whitespace, is part of the text before - and a node copied from
         // a source document, which has its location there, is the instruction's that copied it, e.g. xsl:copy-of
         private void at(Location location, boolean isText) {
+            at(location, isText, false);
+        }
+
+        // and for a start tag: its context item is its instruction's (see LocationResolver.currentContext) - its
+        // attributes' are the same
+        private void at(Location location, boolean isText, boolean isStartTag) {
             if (location != null && location.getLineNumber() > 0) {
                 Location instruction = resolver == null || resolver.isStylesheetLocation(location) ? null : resolver.currentInstruction();
                 output.current = instruction != null ? instruction : location;
                 output.currentIsText = isText && instruction == null;
+                if (attributes == null) {
+                    output.currentContext = resolver == null ? null : resolver.currentContext(isStartTag && instruction == null ? location : null);
+                }
             }
         }
 
         @Override
         public void startElement(net.sf.saxon.om.NodeName elemName, net.sf.saxon.type.SchemaType type, net.sf.saxon.om.AttributeMap attributes,
                 net.sf.saxon.om.NamespaceMap namespaces, Location location, int properties) throws XPathException {
-            at(location, false);
+            at(location, false, true);
             elements.push(location == null ? net.sf.saxon.expr.parser.Loc.NONE : location);
             this.attributes = attributes;
             try {

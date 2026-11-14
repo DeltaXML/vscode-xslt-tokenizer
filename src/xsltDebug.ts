@@ -4,7 +4,8 @@
  *  Contributors:
  *  DeltaXML Ltd. - XSLT debugger
  */
-import { NodeRulesEvent } from './xsltNodeRules';
+import { NodeRulesEvent, XsltNodeRules } from './xsltNodeRules';
+import { parseXml, descendants } from './xspecXml';
 import { XSpecSourceMap } from './xspecSourceMap';
 import { SchematronSourceMap } from './schematronSourceMap';
 import { DebugSourceMap } from './debugSourceMap';
@@ -494,6 +495,9 @@ export interface XsltOutputLocation {
 	line?: number;
 	column?: number;
 	kind?: 'instruction' | 'source' | 'text';
+	// the input node that was the context item when it was written, if it was one in a file: its element's position (where
+	// its start tag ends), and the node - e.g. 'element:order', 'attribute:id', 'text' (see NodeRules)
+	input?: { path: string; line: number; column: number; node: string };
 }
 
 export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vscode.DefinitionProvider, vscode.InlayHintsProvider {
@@ -689,6 +693,52 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		}
 	}
 
+	// the input the output at the offset was written for: the start tag of the element that was the context item - or
+	// whose attribute or text was - in the file as it is now. With the node, e.g. 'element:order'
+	public async inputLocationAt(name: string, offset: number): Promise<{ location: vscode.Location, node: string } | undefined> {
+		const output = this.outputs.get(name);
+		const found = output && offset < output.text.length ? XsltDebugOutputs.locationAt(output.text, output.runs, output.locations, offset) : undefined;
+		const input = found?.location.input;
+		if (!input) {
+			return undefined;
+		}
+		try {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(input.path));
+			const text = document.getText();
+			const tagEnd = (XsltNodeRules.lineStarts(text)[input.line - 1] ?? text.length) + input.column - 1;
+			const root = parseXml(text);
+			const element = root ? [root, ...descendants(root)].find((e) => e.contentStart === tagEnd) : undefined;
+			const start = element ? element.start : Math.max(0, text.lastIndexOf('<', tagEnd - 1));
+			return { location: new vscode.Location(document.uri, new vscode.Range(document.positionAt(start), document.positionAt(element ? element.contentStart : tagEnd))), node: input.node };
+		} catch {
+			return undefined;
+		}
+	}
+
+	// e.g. 'order', '@id', 'text()'
+	public static inputNodeName(node: string): string {
+		const colon = node.indexOf(':');
+		const kind = colon < 0 ? node : node.substring(0, colon);
+		const name = node.substring(colon + 1);
+		return kind === 'element' ? name : kind === 'attribute' ? `@${name}` : kind === 'text' || kind === 'whitespace' ? 'text()' : kind === 'comment' ? 'comment()' : `processing-instruction(${name})`;
+	}
+
+	// the 'Go to XSLT Input' command: shows the input the output at the cursor was written for - the element that was the
+	// context item, or whose attribute or text was - in another editor group from the output's
+	public async goToInput() {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor || editor.document.uri.scheme !== XsltDebugOutputs.scheme) {
+			return;
+		}
+		const found = await this.inputLocationAt(XsltDebugOutputs.nameOf(editor.document.uri), editor.document.offsetAt(editor.selection.active));
+		if (!found) {
+			vscode.window.showInformationMessage('XSLT debugger: this part of the output wasn\'t written for a node of an input file - e.g. the context item was a node the stylesheet constructed, or wasn\'t a node.');
+			return;
+		}
+		const column = XsltDebugOutputs.otherGroup(found.location.uri.toString(), editor.viewColumn) ?? vscode.ViewColumn.Beside;
+		await vscode.window.showTextDocument(found.location.uri, { viewColumn: column, selection: found.location.range, preview: false });
+	}
+
 	// go to definition: the source of the output at the position. VS Code opens it in the output's editor group - so if
 	// it's open in another group, the new tab is replaced by that editor (see revealInOtherGroup). This is also asked for
 	// as the cursor moves over the output with the modifier key down, so it's only noted here
@@ -797,9 +847,12 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		if (!location) {
 			return [];
 		}
-		const hint = new vscode.InlayHint(line.range.end, `→ ${path.basename(location.uri.fsPath)}:${location.range.start.line + 1}`);
+		// and the input it was written for, if any: e.g. '· input: order, orders.xml:12'
+		const input = await this.inputLocationAt(XsltDebugOutputs.nameOf(document.uri), offset);
+		const inputText = input ? ` · input: ${XsltDebugOutputs.inputNodeName(input.node)}, ${path.basename(input.location.uri.fsPath)}:${input.location.range.start.line + 1}` : '';
+		const hint = new vscode.InlayHint(line.range.end, `→ ${path.basename(location.uri.fsPath)}:${location.range.start.line + 1}${inputText}`);
 		hint.paddingLeft = true;
-		hint.tooltip = 'Jump to XSLT source with: ' + XsltDebugOutputs.goToSourceKeys();
+		hint.tooltip = 'Jump to XSLT source with: ' + XsltDebugOutputs.goToSourceKeys() + (input ? ' - and to the input with \'Go to XSLT Input\', on the context menu' : '');
 		return [hint];
 	}
 

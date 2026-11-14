@@ -257,6 +257,39 @@ suite('XSLT debugger: from the output to its source', () => {
 		await closeOwnTabs();
 	}).timeout(10000);
 
+	test('the input it was written for: the start tag of the element that was the context item - in the hint, and Go to XSLT Input', async () => {
+		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+		await closeOwnTabs();
+		// an element whose start tag spans lines: the debugger gives where it ends
+		const inputFile = path.join(path.dirname(file), 'orders.xml');
+		const inputText = '<orders>\n  <order id="A1"\n    date="x">\n  </order>\n</orders>';
+		fs.writeFileSync(inputFile, inputText);
+		const name = 'inputs.xml';
+		const withInput = locations(file).map((l) => l.id === 1 ? { ...l, input: { path: inputFile, line: 3, column: 14, node: 'element:order' } } : l);
+		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'xml', offset: 0, text: output, runs, locations: withInput }] });
+		const found = await XsltDebugOutputs.get().inputLocationAt(name, output.indexOf('<made') + 1);
+		assert.strictEqual(found?.node, 'element:order');
+		assert.strictEqual(found?.location.uri.fsPath, vscode.Uri.file(inputFile).fsPath);
+		assert.strictEqual(`${found!.location.range.start.line + 1}:${found!.location.range.start.character + 1}-${found!.location.range.end.line + 1}:${found!.location.range.end.character + 1}`, '2:3-3:14');
+		// none where it wasn't written for an input node
+		assert.isUndefined(await XsltDebugOutputs.get().inputLocationAt(name, output.indexOf('<report') + 1));
+		// in the hint, after the source
+		const editor = await vscode.window.showTextDocument(XsltDebugOutputs.uri(name), { preview: false });
+		const at = editor.document.positionAt(output.indexOf('<made') + 1);
+		editor.selection = new vscode.Selection(at, at);
+		const hints = await vscode.commands.executeCommand<vscode.InlayHint[]>('vscode.executeInlayHintProvider', editor.document.uri, new vscode.Range(0, 0, editor.document.lineCount, 0));
+		assert.deepEqual(hints.map((hint) => hint.label), ['→ report.xsl:4 · input: order, orders.xml:2']);
+		// Go to XSLT Input: in another editor group, at the start tag
+		await vscode.commands.executeCommand('xslt-xpath.goToDebugOutputInput');
+		const shown = vscode.window.activeTextEditor;
+		assert.strictEqual(shown?.document.uri.fsPath, vscode.Uri.file(inputFile).fsPath);
+		assert.strictEqual(shown?.selection.start.line, 1);
+		assert.notStrictEqual(shown?.viewColumn, editor.viewColumn);
+		const own = vscode.window.tabGroups.all.flatMap((g) => g.tabs).filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === vscode.Uri.file(inputFile).fsPath);
+		await vscode.window.tabGroups.close(own);
+		await closeOwnTabs();
+	}).timeout(10000);
+
 	test('text not found in the stylesheet: the text node\'s first character, or the instruction after it', () => {
 		const offsetFor = (source: string, reported: number, found: string) =>
 			XsltDebugOutputs.sourceOffset(source, { id: 0, path: 'x.xsl', line: 1, column: 1, kind: 'text' }, () => reported, found);

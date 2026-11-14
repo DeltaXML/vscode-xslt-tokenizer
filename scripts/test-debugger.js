@@ -2561,6 +2561,65 @@ async function testOutputMap(saxonJar) {
     await dap.exited;
 }
 
+// the output map's input: for each part of the output, the node that was the context item when it was written - at its
+// element's position, as for the template rules each node was processed by - not one constructed by the stylesheet
+async function testOutputMapInput(saxonJar) {
+    const { input } = await outputInputs(saxonJar, 'node-rules.xsl', 'node-rules.xml');
+    assert.strictEqual(input('<o>'), 'node-rules.xml:4:28 element:order');
+    assert.strictEqual(input('<o>', 2), 'node-rules.xml:8:18 element:order');
+    assert.strictEqual(input('<l>'), 'node-rules.xml:5:38 element:line');
+    // text written for a text node: at its element's position
+    assert.strictEqual(input('Blue pens'), 'node-rules.xml:5:38 text');
+    // a node of a document read with doc()
+    assert.strictEqual(input('P'), 'node-rules-products.xml:2:22 element:product');
+    // a node of a temporary tree: none
+    assert.strictEqual(input('T</o>'), 'none');
+
+    // a start tag written once its first content is - by which time another template, for another node, may be running:
+    // its instruction's context item. Nested in itself, by a recursive template - and an instruction that wrote to a
+    // temporary tree first, for another node
+    const nested = await outputInputs(saxonJar, 'output-input-nested.xsl', 'output-input-nested.xml');
+    assert.strictEqual(nested.input('<div>'), 'output-input-nested.xml:2:20 element:section');
+    assert.strictEqual(nested.input('<div>', 2), 'output-input-nested.xml:3:22 element:section');
+    assert.strictEqual(nested.input('<para>'), 'output-input-nested.xml:4:10 element:p');
+    assert.strictEqual(nested.input('<m/>'), 'output-input-nested.xml:3:22 element:section');
+    assert.strictEqual(nested.input('<m/>', 2), 'output-input-nested.xml:2:20 element:section');
+}
+
+// a run's output text, and for the nth occurrence of a text in it, the input it was written for
+async function outputInputs(saxonJar, xsl, xml) {
+    const dap = new DapClient(saxonJar);
+    const terminated = dap.event('terminated');
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, xsl)}`, `-s:${path.join(fixtures, xml)}`] }, {});
+    await terminated;
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    let text = '';
+    const runs = [];
+    const locations = new Map();
+    for (const e of dap.events.filter((e) => e.event === 'xsltOutputs')) {
+        for (const o of e.body.outputs) {
+            text = text.substring(0, o.offset) + o.text;
+            (o.locations ?? []).forEach((l) => locations.set(l.id, l));
+            runs.push(...(o.runs ?? []));
+        }
+    }
+    const input = (found, nth = 1) => {
+        let offset = -1;
+        for (let i = 0; i < nth; i++) {
+            offset = text.indexOf(found, offset + 1);
+        }
+        assert.ok(offset > -1, `${found} in ${text}`);
+        let location;
+        for (let i = 0; i < runs.length && runs[i] <= offset; i += 2) {
+            location = locations.get(runs[i + 1]);
+        }
+        assert.ok(location, `a location for ${found}`);
+        return location.input ? `${path.basename(location.input.path)}:${location.input.line}:${location.input.column} ${location.input.node}` : 'none';
+    };
+    return { text, input };
+}
+
 // with no xsl:output, Saxon decides the output method from the first element (an 'uncommitted' serializer): the copy's
 // XML emitter is made then, and records where the output came from too
 async function testOutputMapWithoutXslOutput(saxonJar) {
@@ -2878,7 +2937,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNodeRules, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testCommentBreakpoints, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
+        for (const test of [testDeepRecursion, testNodeRules, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testCommentBreakpoints, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapInput, testOutputMapWithoutXslOutput, testXSpecStepping]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;
