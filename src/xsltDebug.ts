@@ -5,6 +5,8 @@
  *  DeltaXML Ltd. - XSLT debugger
  */
 import { XSpecSourceMap } from './xspecSourceMap';
+import { SchematronSourceMap } from './schematronSourceMap';
+import { DebugSourceMap } from './debugSourceMap';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -900,18 +902,29 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	private disconnected = false;
 	// the requests sent to the adapter that it hasn't answered, by seq
 	private readonly pending = new Map<number, string>();
-	// debugging an XSpec file's test runner: the lines of the XSpec file for the runner's (see XSpecSourceMap) - and
-	// for a breakpoint request for the XSpec file, by seq, its response's breakpoints, from the runner's
-	private readonly xspecMap: XSpecSourceMap | undefined;
-	private readonly xspecResponses = new Map<number, (breakpoints: DebugBreakpoint[]) => DebugBreakpoint[]>();
+	// debugging a stylesheet generated from source files - an XSpec file's test runner (see XSpecSourceMap), or a
+	// Schematron schema's compiled stylesheet (see SchematronSourceMap): the source files' lines for its lines - and for a
+	// breakpoint request for a source file, by seq, its response's breakpoints, from the generated stylesheet's
+	private readonly sourceMap: DebugSourceMap | undefined;
+	private readonly mappedResponses = new Map<number, (breakpoints: DebugBreakpoint[]) => DebugBreakpoint[]>();
+	// each source file's breakpoints, as last asked for: the generated stylesheet's breakpoints are those of all of them,
+	// as a request for its breakpoints replaces them all
+	private readonly sourceBreakpoints = new Map<string, DebugBreakpoint[]>();
+	// for hiding the generated stylesheet's own variables (see DebugSourceMap.isHiddenVariable): the frames paused in a
+	// source file, the scopes and variables requests for them, by seq, and their Locals' and Globals' references
+	private readonly sourceFrames = new Set<number>();
+	private readonly scopesRequests = new Map<number, number>();
+	private readonly variablesRequests = new Map<number, number>();
+	private readonly filteredReferences = new Set<number>();
 
 	constructor(private session: vscode.DebugSession, command: string, args: string[], cwd: string | undefined) {
 		const quote = (arg: string) => /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
 		XsltDebugLog.info(`Debug session '${session.name}': ${command} ${args.map(quote).join(' ')}${cwd ? `\n    in ${cwd}` : ''}`);
 		XsltDebugProblems.clear();
 		XsltDebugOutputs.get().startSession();
-		const { xspecFile, xsltFile } = session.configuration;
-		this.xspecMap = typeof xspecFile === 'string' && typeof xsltFile === 'string' ? XSpecSourceMap.load(xspecFile, xsltFile) : undefined;
+		const { xspecFile, xsltFile, schematronFile } = session.configuration;
+		this.sourceMap = typeof xsltFile !== 'string' ? undefined : typeof xspecFile === 'string' ? XSpecSourceMap.load(xspecFile, xsltFile) :
+			typeof schematronFile === 'string' ? SchematronSourceMap.load(schematronFile, xsltFile) : undefined;
 		this.process = cp.spawn(command, args, { cwd });
 		this.process.stdout?.on('data', (data: Buffer) => this.receive(data));
 		this.process.stderr?.on('data', (data: Buffer) => {
@@ -939,7 +952,7 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	}
 
 	public handleMessage(message: vscode.DebugProtocolMessage): void {
-		message = this.xspecRequest(message);
+		message = this.mappedRequest(message);
 		const request = message as { type?: string; command?: string; seq: number };
 		if (request.type === 'request') {
 			if (this.disconnected || (this.exited && this.endedByVsCode)) {
@@ -964,53 +977,76 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		}
 	}
 
-	// for an XSpec file's breakpoints: the runner's breakpoints for them - a line with no step in the runner, e.g. in
-	// an x:context's content, has none, and isn't verified
-	private xspecRequest(message: vscode.DebugProtocolMessage): vscode.DebugProtocolMessage {
+	// for a source file's breakpoints: the generated stylesheet's breakpoints for them - with those of the other source
+	// files - and a line with no step in it, e.g. in an x:context's content, has none, and isn't verified
+	private mappedRequest(message: vscode.DebugProtocolMessage): vscode.DebugProtocolMessage {
 		const request = message as { type?: string; command?: string; seq: number; arguments?: { source?: { path?: string }, breakpoints?: DebugBreakpoint[], lines?: number[] } };
-		const map = this.xspecMap;
+		const map = this.sourceMap;
 		if (map && request.type === 'request' && request.command === 'launch') {
-			// a step in the runner stops only at its lines for the XSpec file's steps (with stepSkip, from the launch
-			// configuration, the runner's and XSpec's own files a step doesn't otherwise stop in)
-			return { ...request, arguments: { ...request.arguments, stepStops: { [map.runnerPath]: map.stepLines() } } } as vscode.DebugProtocolMessage;
+			// a step in the generated stylesheet stops only at its lines for the source files' steps (with stepSkip, from
+			// the launch configuration, other files a step doesn't otherwise stop in)
+			return { ...request, arguments: { ...request.arguments, stepStops: { [map.generatedPath]: map.stepLines() } } } as vscode.DebugProtocolMessage;
+		}
+		if (map?.isHiddenVariable && request.type === 'request') {
+			const args = (request as { arguments?: { frameId?: number, variablesReference?: number } }).arguments;
+			if (request.command === 'scopes' && args?.frameId !== undefined && this.sourceFrames.has(args.frameId)) {
+				this.scopesRequests.set(request.seq, args.frameId);
+			} else if (request.command === 'variables' && args?.variablesReference !== undefined && this.filteredReferences.has(args.variablesReference)) {
+				this.variablesRequests.set(request.seq, args.variablesReference);
+			}
 		}
 		const sourcePath = request.arguments?.source?.path;
-		if (!map || request.type !== 'request' || request.command !== 'setBreakpoints' || !sourcePath || !XSpecSourceMap.samePath(sourcePath, map.xspecPath)) {
+		if (!map || request.type !== 'request' || request.command !== 'setBreakpoints' || !sourcePath || !map.isSource(sourcePath)) {
 			return message;
 		}
-		const requested = request.arguments?.breakpoints ?? [];
-		const mapped = requested.map((breakpoint) => map.runnerLine(breakpoint.line));
-		this.xspecResponses.set(request.seq, (breakpoints) => {
-			let next = 0;
-			return requested.map((breakpoint, i) => {
-				if (mapped[i] === undefined) {
-					return { verified: false, line: breakpoint.line, message: 'XSpec: no step here - set a breakpoint on an x:scenario, x:call, x:context or x:expect' };
-				}
-				const response = breakpoints[next++] ?? { verified: false };
-				return { ...response, line: breakpoint.line, source: { path: map.xspecPath } };
-			});
-		});
-		const breakpoints = requested.filter((_breakpoint, i) => mapped[i] !== undefined).map((breakpoint, i) => ({ ...breakpoint, line: mapped.filter((line) => line !== undefined)[i]! }));
-		return { ...request, arguments: { ...request.arguments, source: { path: map.runnerPath }, breakpoints, lines: breakpoints.map((breakpoint) => breakpoint.line) } } as vscode.DebugProtocolMessage;
+		const key = [...this.sourceBreakpoints.keys()].find((file) => XSpecSourceMap.samePath(file, sourcePath)) ?? sourcePath;
+		this.sourceBreakpoints.set(key, request.arguments?.breakpoints ?? []);
+		// the generated stylesheet's breakpoints, for each source file's - one source line may have more than one
+		const generated: { file: string, index: number, breakpoint: DebugBreakpoint }[] = [];
+		this.sourceBreakpoints.forEach((breakpoints, file) => breakpoints.forEach((breakpoint, index) =>
+			(map.generatedLines(file, breakpoint.line) ?? []).forEach((line) => generated.push({ file, index, breakpoint: { ...breakpoint, line } }))));
+		const requested = this.sourceBreakpoints.get(key)!;
+		this.mappedResponses.set(request.seq, (breakpoints) => requested.map((breakpoint, index) => {
+			const responses = generated.map((g, i) => ({ g, response: breakpoints[i] })).filter(({ g }) => g.file === key && g.index === index).map(({ response }) => response);
+			if (responses.length === 0) {
+				return { verified: false, line: breakpoint.line, message: map.noStepMessage };
+			}
+			const verified = responses.find((response) => response?.verified);
+			return { ...(verified ?? responses[0] ?? {}), verified: !!verified, line: breakpoint.line, source: { path: sourcePath } };
+		}));
+		const breakpoints = generated.map((g) => g.breakpoint);
+		return { ...request, arguments: { ...request.arguments, source: { path: map.generatedPath }, breakpoints, lines: breakpoints.map((breakpoint) => breakpoint.line) } } as vscode.DebugProtocolMessage;
 	}
 
-	// for the runner's breakpoints and stack frames: the XSpec file's
-	private xspecResponse(message: any): any {
-		const map = this.xspecMap;
+	// for the generated stylesheet's breakpoints and stack frames: the source files' - and not its own variables
+	private mappedResponse(message: any): any {
+		const map = this.sourceMap;
 		if (!map || message.type !== 'response' || !message.body) {
 			return message;
 		}
-		const breakpoints = message.request_seq !== undefined ? this.xspecResponses.get(message.request_seq) : undefined;
+		const breakpoints = message.request_seq !== undefined ? this.mappedResponses.get(message.request_seq) : undefined;
 		if (breakpoints) {
-			this.xspecResponses.delete(message.request_seq!);
+			this.mappedResponses.delete(message.request_seq!);
 			return { ...message, body: { ...message.body, breakpoints: breakpoints(message.body.breakpoints ?? []) } };
 		}
 		if (message.command === 'stackTrace' && message.body.stackFrames) {
-			const stackFrames = message.body.stackFrames.map((frame: { line: number, source?: { path?: string } }) => {
-				const xspecLine = frame.source?.path && XSpecSourceMap.samePath(frame.source.path, map.runnerPath) ? map.xspecLine(frame.line) : undefined;
-				return xspecLine === undefined ? frame : { ...frame, line: xspecLine, column: 1, source: { name: path.basename(map.xspecPath), path: map.xspecPath } };
+			const stackFrames = message.body.stackFrames.map((frame: { id: number, line: number, source?: { path?: string } }) => {
+				const source = frame.source?.path && XSpecSourceMap.samePath(frame.source.path, map.generatedPath) ? map.sourceOf(frame.line) : undefined;
+				if (source !== undefined) {
+					this.sourceFrames.add(frame.id);
+				}
+				return source === undefined ? frame : { ...frame, line: source.line, column: 1, source: { name: path.basename(source.path), path: source.path } };
 			});
 			return { ...message, body: { ...message.body, stackFrames } };
+		}
+		if (message.command === 'scopes' && message.body.scopes && this.scopesRequests.has(message.request_seq)) {
+			this.scopesRequests.delete(message.request_seq);
+			message.body.scopes.filter((scope: { name: string }) => scope.name === 'Locals' || scope.name === 'Globals')
+				.forEach((scope: { variablesReference: number }) => this.filteredReferences.add(scope.variablesReference));
+		}
+		if (message.command === 'variables' && message.body.variables && map.isHiddenVariable && this.variablesRequests.has(message.request_seq)) {
+			this.variablesRequests.delete(message.request_seq);
+			return { ...message, body: { ...message.body, variables: message.body.variables.filter((v: { name: string }) => !map.isHiddenVariable!(v.name)) } };
 		}
 		return message;
 	}
@@ -1040,7 +1076,7 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			}
 			const body = this.buffer.subarray(headerEnd + 4, headerEnd + 4 + Number(length)).toString('utf8');
 			this.buffer = this.buffer.subarray(headerEnd + 4 + Number(length));
-			const message = this.xspecResponse(JSON.parse(body));
+			const message = this.mappedResponse(JSON.parse(body));
 			if (message.type === 'response') {
 				this.pending.delete(message.request_seq);
 			}

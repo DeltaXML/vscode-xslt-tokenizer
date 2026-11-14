@@ -191,9 +191,9 @@ export class SchematronTests {
 		return scenarios.concat(pendingRules.map((rule) => SchematronTests.pending(rule, targetAssertion, `no node in ${path.basename(contextFile)} fires it`)));
 	}
 
-	// the rules of the schema, in the order SchXslt2 has them, with the files sch:include brings in included - and the ids
-	// xspec-data.xsl gives those without one
-	public static rulesOf(schema: string): SchRule[] {
+	// the elements of the schema, in the order SchXslt2 has them: with the files sch:include brings in included, in place of
+	// each sch:include - each with its file, and the function for the local names of the Schematron elements in it
+	public static assembled(schema: string): { file: string, element: XmlElement, local: (e: XmlElement) => string | undefined }[] {
 		const elements: { file: string, element: XmlElement, local: (e: XmlElement) => string | undefined }[] = [];
 		const visit = (file: string, element: XmlElement, local: (e: XmlElement) => string | undefined, seen: Set<string>) => {
 			const name = local(element);
@@ -211,10 +211,19 @@ export class SchematronTests {
 		};
 		const text = SchIncludes.textOf(schema);
 		const root = text !== undefined ? parseXml(text) : undefined;
-		if (!root) {
+		if (root) {
+			visit(schema, root, SchematronTests.localOf(root), new Set([schema]));
+		}
+		return elements;
+	}
+
+	// the rules of the schema, in the order SchXslt2 has them, with the files sch:include brings in included - and the ids
+	// xspec-data.xsl gives those without one
+	public static rulesOf(schema: string): SchRule[] {
+		const elements = SchematronTests.assembled(schema);
+		if (elements.length === 0) {
 			return [];
 		}
-		visit(schema, root, SchematronTests.localOf(root), new Set([schema]));
 		const ruleElements = elements.filter((e) => e.local(e.element) === 'rule');
 		const assertionsOf = (entry: typeof elements[number]) => entry.element.children.filter((c) => entry.local(c) === 'assert' || entry.local(c) === 'report').map((c): SchAssertion => ({
 			kind: entry.local(c) as 'assert' | 'report', id: c.attributes.get('id')?.trim() || undefined, test: c.attributes.get('test') ?? '',
@@ -422,7 +431,7 @@ export class SchematronTests {
 		return fragment.replace(/<[^!?/][^>]*>/g, (tag) => tag.replace(/(=\s*)(["'])([\s\S]*?)\2/g, (_m, eq: string, quote: string, value: string) => eq + quote + value.replace(/[{}]/g, (c) => c + c) + quote));
 	}
 
-	private static localOf(root: XmlElement): (e: XmlElement) => string | undefined {
+	public static localOf(root: XmlElement): (e: XmlElement) => string | undefined {
 		const colon = root.name.indexOf(':');
 		const prefix = colon > 0 ? root.name.substring(0, colon + 1) : '';
 		return (e) => (prefix ? e.name.startsWith(prefix) : !e.name.includes(':')) ? e.name.substring(prefix.length) : undefined;

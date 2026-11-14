@@ -378,6 +378,12 @@
 				"icon": "$(play)"
 			},
 			{
+				"command": "xslt-xpath.debugSchematron",
+				"title": "Debug: the XML Context File",
+				"category": "Schematron",
+				"icon": "$(debug-alt)"
+			},
+			{
 				"command": "xslt-xpath.pickSchematronContextFile",
 				"title": "Choose XML Context File...",
 				"category": "Schematron"
@@ -652,6 +658,11 @@
 					"group": "navigation@1"
 				},
 				{
+					"command": "xslt-xpath.debugSchematron",
+					"when": "resourceLangId == sch",
+					"group": "navigation@2"
+				},
+				{
 					"command": "xslt-xpath.editQuickRunTaskSaxonJS",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
 					"group": "1_xslt@1"
@@ -790,6 +801,10 @@
 				},
 				{
 					"command": "xslt-xpath.quickRunSchematron",
+					"when": "editorLangId == sch"
+				},
+				{
+					"command": "xslt-xpath.debugSchematron",
 					"when": "editorLangId == sch"
 				},
 				{

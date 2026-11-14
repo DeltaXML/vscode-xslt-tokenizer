@@ -10,6 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { XSpecTests, XSpecTestNode, XSpecRunnerTemplate } from './xspecTests';
+import { DebugSourceMap } from './debugSourceMap';
 
 // The lines of an XSpec file and of the test runner compiled from it, for debugging an XSpec file (see
 // XsltDebugAdapterProcess): a breakpoint on an x:scenario, x:call, x:context or x:expect is set where the runner does
@@ -18,7 +19,11 @@ import { XSpecTests, XSpecTestNode, XSpecRunnerTemplate } from './xspecTests';
 // - x:scenario: its template
 // - x:call or x:context: the scenario's $x:result variable, which calls the stylesheet under test
 // - x:expect: the expectation's outcome, tested with $x:result
-export class XSpecSourceMap {
+export class XSpecSourceMap implements DebugSourceMap {
+	public readonly noStepMessage = 'XSpec: no step here - set a breakpoint on an x:scenario, x:call, x:context or x:expect';
+	public get generatedPath() {
+		return this.runnerPath;
+	}
 	// a breakpoint's line in the runner, by its line in the XSpec file
 	private readonly runnerLines = new Map<number, number>();
 	// the runner's lines for an element of the XSpec file - the innermost range is the element paused at
@@ -75,6 +80,20 @@ export class XSpecSourceMap {
 			}
 		};
 		return a === b || real(a).toLowerCase() === real(b).toLowerCase();
+	}
+
+	public isSource(file: string): boolean {
+		return XSpecSourceMap.samePath(file, this.xspecPath);
+	}
+
+	public generatedLines(_sourcePath: string, line: number): number[] | undefined {
+		const runnerLine = this.runnerLine(line);
+		return runnerLine === undefined ? undefined : [runnerLine];
+	}
+
+	public sourceOf(generatedLine: number): { path: string, line: number } | undefined {
+		const line = this.xspecLine(generatedLine);
+		return line === undefined ? undefined : { path: this.xspecPath, line };
 	}
 
 	public runnerLine(xspecLine: number): number | undefined {

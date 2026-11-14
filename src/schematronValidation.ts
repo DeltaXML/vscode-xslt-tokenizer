@@ -206,7 +206,7 @@ export class SchematronValidation {
 	}
 
 	// a phase as shown: the one the schema's defaultPhase names, for '#DEFAULT'
-	private static phaseName(phase: string, schemaText: string) {
+	public static phaseName(phase: string, schemaText: string) {
 		return phase === '#DEFAULT' ? SchematronValidation.phasesOf(schemaText).defaultPhase : phase;
 	}
 
@@ -272,8 +272,7 @@ export class SchematronValidation {
 		SchematronValidation.validated.set(xmlUri.fsPath, schema);
 		const svrl = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'schematron-')), 'report.svrl');
 		const schemaText = fs.readFileSync(schema, 'utf8');
-		const chosen = SchematronValidation.phaseFor(xmlUri.fsPath, schema);
-		const phase = chosen === '#DEFAULT' || chosen === '#ALL' || SchematronValidation.phasesOf(schemaText).phases.some((p) => p.id === chosen) ? chosen : '#DEFAULT';
+		const phase = SchematronValidation.validPhase(xmlUri.fsPath, schema, schemaText);
 		const extensions = XSpecRunner.schematronSyntaxExtensions(xmlUri, schema, schemaText);
 		const catalog = CatalogSetting.taskOption({});
 		const transpiler = path.join(XSpecRunner.home(xmlUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
@@ -302,10 +301,17 @@ export class SchematronValidation {
 			return undefined;
 		}
 		const svrlText = fs.readFileSync(svrl, 'utf8');
+		fs.rmSync(path.dirname(svrl), { recursive: true, force: true });
+		return SchematronValidation.show(xmlUri, schema, svrlText, phase);
+	}
+
+	// a validation's SVRL report: its problems, in the Problems view, and above the schema's rules how they were used
+	public static async show(xmlUri: vscode.Uri, schema: string, svrlText: string, phase: string): Promise<SchematronResult[]> {
+		const channel = SchematronValidation.output();
+		const schemaText = fs.readFileSync(schema, 'utf8');
 		const results = SchematronValidation.results(svrlText);
 		SchematronValidation.coverage.set(schema, { ...SchematronValidation.coverageOf(svrlText), xml: xmlUri.fsPath, phase });
 		SchematronValidation.coverageChanged.fire();
-		fs.rmSync(path.dirname(svrl), { recursive: true, force: true });
 		const xmlText = (await vscode.workspace.openTextDocument(xmlUri)).getText();
 		const schemaDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(schema));
 		const assertions = SchematronValidation.assertions(schemaDocument);
@@ -364,6 +370,39 @@ export class SchematronValidation {
 		}
 		await vscode.window.showTextDocument(target, { preview: false });
 		return target;
+	}
+
+	// the phase for validating the XML file with the schema: the one chosen, if the schema still has it, else '#DEFAULT'
+	public static validPhase(xml: string, schema: string, schemaText: string): string {
+		const chosen = SchematronValidation.phaseFor(xml, schema);
+		return chosen === '#DEFAULT' || chosen === '#ALL' || SchematronValidation.phasesOf(schemaText).phases.some((p) => p.id === chosen) ? chosen : '#DEFAULT';
+	}
+
+	// for debugging: the schema compiled by SchXslt2 to a stylesheet - indented, an instruction on each line - at the path,
+	// with the phase (see xslt-resources/schematron/debug-compile.xsl). Its problem, if it can't be compiled
+	public static async compileForDebug(schema: string, phase: string, compiled: string): Promise<string | undefined> {
+		const settingsUri = vscode.Uri.file(schema);
+		const saxonJar = XSpecRunner.saxonJar(settingsUri);
+		if (!saxonJar || !fs.existsSync(saxonJar)) {
+			return saxonJar ? `the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting` : 'set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first';
+		}
+		const schemaText = fs.readFileSync(schema, 'utf8');
+		const extensions = XSpecRunner.schematronSyntaxExtensions(settingsUri, schema, schemaText);
+		const catalog = CatalogSetting.taskOption({});
+		const transpiler = path.join(XSpecRunner.home(settingsUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
+		const args = ['-cp', saxonJar, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
+			'-s:' + schema, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'debug-compile.xsl'), '-o:' + compiled, '!indent=yes',
+			'?schema=' + XSpecRunner.xpathString(vscode.Uri.file(schema).toString()), '?transpiler=' + XSpecRunner.xpathString(vscode.Uri.file(transpiler).toString()),
+			...(phase !== '#DEFAULT' ? ['?phase=' + XSpecRunner.xpathString(phase)] : []),
+			...(SchExpandText.allowed() ? ['?allow-expand-text=true()'] : [])];
+		const outcome = await SchematronValidation.java(args, path.dirname(schema));
+		if (!outcome.ok || !fs.existsSync(compiled)) {
+			const channel = SchematronValidation.output();
+			channel.appendLine(`Compiling ${schema} for debugging:`);
+			channel.append(outcome.output);
+			return 'the schema couldn\'t be compiled - see the Schematron output';
+		}
+		return undefined;
 	}
 
 	// the schema's SVRL reports for documents - by their files, or as their text - with one run of Saxon, the schema compiled
