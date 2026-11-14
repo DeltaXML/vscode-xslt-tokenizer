@@ -80,7 +80,6 @@ suite('Schematron: debugging', () => {
 	let stops: { session: vscode.DebugSession; reason: string; body?: any }[] = [];
 	let onStop: (() => void) | undefined;
 	const disposables: vscode.Disposable[] = [];
-	let saveBeforeStart: string | undefined;
 	// the responses to setBreakpoints for the schema, as VS Code gets them
 	const breakpointResponses: { session: vscode.DebugSession, body: any }[] = [];
 
@@ -90,10 +89,6 @@ suite('Schematron: debugging', () => {
 		}
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
 		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', saxonJar, vscode.ConfigurationTarget.Global);
-		// starting a session saves unsaved editors (debug.saveBeforeStart): an untitled one another suite left open would
-		// get a Save As dialog, which waits for an answer
-		saveBeforeStart = vscode.workspace.getConfiguration('debug').inspect<string>('saveBeforeStart')?.globalValue;
-		await vscode.workspace.getConfiguration('debug').update('saveBeforeStart', 'none', vscode.ConfigurationTarget.Global);
 		disposables.push(vscode.debug.registerDebugAdapterTrackerFactory(SchematronDebug.debugType, {
 			createDebugAdapterTracker: (session) => ({
 				onDidSendMessage: (message: any) => {
@@ -126,7 +121,6 @@ suite('Schematron: debugging', () => {
 	suiteTeardown(async () => {
 		disposables.forEach((d) => d.dispose());
 		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', undefined, vscode.ConfigurationTarget.Global);
-		await vscode.workspace.getConfiguration('debug').update('saveBeforeStart', saveBeforeStart, vscode.ConfigurationTarget.Global);
 	});
 
 	const nextStop = () => new Promise<{ session: vscode.DebugSession; reason: string; body?: any }>((resolve) => {

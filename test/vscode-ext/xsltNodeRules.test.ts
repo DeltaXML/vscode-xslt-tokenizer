@@ -10,6 +10,7 @@ import * as path from 'path';
 import { assert } from 'chai';
 import { XsltDebug } from '../../src/xsltDebug';
 import { XsltNodeRules } from '../../src/xsltNodeRules';
+import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 
 const fixtures = path.resolve(__dirname, '..', '..', '..', 'debugger', 'test');
 
@@ -24,15 +25,13 @@ suite('XSLT debugger: the template rules each input node was processed by', func
 	let folder = '';
 	const file = (name: string) => path.join(folder, name);
 
-	// starting a session saves unsaved editors (debug.saveBeforeStart): an untitled one another suite left open would get
-	// a Save As dialog, which waits for an answer
-	let saveBeforeStart: string | undefined;
+	// the XML context file: the input files these tests open, in a folder deleted after each, aren't left as it
+	let context: { uri: vscode.Uri | null, isNone: boolean } | undefined;
 	suiteSetup(async () => {
-		saveBeforeStart = vscode.workspace.getConfiguration('debug').inspect<string>('saveBeforeStart')?.globalValue;
-		await vscode.workspace.getConfiguration('debug').update('saveBeforeStart', 'none', vscode.ConfigurationTarget.Global);
+		context = await DocumentChangeHandler.contextFor(undefined);
 	});
-	suiteTeardown(async () => {
-		await vscode.workspace.getConfiguration('debug').update('saveBeforeStart', saveBeforeStart, vscode.ConfigurationTarget.Global);
+	suiteTeardown(() => {
+		DocumentChangeHandler.setLastPicked(context!.uri, context!.isNone);
 	});
 
 	setup(() => {
