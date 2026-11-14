@@ -12,6 +12,7 @@ import { assert } from 'chai';
 import { SchematronDebug } from '../../src/schematronDebug';
 import { SchematronContext } from '../../src/schematronContext';
 import { SchIncludes } from '../../src/schIncludes';
+import { XsltEmptySteps } from '../../src/xsltEmptySteps';
 
 const iso = 'xmlns="http://purl.oclc.org/dsdl/schematron"';
 const schemaText = `<schema ${iso} queryBinding="xslt3">
@@ -29,6 +30,34 @@ const dataText = `<orders>
   <order id="A1" date="2026-11-02"><line/></order>
   <order id="B2" date="2026-11-31"/>
 </orders>`;
+
+suite('Schematron: debugging - the paths checked for empty steps', () => {
+	test('in the rule paused in: its lets, tests and messages up to the line - all its lets at the rule - not its context, nor an abstract pattern\'s parameters', () => {
+		const text = [
+			`<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt3">`,
+			'  <sch:let name="g" value="/orders/order"/>',
+			'  <sch:pattern id="p">',
+			'    <sch:rule context="order/item">',
+			'      <sch:let name="n" value="name/first"/>',
+			'      <sch:assert test="price/amount">No <sch:value-of select="../code"/></sch:assert>',
+			'      <sch:report test="$n/x and note">Noted</sch:report>',
+			'    </sch:rule>',
+			'  </sch:pattern>',
+			'  <sch:pattern abstract="true" id="a">',
+			'    <sch:rule context="$e"><sch:let name="v" value="$v2"/><sch:assert test="$attr/x, $v/y, q/r">x</sch:assert></sch:rule>',
+			'  </sch:pattern>',
+			'</sch:schema>'].join('\n');
+		const chains = (line: number) => XsltEmptySteps.schematronChains(text, line).map((c) => c.points.map((p) => text.substring(p.markStart, p.markEnd)).join(' '));
+		// at the rule: its lets
+		assert.deepStrictEqual(chains(3), ['name first']);
+		assert.deepStrictEqual(chains(5), ['name first', 'price amount', '.. code']);
+		assert.deepStrictEqual(chains(6), ['name first', 'price amount', '.. code', '$n x', 'note']);
+		// a global let: from the root or a variable only
+		assert.deepStrictEqual(chains(1), ['orders order']);
+		// $attr is the abstract pattern's parameter - $v is its let
+		assert.deepStrictEqual(chains(10), []);
+	});
+});
 
 suite('Schematron: debugging', () => {
 	const saxonJar = process.env.XSLT_TEST_SAXON_JAR ?? process.env.XSPEC_SAXON_JAR;
@@ -70,6 +99,7 @@ suite('Schematron: debugging', () => {
 	teardown(async () => {
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		await SchematronContext.setContextFile(file('orders.sch'), undefined);
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 		fs.rmSync(folder, { recursive: true, force: true });
 	});
 	suiteTeardown(async () => {
@@ -154,5 +184,87 @@ suite('Schematron: debugging', () => {
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		await second.session.customRequest('continue', { threadId: 1 });
 		await finished;
+	});
+
+	test('fades a path step that\'s empty for the rule\'s node, with why in its hover', async () => {
+		const schema = vscode.Uri.file(file('orders.sch'));
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(schema));
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(lineOf('id="has-lines"'), 0)))]);
+		const finished = ended();
+		assert.isTrue(await SchematronDebug.debug(schema));
+		// A1 has a line
+		let stop = await nextStop();
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+		assert.deepStrictEqual(XsltEmptySteps.lastFaded, []);
+		await stop.session.customRequest('continue', { threadId: 1 });
+		// B2 hasn't
+		stop = await nextStop();
+		for (let i = 0; i < 100 && XsltEmptySteps.lastFaded.length === 0; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		const faded = XsltEmptySteps.lastFaded;
+		assert.deepStrictEqual(faded.map((f) => `${f.line}: ${f.text}`), [`${lineOf('id="has-lines"')}: line`]);
+		assert.include(faded[0].hover, 'no `line` - 0 child elements');
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		await stop.session.customRequest('continue', { threadId: 1 });
+		await finished;
+	});
+
+	test('the phase: a breakpoint in a pattern that isn\'t active in it isn\'t verified, and says why', async () => {
+		fs.writeFileSync(file('orders.sch'), schemaText.replace('queryBinding="xslt3">', 'queryBinding="xslt3" defaultPhase="lines">')
+			.replace('  <pattern id="orders">', `  <phase id="lines"><active pattern="lines"/></phase>
+  <pattern id="lines"><rule context="line"><assert test="true()" id="line-ok">x</assert></rule></pattern>
+  <pattern id="orders">`));
+		const text = fs.readFileSync(file('orders.sch'), 'utf8');
+		const schema = vscode.Uri.file(file('orders.sch'));
+		breakpointResponses.length = 0;
+		const line = (t: string) => text.split('\n').findIndex((l) => l.includes(t));
+		vscode.debug.addBreakpoints([line('id="valid-date"'), line('id="line-ok"')].map((l) => new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(l, 0)))));
+		const finished = ended();
+		assert.isTrue(await SchematronDebug.debug(schema));
+		const stop = await nextStop();
+		assert.match(stop.session.name, /\(phase lines\)$/);
+		const response = breakpointResponses.find((r) => r.session === stop.session && r.body.breakpoints?.length === 2)?.body;
+		// by line, as VS Code sends them
+		const at = (l: number) => response.breakpoints.find((b: any) => b.line === l + 1);
+		assert.isTrue(at(line('id="line-ok"')).verified);
+		assert.isFalse(at(line('id="valid-date"')).verified);
+		assert.strictEqual(at(line('id="valid-date"')).message, 'Schematron: the pattern orders isn\'t active in the phase lines');
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		await stop.session.customRequest('continue', { threadId: 1 });
+		await finished;
+	});
+
+	test('is-a: a breakpoint on an instance pauses for its copy alone - named for it, with its parameters', async () => {
+		fs.writeFileSync(file('orders.sch'), `<schema ${iso} queryBinding="xslt3">
+  <pattern abstract="true" id="required">
+    <param name="element"/>
+    <param name="attribute"/>
+    <rule context="$element"><assert test="$attribute" id="required-attribute">needs it</assert></rule>
+  </pattern>
+  <pattern id="order-ids" is-a="required"><param name="element" value="order"/><param name="attribute" value="@id"/></pattern>
+  <pattern id="order-dates" is-a="required"><param name="element" value="order"/><param name="attribute" value="@date"/></pattern>
+</schema>`);
+		const text = fs.readFileSync(file('orders.sch'), 'utf8');
+		const schema = vscode.Uri.file(file('orders.sch'));
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(text.split('\n').findIndex((l) => l.includes('id="order-dates"')), 0)))]);
+		const finished = ended();
+		assert.isTrue(await SchematronDebug.debug(schema));
+		const names: string[] = [];
+		let parameters: string[] = [];
+		for (let i = 0; i < 2; i++) {
+			const stop = await nextStop();
+			const frame = (await stop.session.customRequest('stackTrace', { threadId: 1 })).stackFrames[0];
+			names.push(`${frame.name} @${frame.line}`);
+			const { scopes } = await stop.session.customRequest('scopes', { frameId: frame.id });
+			const scope = scopes.find((s: any) => s.name === 'Parameters');
+			parameters = (await stop.session.customRequest('variables', { variablesReference: scope.variablesReference })).variables.map((v: any) => `${v.name}=${v.value}`);
+			await stop.session.customRequest('continue', { threadId: 1 });
+		}
+		await finished;
+		// the rule of the abstract pattern, for each order - order-dates' copy only
+		const ruleLine = text.split('\n').findIndex((l) => l.includes('<rule context="$element">')) + 1;
+		assert.deepEqual(names, [`rule order - order-dates (is-a required) @${ruleLine}`, `rule order - order-dates (is-a required) @${ruleLine}`]);
+		assert.deepEqual(parameters, ['$element=order', '$attribute=@date']);
 	});
 });

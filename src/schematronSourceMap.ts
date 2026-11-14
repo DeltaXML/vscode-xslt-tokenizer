@@ -32,8 +32,15 @@ export class SchematronSourceMap implements DebugSourceMap {
 	private readonly stops = new Set<number>();
 	// the names the schema - with the files it includes - declares with sch:let and sch:param
 	private readonly declared = new Set<string>();
+	// each rule's template, for each copy: its name - with an abstract pattern's instance - and the instance's parameters
+	private readonly templates: { first: number, last: number, name: string, parameters?: { name: string, value: string }[] }[] = [];
+	// the patterns - and groups - not active in the phase, with their lines in their files
+	private readonly inactive: { path: string, first: number, last: number, id: string }[] = [];
+	// the phase's id - the one the schema's defaultPhase names, for '#DEFAULT'
+	private phaseId: string | undefined;
 
-	constructor(public readonly schemaPath: string, public readonly generatedPath: string, generatedText: string) {
+	// phase: the phase the schema is compiled with - its id, '#ALL' or '#DEFAULT'
+	constructor(public readonly schemaPath: string, public readonly generatedPath: string, generatedText: string, private readonly phase = '#DEFAULT') {
 		const generatedLine = lineOf(generatedText);
 		const sourceLines = new Map<string, (offset: number) => number>();
 		const sourceLine = (file: string, element: XmlElement) => {
@@ -83,6 +90,38 @@ export class SchematronSourceMap implements DebugSourceMap {
 				}
 			}
 		});
+		// the patterns and groups, by their ids - as validate.xsl gives them, for the schema's
+		const patterns = new Map<string, typeof entries[number]>();
+		let schemaPatternCount = 0;
+		let schemaGroupCount = 0;
+		entries.forEach((entry) => {
+			const name = entry.local(entry.element);
+			if (name === 'pattern' || name === 'group') {
+				const inSchema = XSpecSourceMap.samePath(entry.file, schemaPath);
+				const count = name === 'pattern' ? (schemaPatternCount += inSchema ? 1 : 0) : (schemaGroupCount += inSchema ? 1 : 0);
+				const id = entry.element.attributes.get('id')?.trim() || (inSchema ? `vscode-${name}-${count}` : undefined);
+				if (id && !patterns.has(id)) {
+					patterns.set(id, entry);
+				}
+			}
+		});
+		// those not active in the phase: SchXslt2 has no templates for them
+		const schemaRoot = entries[0]?.element;
+		const phaseId = this.phaseId = this.phase === '#DEFAULT' ? schemaRoot?.attributes.get('defaultPhase')?.trim() : this.phase === '#ALL' ? undefined : this.phase;
+		const phaseEntry = phaseId ? entries.find((entry) => entry.local(entry.element) === 'phase' && entry.element.attributes.get('id')?.trim() === phaseId) : undefined;
+		if (phaseEntry) {
+			const active = new Set(phaseEntry.element.children.filter((c) => phaseEntry.local(c) === 'active').map((c) => c.attributes.get('pattern')?.trim()));
+			// an abstract pattern is active with an instance of it
+			const instancesActive = (id: string) => [...patterns.values()].some((p) => p.element.attributes.get('is-a')?.trim() === id && active.has(p.element.attributes.get('id')?.trim()));
+			patterns.forEach((entry, id) => {
+				const isAbstract = entry.element.attributes.get('abstract')?.trim() === 'true';
+				if (isAbstract ? !instancesActive(id) : !active.has(id)) {
+					const text = SchIncludes.textOf(entry.file) ?? '';
+					const line = lineOf(text);
+					this.inactive.push({ path: entry.file, first: line(entry.element.start), last: line(entry.element.end), id: entry.element.attributes.get('id')?.trim() ?? id });
+				}
+			});
+		}
 		const root = parseXml(generatedText);
 		if (!root) {
 			return;
@@ -107,6 +146,24 @@ export class SchematronSourceMap implements DebugSourceMap {
 			}
 			this.ranges.push({ first: generatedLine(template.start), last: generatedLine(template.end), path: rule.file, line: sourceLine(rule.file, rule.element) });
 			add(rule.file, rule.element, fired, fired);
+			// its pattern - for an abstract pattern's rule, the instance it's for - as SchXslt2 reports it: a breakpoint on
+			// the pattern's line pauses where its rules fire
+			const patternId = descendants(template).map((e) => e.attributes.get('patternId')).find((id) => id);
+			const pattern = patternId ? patterns.get(patternId) : undefined;
+			if (pattern) {
+				add(pattern.file, pattern.element, fired, fired);
+			}
+			const abstractId = pattern?.element.attributes.get('is-a')?.trim();
+			const abstractPattern = abstractId ? patterns.get(abstractId) : undefined;
+			const parameters = pattern && abstractPattern ? abstractPattern.element.children.filter((c) => abstractPattern.local(c) === 'param').map((p) => {
+				const name = p.attributes.get('name')?.trim() ?? '';
+				const given = pattern.element.children.find((c) => pattern.local(c) === 'param' && c.attributes.get('name')?.trim() === name);
+				return { name: '$' + name, value: given?.attributes.get('value') ?? p.attributes.get('value') ?? '(not supplied)' };
+			}) : undefined;
+			this.templates.push({
+				first: generatedLine(template.start), last: generatedLine(template.end), parameters,
+				name: `rule ${fired.attributes.get('context') ?? rule.element.attributes.get('context') ?? ''}${abstractId ? ` - ${patternId} (is-a ${abstractId})` : ''}`
+			});
 			// its sch:let - and those of the abstract rules it extends, copied into it - as variables, in order, by name
 			const lets = this.letsOf(rule, rules);
 			const variables = descendants(template).filter((v) => isXslt(v) && local(v) === 'variable' && !v.attributes.get('name')!.startsWith('Q{') &&
@@ -152,9 +209,9 @@ export class SchematronSourceMap implements DebugSourceMap {
 		});
 	}
 
-	public static load(schemaPath: string, generatedPath: string): SchematronSourceMap | undefined {
+	public static load(schemaPath: string, generatedPath: string, phase?: string): SchematronSourceMap | undefined {
 		try {
-			return new SchematronSourceMap(schemaPath, generatedPath, fs.readFileSync(generatedPath, 'utf8'));
+			return new SchematronSourceMap(schemaPath, generatedPath, fs.readFileSync(generatedPath, 'utf8'), phase);
 		} catch {
 			return undefined;
 		}
@@ -196,10 +253,27 @@ export class SchematronSourceMap implements DebugSourceMap {
 		return file ? this.lines.get(file)!.get(line) : undefined;
 	}
 
-	public sourceOf(generatedLine: number): { path: string, line: number } | undefined {
+	public sourceOf(generatedLine: number): { path: string, line: number, name?: string } | undefined {
 		const containing = this.ranges.filter((range) => range.first <= generatedLine && generatedLine <= range.last);
 		containing.sort((a, b) => (a.last - a.first) - (b.last - b.first));
-		return containing[0] ? { path: containing[0].path, line: containing[0].line } : undefined;
+		return containing[0] ? { path: containing[0].path, line: containing[0].line, name: this.templateAt(generatedLine)?.name } : undefined;
+	}
+
+	// the rule's template the line is in
+	private templateAt(generatedLine: number) {
+		return this.templates.find((t) => t.first <= generatedLine && generatedLine <= t.last);
+	}
+
+	// paused in a rule of an abstract pattern's instance: the instance's parameters, as text, replaced in its copy
+	public parametersAt(generatedLine: number): { scope: string, variables: { name: string, value: string }[] } | undefined {
+		const template = this.templateAt(generatedLine);
+		return template?.parameters ? { scope: 'Parameters', variables: template.parameters } : undefined;
+	}
+
+	// a breakpoint in a pattern that isn't active in the phase: why it has no step
+	public noStepMessageFor(sourcePath: string, line: number): string | undefined {
+		const pattern = this.inactive.filter((p) => XSpecSourceMap.samePath(p.path, sourcePath) && p.first <= line && line <= p.last).pop();
+		return pattern ? `Schematron: the pattern ${pattern.id} isn't active in the phase ${this.phaseId}` : undefined;
 	}
 
 	public stepLines(): number[] {

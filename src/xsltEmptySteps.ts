@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { BaseToken, TokenLevelState } from './xpLexer';
 import { XslLexer, XSLTokenLevelState } from './xslLexer';
-import { XSLTConfiguration } from './languageConfigurations';
+import { SchConfiguration, XSLTConfiguration } from './languageConfigurations';
 
 // a point in a path or lookup chain where its value so far can be checked: the variable it starts with, a step
 // ('/' or '//' and a node test), a predicate ('[...]') or a lookup ('?key')
@@ -127,7 +127,8 @@ export class XsltEmptySteps {
 		}
 		const document = editor.document;
 		const text = document.getText();
-		const chains = XsltEmptySteps.chains(text, frame.line - 1, frame.column, /\(XPath\)$/.test(frame.name ?? ''));
+		const chains = document.languageId === 'sch' ? XsltEmptySteps.schematronChains(text, frame.line - 1) :
+			XsltEmptySteps.chains(text, frame.line - 1, frame.column, /\(XPath\)$/.test(frame.name ?? ''));
 		if (chains.length === 0) {
 			return;
 		}
@@ -390,6 +391,119 @@ export class XsltEmptySteps {
 			const isStopped = stopped !== undefined && group.elementLine === stopped.line && group.elementCharacter === stopped.character;
 			// an xsl:sort's select is evaluated for each item sorted
 			const relativeAllowed = !inXPathFrame && stopped !== undefined && group.focus === stopped.focus && (isStopped || group.elementName !== 'xsl:sort');
+			chains.push(...XsltEmptySteps.groupChains(group.tokens, text, offset, relativeAllowed));
+		}
+		return chains;
+	}
+
+	/**
+	 * In a Schematron schema, paused in a rule - at the rule, a let, an assert or report, or a value-of in its message -
+	 * the paths of the rule's lets, tests and messages on lines up to the one paused at (its lets all, when paused at
+	 * the rule), relative ones too: they're all evaluated with the rule's node as the context item. Not the rule's
+	 * context (a match pattern), and not paths with a variable an abstract pattern's rule has as a parameter (replaced
+	 * by the instance's text). Paused elsewhere - e.g. at a global let - only that element's paths from a variable or
+	 * the root
+	 */
+	public static schematronChains(text: string, stopLine: number): PathChain[] {
+		const tokens = new XslLexer(SchConfiguration.configuration).analyse(text);
+		const xslStart = XslLexer.getXsltStartTokenNumber();
+		const lineStarts = [0];
+		for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) {
+			lineStarts.push(i + 1);
+		}
+		const offset = (token: BaseToken) => lineStarts[token.line] + token.startCharacter;
+		const tokenText = (token: BaseToken) => text.substr(offset(token), token.length);
+		const localName = (name: string) => name.replace(/^.*:/, '');
+		const evaluated = new Set(['test', 'value', 'select', 'path', 'subject']);
+
+		// the XPath tokens of each attribute, with its element - its line and local name - and the rule it's in (its line)
+		const groups: { elementLine: number; elementName: string; rule: number; abstract: boolean; tokens: BaseToken[] }[] = [];
+		// the lines of the elements starting on each line, and the rule they're in
+		const startTags: { line: number; name: string; rule: number }[] = [];
+		const stack: { name: string; line: number; abstract: boolean }[] = [];
+		// the variables lets declare: a variable that isn't one, in an abstract pattern, is the pattern's parameter
+		const declared = new Set<string>();
+		const ruleOf = () => [...stack].reverse().find((e) => e.name === 'rule')?.line ?? -1;
+		let elementName: string | undefined;
+		let elementLine = -1;
+		let abstract = false;
+		let isEndTag = false;
+		let attributeName: string | undefined;
+		let current: BaseToken[] | undefined;
+		for (const token of tokens) {
+			if (token.tokenType < xslStart) {
+				if (attributeName !== undefined && elementName !== undefined && evaluated.has(attributeName) && elementName !== 'rule') {
+					if (!current) {
+						current = [];
+						groups.push({ elementLine, elementName, rule: ruleOf(), abstract: stack.some((e) => e.abstract), tokens: current });
+					}
+					current.push(token);
+				}
+				continue;
+			}
+			const type = token.tokenType - xslStart;
+			if (type === XSLTokenLevelState.attributeValue) {
+				const value = tokenText(token).replace(/^["']|["']$/g, '');
+				if (attributeName === 'abstract' && elementName === 'pattern') {
+					abstract = value === 'true';
+				} else if (attributeName === 'name' && elementName === 'let') {
+					declared.add(value);
+				}
+				continue;
+			}
+			if (type === XSLTokenLevelState.entityRef || type === XSLTokenLevelState.attributeEquals) {
+				continue;
+			}
+			current = undefined;
+			attributeName = undefined;
+			if (type === XSLTokenLevelState.elementName || type === XSLTokenLevelState.xslElementName) {
+				if (isEndTag) {
+					stack.pop();
+				} else {
+					elementName = localName(tokenText(token));
+					if (elementLine <= stopLine) {
+						startTags.push({ line: elementLine, name: elementName, rule: elementName === 'rule' ? elementLine : ruleOf() });
+					}
+				}
+			} else if (type === XSLTokenLevelState.attributeName) {
+				attributeName = elementName !== undefined ? tokenText(token) : undefined;
+			} else if (type === XSLTokenLevelState.xmlPunctuation) {
+				const punctuation = tokenText(token);
+				if (punctuation === '<' || punctuation === '</') {
+					isEndTag = punctuation === '</';
+					elementName = undefined;
+					elementLine = token.line;
+					abstract = false;
+				} else if (punctuation === '>' && elementName !== undefined && !isEndTag) {
+					stack.push({ name: elementName, line: elementLine, abstract });
+					elementName = undefined;
+				} else if (punctuation === '/>') {
+					elementName = undefined;
+				}
+			}
+		}
+		// the element paused at: the first starting on the line
+		const stopped = startTags.find((s) => s.line === stopLine);
+		if (!stopped) {
+			return [];
+		}
+		const chains: PathChain[] = [];
+		for (const group of groups) {
+			let relativeAllowed: boolean;
+			if (stopped.rule >= 0) {
+				const inScope = group.rule === stopped.rule && (group.elementLine <= stopLine || (stopped.name === 'rule' && group.elementName === 'let'));
+				if (!inScope) {
+					continue;
+				}
+				relativeAllowed = true;
+			} else if (group.elementLine === stopLine) {
+				relativeAllowed = false;
+			} else {
+				continue;
+			}
+			if (group.abstract && group.tokens.some((t) => t.tokenType === TokenLevelState.variable && !declared.has(t.value.replace(/^\$/, '')))) {
+				continue;
+			}
 			chains.push(...XsltEmptySteps.groupChains(group.tokens, text, offset, relativeAllowed));
 		}
 		return chains;

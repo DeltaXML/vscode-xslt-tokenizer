@@ -912,7 +912,11 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	private readonly sourceBreakpoints = new Map<string, DebugBreakpoint[]>();
 	// for hiding the generated stylesheet's own variables (see DebugSourceMap.isHiddenVariable): the frames paused in a
 	// source file, the scopes and variables requests for them, by seq, and their Locals' and Globals' references
-	private readonly sourceFrames = new Set<number>();
+	private readonly sourceFrames = new Map<number, number>();
+	// values shown in a scope of their own, e.g. an abstract pattern's parameters (see DebugSourceMap.parametersAt): by
+	// their scope's reference, which the adapter doesn't know - so their variables requests are answered here
+	private readonly ownScopes = new Map<number, { name: string, value: string }[]>();
+	private nextOwnScope = 0x40000000;
 	private readonly scopesRequests = new Map<number, number>();
 	private readonly variablesRequests = new Map<number, number>();
 	private readonly filteredReferences = new Set<number>();
@@ -922,9 +926,9 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		XsltDebugLog.info(`Debug session '${session.name}': ${command} ${args.map(quote).join(' ')}${cwd ? `\n    in ${cwd}` : ''}`);
 		XsltDebugProblems.clear();
 		XsltDebugOutputs.get().startSession();
-		const { xspecFile, xsltFile, schematronFile } = session.configuration;
+		const { xspecFile, xsltFile, schematronFile, schematronPhase } = session.configuration;
 		this.sourceMap = typeof xsltFile !== 'string' ? undefined : typeof xspecFile === 'string' ? XSpecSourceMap.load(xspecFile, xsltFile) :
-			typeof schematronFile === 'string' ? SchematronSourceMap.load(schematronFile, xsltFile) : undefined;
+			typeof schematronFile === 'string' ? SchematronSourceMap.load(schematronFile, xsltFile, typeof schematronPhase === 'string' ? schematronPhase : undefined) : undefined;
 		this.process = cp.spawn(command, args, { cwd });
 		this.process.stdout?.on('data', (data: Buffer) => this.receive(data));
 		this.process.stderr?.on('data', (data: Buffer) => {
@@ -952,6 +956,13 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	}
 
 	public handleMessage(message: vscode.DebugProtocolMessage): void {
+		const own = message as { type?: string; command?: string; seq: number; arguments?: { variablesReference?: number } };
+		if (own.type === 'request' && own.command === 'variables' && own.arguments?.variablesReference !== undefined && this.ownScopes.has(own.arguments.variablesReference)) {
+			// a scope of the proxy's own: its values, as variables
+			const variables = this.ownScopes.get(own.arguments.variablesReference)!.map((v) => ({ name: v.name, value: v.value, variablesReference: 0 }));
+			this.messages.fire({ seq: 0, type: 'response', request_seq: own.seq, success: true, command: 'variables', body: { variables } } as vscode.DebugProtocolMessage);
+			return;
+		}
 		message = this.mappedRequest(message);
 		const request = message as { type?: string; command?: string; seq: number };
 		if (request.type === 'request') {
@@ -1009,7 +1020,7 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		this.mappedResponses.set(request.seq, (breakpoints) => requested.map((breakpoint, index) => {
 			const responses = generated.map((g, i) => ({ g, response: breakpoints[i] })).filter(({ g }) => g.file === key && g.index === index).map(({ response }) => response);
 			if (responses.length === 0) {
-				return { verified: false, line: breakpoint.line, message: map.noStepMessage };
+				return { verified: false, line: breakpoint.line, message: map.noStepMessageFor?.(key, breakpoint.line) ?? map.noStepMessage };
 			}
 			const verified = responses.find((response) => response?.verified);
 			return { ...(verified ?? responses[0] ?? {}), verified: !!verified, line: breakpoint.line, source: { path: sourcePath } };
@@ -1033,16 +1044,24 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			const stackFrames = message.body.stackFrames.map((frame: { id: number, line: number, source?: { path?: string } }) => {
 				const source = frame.source?.path && XSpecSourceMap.samePath(frame.source.path, map.generatedPath) ? map.sourceOf(frame.line) : undefined;
 				if (source !== undefined) {
-					this.sourceFrames.add(frame.id);
+					this.sourceFrames.set(frame.id, frame.line);
 				}
-				return source === undefined ? frame : { ...frame, line: source.line, column: 1, source: { name: path.basename(source.path), path: source.path } };
+				return source === undefined ? frame : { ...frame, line: source.line, column: 1, source: { name: path.basename(source.path), path: source.path }, ...(source.name ? { name: source.name } : {}) };
 			});
 			return { ...message, body: { ...message.body, stackFrames } };
 		}
 		if (message.command === 'scopes' && message.body.scopes && this.scopesRequests.has(message.request_seq)) {
+			const frameId = this.scopesRequests.get(message.request_seq)!;
 			this.scopesRequests.delete(message.request_seq);
 			message.body.scopes.filter((scope: { name: string }) => scope.name === 'Locals' || scope.name === 'Globals')
 				.forEach((scope: { variablesReference: number }) => this.filteredReferences.add(scope.variablesReference));
+			// and a scope of the proxy's own, e.g. for an abstract pattern's parameters
+			const parameters = map.parametersAt?.(this.sourceFrames.get(frameId)!);
+			if (parameters) {
+				const reference = this.nextOwnScope++;
+				this.ownScopes.set(reference, parameters.variables);
+				return { ...message, body: { ...message.body, scopes: [...message.body.scopes, { name: parameters.scope, variablesReference: reference, expensive: false }] } };
+			}
 		}
 		if (message.command === 'variables' && message.body.variables && map.isHiddenVariable && this.variablesRequests.has(message.request_seq)) {
 			this.variablesRequests.delete(message.request_seq);

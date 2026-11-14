@@ -21,8 +21,14 @@ export interface DebugSourceMap {
 	isSource(file: string): boolean;
 	// the generated stylesheet's lines for a source line - undefined if it has no step, e.g. in an x:context's content
 	generatedLines(sourcePath: string, line: number): number[] | undefined;
-	// the source file and line for a line of the generated stylesheet - undefined if it's for no step
-	sourceOf(generatedLine: number): { path: string, line: number } | undefined;
+	// the source file and line for a line of the generated stylesheet - undefined if it's for no step - with a name for the
+	// frame, if it has one
+	sourceOf(generatedLine: number): { path: string, line: number, name?: string } | undefined;
+	// a breakpoint at a source line with no step: why, if there's more to say than noStepMessage
+	noStepMessageFor?(sourcePath: string, line: number): string | undefined;
+	// paused at a line of the generated stylesheet: values to show in a scope of their own, e.g. an abstract pattern's
+	// parameters, which aren't variables
+	parametersAt?(generatedLine: number): { scope: string, variables: { name: string, value: string }[] } | undefined;
 	// the generated stylesheet's lines for the source files' steps: where a step stops (the debugger's stepStops)
 	stepLines(): number[];
 	// whether a variable shown when paused in a source file - in its Locals or Globals - is the generated stylesheet's own,

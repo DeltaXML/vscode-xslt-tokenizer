@@ -135,7 +135,9 @@ export class SchematronValidation {
 			// SchematronContext); for a file sch:include brings in, the schema that includes it
 			const schema = SchematronContext.schemaOf(target) ?? target.fsPath;
 			const xml = SchematronContext.contextFor(schema)?.file ?? await SchematronContext.pick(schema);
-			if (xml && (!choosePhase || await SchematronValidation.setPhase(xml, schema))) {
+			if (xml && choosePhase) {
+				await SchematronValidation.choosePhaseFor(xml, schema);
+			} else if (xml) {
 				await SchematronValidation.validate(vscode.Uri.file(xml), schema, true);
 			}
 			return;
@@ -150,9 +152,25 @@ export class SchematronValidation {
 			// another schema: its default phase, until one is chosen
 			await SchematronValidation.storePhase(target.fsPath, schema, '#DEFAULT');
 		}
-		if (!choosePhase || await SchematronValidation.setPhase(target.fsPath, schema)) {
+		if (choosePhase) {
+			await SchematronValidation.choosePhaseFor(target.fsPath, schema);
+		} else {
 			await SchematronValidation.validate(target, schema, true);
 		}
+	}
+
+	// Choose Phase: the phase for the XML file and schema - for Quick Run, Validate and Debug. With the file validated with
+	// the schema already, it's validated again, so its problems are those of the phase
+	private static async choosePhaseFor(xml: string, schema: string) {
+		if (await SchematronValidation.setPhase(xml, schema) && SchematronValidation.validated.get(xml) === schema) {
+			await SchematronValidation.validate(vscode.Uri.file(xml), schema, true);
+		}
+	}
+
+	// the schema for an XML file: the one its xml-model associates with it, else the one last used for it
+	public static schemaFor(xml: string, text: string): string | undefined {
+		const pair = SchematronValidation.pairs()[xml];
+		return SchematronValidation.xmlModel(text, xml) ?? (pair && fs.existsSync(pair) ? pair : undefined);
 	}
 
 	// the phases of a schema: the id of each, with its title or first paragraph - and its defaultPhase
@@ -179,7 +197,12 @@ export class SchematronValidation {
 	private static async storePhase(xml: string, schema: string, phase: string) {
 		const phases = SchematronValidation.state.get<{ [key: string]: string }>(SchematronValidation.phaseStateKey, {});
 		await SchematronValidation.state.update(SchematronValidation.phaseStateKey, { ...phases, [`${xml}\u0000${schema}`]: phase });
+		SchematronValidation.phaseChangedEmitter.fire();
 	}
+
+	// when a phase is chosen - e.g. to show it in the status bar
+	private static readonly phaseChangedEmitter = new vscode.EventEmitter<void>();
+	public static readonly onDidChangePhase = SchematronValidation.phaseChangedEmitter.event;
 
 	// for testing: how the phase is chosen
 	public static choosePhase = async (items: { label: string, description?: string, phase: string }[], current: string, schemaName: string) =>
@@ -270,6 +293,8 @@ export class SchematronValidation {
 		const others = Object.entries(SchematronValidation.pairs()).filter(([xml]) => xml !== xmlUri.fsPath);
 		await SchematronValidation.state.update(SchematronValidation.stateKey, { ...Object.fromEntries(others), [xmlUri.fsPath]: schema });
 		SchematronValidation.validated.set(xmlUri.fsPath, schema);
+		// the file's schema, for the phase shown in the status bar
+		SchematronValidation.phaseChangedEmitter.fire();
 		const svrl = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'schematron-')), 'report.svrl');
 		const schemaText = fs.readFileSync(schema, 'utf8');
 		const phase = SchematronValidation.validPhase(xmlUri.fsPath, schema, schemaText);

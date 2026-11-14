@@ -32,6 +32,8 @@ export class SchematronContext {
 	public static browse = async () => (await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'XML': ['xml'], 'All files': ['*'] }, openLabel: 'Choose' }))?.[0]?.fsPath;
 	// called when the context file of a schema changes - e.g. to show it in the status bar
 	public static onChange: (() => void) | undefined;
+	// the status bar item for the phase: of the schema and its XML context file - or of the XML file and its schema
+	private static phaseItem: vscode.StatusBarItem | undefined;
 
 	public static activate(context: vscode.ExtensionContext) {
 		SchematronContext.state = context.workspaceState;
@@ -43,6 +45,55 @@ export class SchematronContext {
 				}
 			}),
 			vscode.commands.registerCommand(SchematronContext.quickRunCommand, (uri?: vscode.Uri) => SchematronContext.quickRun(uri)));
+		// the phase: just right of the context file's item, at 100
+		const phaseItem = vscode.window.createStatusBarItem('xslt-xpath.schematronPhase', vscode.StatusBarAlignment.Right, 99.9);
+		phaseItem.name = 'Schematron Phase';
+		SchematronContext.phaseItem = phaseItem;
+		context.subscriptions.push(phaseItem,
+			vscode.window.onDidChangeActiveTextEditor(() => SchematronContext.showPhase()),
+			SchematronValidation.onDidChangePhase(() => SchematronContext.showPhase()),
+			vscode.workspace.onDidSaveTextDocument((document) => document.languageId === 'sch' && SchematronContext.showPhase()));
+		SchematronContext.showPhase();
+	}
+
+	// for testing: the phase's status bar item
+	public static phaseStatus() {
+		const item = SchematronContext.phaseItem;
+		return item ? { text: item.text, tooltip: (item.tooltip as vscode.MarkdownString | undefined)?.value, command: item.command } : undefined;
+	}
+
+	// the phase Quick Run, Validate and Debug use: for a Schematron file, of its schema and XML context file - for an XML
+	// file with a Schematron schema, of the file and schema. A click chooses another
+	public static showPhase() {
+		const item = SchematronContext.phaseItem;
+		const document = vscode.window.activeTextEditor?.document;
+		if (!item) {
+			return;
+		}
+		let schema: string | undefined;
+		let xml: string | undefined;
+		if (document?.languageId === 'sch') {
+			schema = SchematronContext.schemaOf(document.uri);
+			xml = schema ? SchematronContext.contextFor(schema)?.file : undefined;
+		} else if (document && document.uri.scheme === 'file' && document.languageId === 'xml') {
+			xml = document.fileName;
+			schema = SchematronValidation.schemaFor(xml, document.getText());
+		}
+		if (!document || !schema || !fs.existsSync(schema)) {
+			item.hide();
+			return;
+		}
+		const schemaText = fs.readFileSync(schema, 'utf8');
+		const { phases, defaultPhase } = SchematronValidation.phasesOf(schemaText);
+		const phase = xml ? SchematronValidation.validPhase(xml, schema, schemaText) : '#DEFAULT';
+		const name = phases.length === 0 ? 'all patterns' : phase === '#ALL' ? 'all patterns (#ALL)' :
+			phase === '#DEFAULT' ? `${defaultPhase ?? 'all patterns'} (default)` : phase;
+		item.text = `$(layers) ${phases.length === 0 ? name : 'phase: ' + name}`;
+		const forFiles = `for \`${path.basename(schema)}\`${xml ? ` and \`${path.basename(xml)}\`` : ''}`;
+		item.tooltip = new vscode.MarkdownString(phases.length === 0 ? `Schematron: \`${path.basename(schema)}\` has no phases - all its patterns are used.` :
+			`Schematron phase ${forFiles}: **${name}** - used by Quick Run, Validate and Debug.\n\nClick to choose another.`);
+		item.command = phases.length === 0 ? undefined : { command: SchematronValidation.choosePhaseCommand, title: 'Choose Phase...', arguments: [document.uri] };
+		item.show();
 	}
 
 	// the schema whose context file the Schematron file has: the schema that includes it, directly or not - else itself
@@ -74,6 +125,7 @@ export class SchematronContext {
 		const { [schema]: _old, ...others } = files;
 		await SchematronContext.state?.update(SchematronContext.stateKey, file ? { ...others, [schema]: file } : others);
 		SchematronContext.onChange?.();
+		SchematronContext.showPhase();
 	}
 
 	// chooses the schema's context file: those whose xml-model names the schema first, then the XML files viewed recently,

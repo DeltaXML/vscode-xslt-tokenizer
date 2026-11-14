@@ -121,4 +121,45 @@ suite('Schematron context file', () => {
 			await tasks.update('saxonJar', saved, vscode.ConfigurationTarget.Global);
 		}
 	});
+
+	test('the phase: in the status bar - the default, else the one chosen - and a click chooses another, for Quick Run, Validate and Debug', async () => {
+		const withPhases = file('phases.sch');
+		fs.writeFileSync(withPhases, `<schema ${iso} queryBinding="xslt3" defaultPhase="books">
+  <phase id="books"><p>The books</p><active pattern="p"/></phase>
+  <phase id="none"><p>Nothing</p></phase>
+  <pattern id="p"><rule context="book"><assert test="@isbn">x</assert></rule></pattern>
+</schema>`);
+		const data = file('phases-data.xml');
+		fs.writeFileSync(data, '<catalog><book isbn="1"/></catalog>');
+		await SchematronContext.setContextFile(withPhases, data);
+		const shown = async () => {
+			for (let i = 0; i < 20 && !SchematronContext.phaseStatus()?.text.includes('phase'); i++) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			return SchematronContext.phaseStatus()!;
+		};
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(withPhases)));
+		let status = await shown();
+		assert.strictEqual(status.text, '$(layers) phase: books (default)');
+		assert.include(status.tooltip, 'used by Quick Run, Validate and Debug');
+		const command = status.command as vscode.Command;
+		assert.strictEqual(command.command, SchematronValidation.choosePhaseCommand);
+		const chooser = SchematronValidation.choosePhase;
+		SchematronValidation.choosePhase = async () => 'none';
+		try {
+			await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
+		} finally {
+			SchematronValidation.choosePhase = chooser;
+		}
+		status = SchematronContext.phaseStatus()!;
+		assert.strictEqual(status.text, '$(layers) phase: none');
+		// only chosen - not validated, as it hadn't been
+		assert.lengthOf(vscode.languages.getDiagnostics(vscode.Uri.file(data)).filter((d) => d.source?.startsWith('Schematron')), 0);
+		// a schema with no phases: all its patterns
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(file('main.sch'))));
+		status = SchematronContext.phaseStatus()!;
+		assert.strictEqual(status.text, '$(layers) all patterns');
+		assert.isUndefined(status.command);
+		await SchematronContext.setContextFile(withPhases, undefined);
+	});
 });

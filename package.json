@@ -368,7 +368,7 @@
 			},
 			{
 				"command": "xslt-xpath.validateWithSchematronPhase",
-				"title": "Validate (Choose Phase)...",
+				"title": "Choose Phase...",
 				"category": "Schematron"
 			},
 			{
@@ -2437,6 +2437,9 @@
 			},
 			{
 				"language": "xspec"
+			},
+			{
+				"language": "sch"
 			}
 		],
 		"viewsWelcome": [

@@ -1320,7 +1320,7 @@ export function activate(context: vscode.ExtensionContext) {
 		provideDebugConfigurations: (folder) => debugConfigurationProvider.provideDebugConfigurations(folder)
 	}, vscode.DebugConfigurationProviderTriggerKind.Dynamic));
 	context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory(XsltDebug.type, new XsltDebugAdapterFactory(context.extensionUri)));
-	context.subscriptions.push(vscode.languages.registerEvaluatableExpressionProvider({ language: 'xslt' }, new XsltEvaluatableExpressionProvider()));
+	context.subscriptions.push(vscode.languages.registerEvaluatableExpressionProvider([{ language: 'xslt' }, { language: 'sch' }], new XsltEvaluatableExpressionProvider()));
 	// while paused, variable values at their declarations
 	context.subscriptions.push(vscode.languages.registerInlineValuesProvider({ language: 'xslt' }, new XsltInlineValuesProvider()));
 	// while paused, the step in a path (or lookup) after which its value is empty, faded
