@@ -537,7 +537,7 @@ suite('XSLT debugger - debug sessions', function () {
 				});
 			});
 			// as VS Code starts it for Ctrl+F5 with no launch.json: an empty configuration
-			assert.isTrue(await vscode.debug.startDebugging(undefined, { type: '', request: '', name: '' }, { noDebug: true }));
+			assert.isTrue(await vscode.debug.startDebugging(undefined, {} as vscode.DebugConfiguration, { noDebug: true }));
 			const session = await ended;
 			assert.strictEqual(path.basename(session.configuration.xsltFile), 'error.xsl');
 			assert.isTrue(session.configuration.noDebug);
