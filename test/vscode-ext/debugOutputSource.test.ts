@@ -150,7 +150,9 @@ suite('XSLT debugger: from the output to its source', () => {
 		const isStylesheet = (uri?: vscode.Uri) => uri?.fsPath === vscode.Uri.file(file).fsPath;
 		const tabsInOutputGroup = () => vscode.window.tabGroups.all.find((g) => g.viewColumn === vscode.ViewColumn.Two)?.tabs
 			.filter((tab) => tab.input instanceof vscode.TabInputText && isStylesheet(tab.input.uri)).length;
-		const isDone = () => isStylesheet(vscode.window.activeTextEditor?.document.uri) && (!openStylesheetFirst || tabsInOutputGroup() === 0);
+		// moved to the group where it's open already, then the cursor put at the definition - when the machine is busy, after a delay
+		const isDone = () => isStylesheet(vscode.window.activeTextEditor?.document.uri) && (!openStylesheetFirst || tabsInOutputGroup() === 0) &&
+			vscode.window.activeTextEditor?.selection.start.line === definition.range.start.line;
 		for (let i = 0; i < 100 && !isDone(); i++) {
 			await new Promise((resolve) => setTimeout(resolve, 50));
 		}

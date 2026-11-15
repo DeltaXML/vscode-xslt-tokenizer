@@ -113,8 +113,9 @@ export class SchematronTests {
 		if (elementStart !== undefined && !targetRule && !targetAssertion) {
 			return undefined;
 		}
-		// Saxon reads the files: those with unsaved changes are saved
-		for (const document of vscode.workspace.textDocuments.filter((d) => d.isDirty && d.languageId === 'sch')) {
+		// Saxon reads the files: those with unsaved changes are saved - not an untitled document, which Saxon can't read
+		// anyway: saving it would open the Save As dialog
+		for (const document of vscode.workspace.textDocuments.filter((d) => d.isDirty && d.languageId === 'sch' && d.uri.scheme === 'file')) {
 			await document.save();
 		}
 		const xspecUri = await SchematronTests.xspecFor(schema);

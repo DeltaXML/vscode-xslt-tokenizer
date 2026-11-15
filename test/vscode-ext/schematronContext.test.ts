@@ -168,6 +168,34 @@ suite('Schematron context file', () => {
 		assert.isUndefined(await show('browsed.xml'));
 	});
 
+	test('results cleared when the schema is deleted, or the XML file is replaced outside the editor - e.g. by a script', async () => {
+		const svrl = `<svrl:schematron-output xmlns:svrl="http://purl.oclc.org/dsdl/svrl"><svrl:failed-assert test="@isbn" id="isbn" location="/Q{}catalog[1]/Q{}book[1]"><svrl:text>The book has no ISBN</svrl:text></svrl:failed-assert></svrl:schematron-output>`;
+		const catalog = vscode.Uri.file(file('catalog.xml'));
+		const problems = () => vscode.languages.getDiagnostics(catalog).filter((d) => d.source?.startsWith('Schematron'));
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(catalog));
+		// the schema deleted - or its folder
+		await SchematronValidation.show(catalog, file('main.sch'), svrl, '#DEFAULT');
+		assert.lengthOf(problems(), 1);
+		assert.isDefined(SchematronStatus.status());
+		SchematronValidation.fileDeleted(file('main.sch'));
+		assert.lengthOf(problems(), 0);
+		assert.isUndefined(SchematronStatus.status());
+		await SchematronValidation.show(catalog, file('main.sch'), svrl, '#DEFAULT');
+		SchematronValidation.fileDeleted(folder);
+		assert.lengthOf(problems(), 0);
+		// the XML file replaced, not validated in this session with a schema that's still there: its results don't match it
+		await SchematronValidation.show(catalog, file('main.sch'), svrl, '#DEFAULT');
+		SchematronValidation.fileChanged(file('catalog.xml'));
+		assert.lengthOf(problems(), 0);
+		assert.isUndefined(SchematronStatus.status());
+		// another file changed: kept
+		await SchematronValidation.show(catalog, file('main.sch'), svrl, '#DEFAULT');
+		SchematronValidation.fileChanged(file('browsed.xml'));
+		SchematronValidation.fileDeleted(file('browsed.xml'));
+		assert.lengthOf(problems(), 1);
+		SchematronValidation.clearResults(file('catalog.xml'));
+	});
+
 	test('the phase: in the status bar - the default, else the one chosen - and a click chooses another, for Quick Run, Validate and Debug', async () => {
 		const withPhases = file('phases.sch');
 		fs.writeFileSync(withPhases, `<schema ${iso} queryBinding="xslt3" defaultPhase="books">

@@ -126,6 +126,7 @@ export class SchematronValidation {
 				if (document.uri.scheme !== 'file') {
 					return;
 				}
+				SchematronValidation.savedAt.set(document.fileName, Date.now());
 				SchematronValidation.validated.forEach((schema, xml) => {
 					if (xml === document.fileName || schema === document.fileName) {
 						SchematronValidation.validate(vscode.Uri.file(xml), schema, false);
@@ -143,6 +144,83 @@ export class SchematronValidation {
 					SchematronValidation.outcomeEmitter.fire(outcome);
 				}
 			}));
+		// files changed outside the editor, e.g. replaced by a script: results that no longer match them are cleared
+		const watcher = vscode.workspace.createFileSystemWatcher('**/*');
+		context.subscriptions.push(watcher,
+			watcher.onDidDelete((uri) => SchematronValidation.fileDeleted(uri.fsPath)),
+			watcher.onDidCreate((uri) => SchematronValidation.fileChanged(uri.fsPath)),
+			watcher.onDidChange((uri) => SchematronValidation.fileChanged(uri.fsPath)));
+	}
+
+	// when each file was last saved in the editor, by path: its change on disk is then the save's, already handled
+	private static readonly savedAt = new Map<string, number>();
+
+	// the XML files with results - problems, the status bar's outcome or the counts above a schema's rules - with the
+	// schema of each
+	private static resultFiles(): Map<string, string> {
+		const files = new Map<string, string>();
+		SchematronValidation.coverage.forEach((coverage, schema) => files.set(coverage.xml, schema));
+		SchematronValidation.outcomes.forEach((outcome) => files.set(outcome.xml, outcome.schema));
+		SchematronValidation.validated.forEach((schema, xml) => files.set(xml, schema));
+		SchematronValidation.collection.forEach((uri) => {
+			if (!files.has(uri.fsPath)) {
+				files.set(uri.fsPath, '');
+			}
+		});
+		return files;
+	}
+
+	// an XML file's results, cleared: its problems, its outcome in the status bar, and the counts above its schema's rules
+	public static clearResults(xml: string) {
+		SchematronValidation.collection.delete(vscode.Uri.file(xml));
+		SchematronValidation.validated.delete(xml);
+		const outcome = SchematronValidation.outcomes.get(xml);
+		if (outcome && outcome.state !== 'running') {
+			SchematronValidation.outcomes.delete(xml);
+			SchematronValidation.outcomeEmitter.fire(outcome);
+		}
+		let coverageCleared = false;
+		SchematronValidation.coverage.forEach((coverage, schema) => {
+			if (coverage.xml === xml) {
+				SchematronValidation.coverage.delete(schema);
+				coverageCleared = true;
+			}
+		});
+		if (coverageCleared) {
+			SchematronValidation.coverageChanged.fire();
+		}
+	}
+
+	// a file - or a folder, with the files in it - deleted: the results of an XML file in it, or validated with a schema
+	// in it, are cleared
+	public static fileDeleted(deleted: string) {
+		const within = (file: string) => file === deleted || file.startsWith(deleted + path.sep);
+		SchematronValidation.resultFiles().forEach((schema, xml) => {
+			if (within(xml) || (schema && within(schema))) {
+				SchematronValidation.clearResults(xml);
+			}
+		});
+	}
+
+	// a file created, or changed, outside the editor - e.g. replaced by a script: an XML file validated in this session
+	// is validated again, if its schema is still there - else its results, which no longer match it, are cleared; the
+	// files validated with a schema that changed are validated again. Not after a save in the editor, which validates
+	public static fileChanged(changed: string) {
+		const saved = SchematronValidation.savedAt.get(changed);
+		if (saved !== undefined && Date.now() - saved < 2000) {
+			return;
+		}
+		SchematronValidation.resultFiles().forEach((schema, xml) => {
+			if (xml !== changed && schema !== changed) {
+				return;
+			}
+			const validatedWith = SchematronValidation.validated.get(xml);
+			if (validatedWith && fs.existsSync(validatedWith) && fs.existsSync(xml)) {
+				SchematronValidation.validate(vscode.Uri.file(xml), validatedWith, false);
+			} else if (xml === changed) {
+				SchematronValidation.clearResults(xml);
+			}
+		});
 	}
 
 	// the file to validate, and the schema - from the command's file, or the active editor's

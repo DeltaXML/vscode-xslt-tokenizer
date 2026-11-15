@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { assert } from 'chai';
 
 const head = '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">';
@@ -57,9 +58,17 @@ suite('Tab: an empty line indented for its context', () => {
 		['xslt', 'xml', 'xspec', 'sch', 'dcp'].forEach((languageId) =>
 			assert.isTrue(vscode.workspace.getConfiguration('editor', { languageId }).get('formatOnType'), languageId));
 		// Enter in a Schematron file: the new line indented by the extension's formatter
-		const document = await vscode.workspace.openTextDocument({ content: [sch, '  <pattern>', '    <rule context="a">', '', '    </rule>', '  </pattern>', '</schema>'].join('\n'), language: 'sch' });
-		const edits = await vscode.commands.executeCommand<vscode.TextEdit[]>('vscode.executeFormatOnTypeProvider', document.uri, new vscode.Position(3, 0), '\n', { tabSize: 2, insertSpaces: true });
-		assert.deepEqual(edits?.map((e) => e.newText), ['      ']);
+		// a file, not an untitled document: one left open, unsaved, would get a Save As dialog when Schematron saves its files
+		const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tab-sch-'));
+		const file = path.join(folder, 'rules.sch');
+		fs.writeFileSync(file, [sch, '  <pattern>', '    <rule context="a">', '', '    </rule>', '  </pattern>', '</schema>'].join('\n'));
+		try {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+			const edits = await vscode.commands.executeCommand<vscode.TextEdit[]>('vscode.executeFormatOnTypeProvider', document.uri, new vscode.Position(3, 0), '\n', { tabSize: 2, insertSpaces: true });
+			assert.deepEqual(edits?.map((e) => e.newText), ['      ']);
+		} finally {
+			fs.rmSync(folder, { recursive: true, force: true });
+		}
 	});
 
 	test('one undo step', async () => {

@@ -71,7 +71,8 @@ export class SchematronDebug {
 		if (!xml) {
 			return false;
 		}
-		for (const document of vscode.workspace.textDocuments.filter((d) => d.isDirty && (d.languageId === 'sch' || d.fileName === xml))) {
+		// not an untitled document, which Saxon can't read: saving it would open the Save As dialog
+		for (const document of vscode.workspace.textDocuments.filter((d) => d.isDirty && d.uri.scheme === 'file' && (d.languageId === 'sch' || d.fileName === xml))) {
 			await document.save();
 		}
 		const configuration = await SchematronDebug.configuration(schema, xml);
