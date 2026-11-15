@@ -11,7 +11,7 @@ The aim is to make writing, reviewing and debugging XSLT easier. The extension u
 2. To run or debug stylesheets, set `XSLT.tasks.saxonJar` to the path of your Saxon jar (Saxon-HE is fine), with a Java runtime on the PATH.
 3. Press **Quick Run** (`⌘⌥R` / `Ctrl+Alt+R`) to run the stylesheet with the XML file you last had open - shown in the status bar, where you can pick another.
 
-See the [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) for the full description of each feature.
+See the [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) for the full description of each feature, and [What's New](https://deltaxml.github.io/vscode-xslt-xpath/new-release.html) for this release's highlights.
 
 **Where it goes further:**
 
@@ -243,67 +243,15 @@ When the `parse-html()` function is used, the following setting is also needed, 
 
 ## XSLT Packages
 
-If your XSLT contains xsl:use-package instructions, XSLT package names are resolved to lookup symbols to support the following features:
-
-- Goto Definition
-- Symbol Diagnostics
-- Symbol Auto-Completion
-
- To allow XSLT package names to be resolved to file paths, package details should be added to the setting:
-
-`XSLT.resources.xsltPackages`
-
-An example of XSLT package name settings:
+Packages in the workspace are found from their `xsl:package` name and version, with no setup, and passed to Saxon with `-lib` when a stylesheet that uses them runs. For packages outside the workspace, add them to the `XSLT.resources.xsltPackages` setting - each one's name and version are read from its `xsl:package` element, unless given:
 
 ```json
 "XSLT.resources.xsltPackages": [
-       { "name": "example.com.package1", "version": "2.0", "path": "included1.xsl"},
-       { "name": "example.com.package2", "version": "2.0", "path": "features/included2.xsl"},
-       { "name": "example.com.package3", "version": "2.0", "path": "features/not-exists.xsl"}
+       { "path": "/path/to/shared/package.xsl" }
 ]
 ```
 
-If file paths are relative they are resolved from the first Visual Studio Code Workspace folder
-
-*Note: Currently, XSLT Package versions are not used in package-name lookup*
-
-## Formatting
-
-This extension supports special XSLT code formatting. This can be invoked with a VS Code command and/or as you type, depending on your settings.
-
-### VS Code Formatting Command Keyboard Shortcuts
-1. *On Windows* - ```Shift + Alt + F```.
-2. *On Mac* - ```Shift + Option + F```.
-3. *On Ubuntu* - ```Ctrl + Shift + I```.
-
-### Recommended Editor Settings For Formatting etc.
-
-You should start with something like the following in the `settings.json` file: 
-```json
-{
-  ...
-  "[xslt]": {
-        "editor.formatOnPaste": true,
-        "editor.formatOnSave": false,
-        "editor.formatOnSaveMode": "modifications",
-        "editor.formatOnType": true,
-        "editor.defaultFormatter": "deltaxml.xslt-xpath",
-        "editor.detectIndentation": true,
-        "editor.tabSize": 2,
-        "editor.wordSeparators": "`~!@#$%^&*()=+[{]}\\|;:'\",.<>/?",
-        "outline.showArrays": true,
-        "breadcrumbs.showArrays": true,
-        "editor.semanticHighlighting.enabled": true
-  }
-  ...
-}
-```
-
-## Refactoring
-A range of [code refactoring](https://deltaxml.github.io/vscode-xslt-xpath/refactoring-xslt.html) features are supported, including **Rename Symbol**, **Extract Function** and, for XSLT 4.0, **Extract record type**. 
-
-When XSLT code is refactored, instructions and expressions are revised when necessary to
-ensure the code behaviour remains unchanged. For example, the **Extract Function** refactor revises all expressions requiring the context-item so the code compiles and runs as before.
+A relative path is resolved from the first workspace folder. See [XSLT Packages](https://deltaxml.github.io/vscode-xslt-xpath/xslt-packages.html) in the User Guide.
 
 ## Editor Settings for Highlighting in Color Theme Extensions
 
@@ -345,54 +293,8 @@ For word selection and navigation (e.g. double-click, or `Alt`/`Ctrl` + arrow ke
 
 See: [VS Code Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
-## Code Folding
-
-Code-folding currently works by indentation indicating the nesting level. So, if code-folding does not work as expected, try reformatting using (for MacOS) - ```Shift-⌥-F```.
-
-**Region code-folding** is also supported. This can be useful, for example, for blocks of templates for a specific mode. To set a region code-folding block, surround it with `<?region?>` and `<?endregion?>` processing instructions. You may optionally include a label for the processing instructions, for example: 
-
-```
-  <?region reconstruct?>
-    ...
-  <?endregion reconstruct?>
-```
 ___
 
-# XSLT/XPath User Guide
-
-The [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) provides an introduction to features supported by this extension for XSLT and XPath developers.
-
-The main documentation pages are linked below:
-
-- [Overview](https://deltaxml.github.io/vscode-xslt-xpath/index.html)
-- [What's New](https://deltaxml.github.io/vscode-xslt-xpath/new-release.html)
-- [Features](https://deltaxml.github.io/vscode-xslt-xpath/features.html)
-- [Editing XML](https://deltaxml.github.io/vscode-xslt-xpath/editing.html)
-- [Editing XSLT/XPath](https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html)
-- [Code Navigation](https://deltaxml.github.io/vscode-xslt-xpath/navigation.html)
-- [Quick Run](https://deltaxml.github.io/vscode-xslt-xpath/quick-run.html)
-- [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html)
-- [XSLT Debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html)
-- [Profiler](https://deltaxml.github.io/vscode-xslt-xpath/profiler.html)
-- [XSpec Tests](https://deltaxml.github.io/vscode-xslt-xpath/xspec.html)
-- [Schematron](https://deltaxml.github.io/vscode-xslt-xpath/schematron.html)
-- [Debugging with xsl:message](https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html)
-- [Settings](https://deltaxml.github.io/vscode-xslt-xpath/settings.html)
-- [XSLT 4.0](https://deltaxml.github.io/vscode-xslt-xpath/xslt40.html)
-- [Records and Enums](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-records.html)
-- [Code Documentation](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-notes.html)
-- [XML Catalogs](https://deltaxml.github.io/vscode-xslt-xpath/xml-catalogs.html)
-
----
-
-
-## Support for other languages with embedded XPath
-
-In addition to XSLT and XSpec, XPath embedded in this XML vocabulary is highlighted, checked and auto-completed:
-
-- Schematron (`.sch`) - checked as SchXslt2 runs it, with completion, quick fixes, validation of XML files and debugging - see [Schematron](https://deltaxml.github.io/vscode-xslt-xpath/schematron.html)
-
----
 _Project Sponsor Message:_
 
 [<img src="deltaxigniaLogo.png" style="width: 300px">](https://www.deltaxml.com/?utm_source=VisualStudio&utm_medium=Dev-Tools&utm_campaign=XSLT-XPATH)
