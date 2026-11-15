@@ -9,6 +9,9 @@
  * left open, closing all editors later, in another suite, would ask to save it, a modal dialog that stops the run. After
  * each test, those it opened are reverted and closed - not those that were open before it, e.g. one a suite shares
  * between its tests, opened in suiteSetup.
+ *
+ * For new tests: use files in a temp folder, not untitled documents, and close only the suite's own editors - see
+ * "Writing VS Code host tests: documents and editors" in __tests__/README.md.
  */
 import * as vscode from 'vscode';
 

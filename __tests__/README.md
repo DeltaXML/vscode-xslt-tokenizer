@@ -15,6 +15,16 @@ There are two separate test setups here, each running in a different environment
 - **Standalone lexer tests** (`test/unit/*.spec.ts`) are pure TypeScript with no `vscode` API involved - just the lexer/tokenizer logic. `npm run unit-test` runs them directly via `ts-node/register` in a plain Node process, no VS Code instance spun up.
 - **VS Code extension-host tests** (`test/vscode-ext/*.test.ts`) need the real `vscode` API (e.g. the linter tests open documents and read back diagnostics), so they run inside an actual headless VS Code instance, launched via `@vscode/test-cli`'s `vscode-test` CLI. That package bundles its own separate Mocha to drive tests inside that sandboxed environment - independent of, and not controlled by, the top-level Mocha version pinned in `package.json`.
 
+## Writing VS Code host tests: documents and editors
+
+A document left open in an editor with unsaved changes stops the whole test run. When a later suite closes all editors, VS Code asks whether to save it, in a modal dialog that waits for an answer. So in `test/vscode-ext`:
+
+- **Use files in a temp folder, not untitled documents.** Create a folder for the suite with `fs.mkdtempSync(path.join(os.tmpdir(), 'my-suite-'))` and remove it in `suiteTeardown`. Write each test document there and open it with `vscode.workspace.openTextDocument(vscode.Uri.file(file))`. An untitled document created with `openTextDocument({ content, language })` counts as unsaved from the start, but a file that's opened and not edited never does. Use an untitled document only to test untitled-document behaviour itself.
+- **Close only your own editors.** Don't use `workbench.action.closeAllEditors`, which closes, and may prompt for, other suites' editors. Close the tabs of files in your folder instead, and revert any you edited: `revertAndCloseEditorsIn(folder)` in [testEditors.ts](../test/vscode-ext/testEditors.ts) does both.
+- **Match paths on both forms on macOS.** `os.tmpdir()` is under `/var`, a symbolic link to `/private/var`, and a file may be open under either path. Use `fs.realpathSync(folder)` when comparing.
+
+As a safety net, [rootHooks.test.ts](../test/vscode-ext/rootHooks.test.ts) reverts and closes any untitled editor a test opened, after each test. It also turns off `debug.saveBeforeStart` for the run, as saving an untitled document opens a Save As dialog. Many existing tests still use untitled documents; convert them when you change their setup.
+
 ## Overview
 This document explains how to create and run tests for the XPath lexer and, subsequently, for the XSLT linter - using the same XPath test data. These two components are the most important part of the extension as they drive amlost all language-specific features, from Syntax Highlighting to Symbol Referencing.
 
