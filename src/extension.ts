@@ -72,6 +72,7 @@ import { ImportTreeProvider } from './importTreeProvider';
 import { SchIncludes } from './schIncludes';
 import { SchematronFunctions } from './schematronFunctions';
 import { SchematronContext } from './schematronContext';
+import { SchematronStatus } from './schematronStatus';
 import { SchematronTests } from './schematronTests';
 import { SchematronDebug } from './schematronDebug';
 import { FileSelection } from './fileSelection';
@@ -1797,6 +1798,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// Schematron: a schema's XML context file - in the status bar, for auto-completion, and validated by Quick Run with a
 	// Schematron file in the editor (see SchematronContext)
 	SchematronContext.activate(context);
+	// the last validation's result of the XML file - or the Schematron file's context file - in the editor
+	SchematronStatus.activate(context);
 	// Schematron: debugging a schema on its XML context file - with the editor title's Debug button (see SchematronDebug)
 	SchematronDebug.activate(context);
 	// Schematron: XSpec tests generated from the XML context file, for a rule, an assertion or each rule (see SchematronTests)

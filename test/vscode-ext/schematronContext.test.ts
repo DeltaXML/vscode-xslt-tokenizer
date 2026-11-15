@@ -10,6 +10,7 @@ import * as path from 'path';
 import { assert } from 'chai';
 import { SchematronContext } from '../../src/schematronContext';
 import { SchematronValidation } from '../../src/schematronValidation';
+import { SchematronStatus } from '../../src/schematronStatus';
 import { SchIncludes } from '../../src/schIncludes';
 import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 
@@ -120,6 +121,51 @@ suite('Schematron context file', () => {
 		} finally {
 			await tasks.update('saxonJar', saved, vscode.ConfigurationTarget.Global);
 		}
+	});
+
+	test('the last validation in the status bar: its problems, valid, or out of date after an edit - for the XML file and the schema, only once validated', async () => {
+		const svrl = (results: string) => `<svrl:schematron-output xmlns:svrl="http://purl.oclc.org/dsdl/svrl">${results}</svrl:schematron-output>`;
+		const failed = (role: string) => `<svrl:failed-assert test="@isbn" id="isbn" role="${role}" location="/Q{}catalog[1]/Q{}book[1]"><svrl:text>The book has no ISBN</svrl:text></svrl:failed-assert>`;
+		const show = async (name: string) => {
+			await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(file(name))));
+			return SchematronStatus.status();
+		};
+		const catalog = vscode.Uri.file(file('catalog.xml'));
+		await SchematronContext.setContextFile(file('main.sch'), file('catalog.xml'));
+		await SchematronValidation.show(catalog, file('main.sch'), svrl(failed('error') + failed('warning')), '#DEFAULT');
+		let status = (await show('catalog.xml'))!;
+		assert.strictEqual(status.text, '$(error) 2 · main.sch');
+		assert.include(status.tooltip, '`catalog.xml` with `main.sch` has 1 error, 1 warning');
+		assert.strictEqual(status.command, 'workbench.actions.view.problems');
+		// the schema - and a file it includes: its context file's
+		assert.strictEqual((await show('main.sch'))?.text, '$(error) 2 · catalog.xml');
+		assert.strictEqual((await show('pattern.sch'))?.text, '$(error) 2 · catalog.xml');
+		// warnings only
+		await SchematronValidation.show(catalog, file('main.sch'), svrl(failed('warning')), '#DEFAULT');
+		assert.strictEqual(SchematronStatus.status()?.text, '$(warning) 1 · catalog.xml');
+		// valid
+		await SchematronValidation.show(catalog, file('main.sch'), svrl(''), '#DEFAULT');
+		status = (await show('catalog.xml'))!;
+		assert.strictEqual(status.text, '$(pass) main.sch');
+		assert.include(status.tooltip, 'is valid');
+		assert.strictEqual(status.command, SchematronValidation.validateCommand);
+		// an edit of the file - or of a file the schema includes - makes it out of date, until it's validated again
+		const editor = vscode.window.activeTextEditor!;
+		await editor.edit((edit) => edit.insert(new vscode.Position(0, 0), ' '));
+		status = SchematronStatus.status()!;
+		assert.strictEqual(status.text, '$(circle-outline) main.sch');
+		assert.include(status.tooltip, 'was valid');
+		assert.include(status.tooltip, 'changed since');
+		await SchematronValidation.show(catalog, file('main.sch'), svrl(''), '#DEFAULT');
+		assert.strictEqual(SchematronStatus.status()?.text, '$(pass) main.sch');
+		const pattern = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(file('pattern.sch'))));
+		await pattern.edit((edit) => edit.insert(new vscode.Position(0, 0), ' '));
+		assert.strictEqual(SchematronStatus.status()?.text, '$(circle-outline) catalog.xml');
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+		await vscode.window.showTextDocument(editor.document);
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+		// another XML file, not validated
+		assert.isUndefined(await show('browsed.xml'));
 	});
 
 	test('the phase: in the status bar - the default, else the one chosen - and a click chooses another, for Quick Run, Validate and Debug', async () => {

@@ -43,6 +43,20 @@ export interface SchematronCoverage {
 	activePatterns: Set<string>;
 }
 
+// the last validation of an XML file - with a schema, in this session - for the status bar (see SchematronStatus):
+// running, failed to run, or its problems by severity
+export interface SchematronOutcome {
+	xml: string;
+	schema: string;
+	// the phase's name, if it's not all patterns
+	phase?: string;
+	state: 'running' | 'done' | 'failed';
+	errors: number;
+	warnings: number;
+	infos: number;
+	at: Date;
+}
+
 // Schematron: Validate: an XML file validated with a Schematron schema, as SchXslt2 - the Schematron processor bundled
 // with XSpec - validates it, with the Saxon of the XSLT.tasks.saxonJar setting (see
 // xslt-resources/schematron/validate.xsl). Each failed assertion and successful report is a problem in the XML file, at
@@ -71,6 +85,10 @@ export class SchematronValidation {
 	// the last validation with each schema, by its path - for the counts above its rules and patterns (see codeLenses)
 	private static readonly coverage = new Map<string, SchematronCoverage>();
 	private static readonly coverageChanged = new vscode.EventEmitter<void>();
+	// the last validation of each XML file, by its path - and when one starts or ends
+	public static readonly outcomes = new Map<string, SchematronOutcome>();
+	private static readonly outcomeEmitter = new vscode.EventEmitter<SchematronOutcome>();
+	public static readonly onDidChangeOutcome = SchematronValidation.outcomeEmitter.event;
 	// for testing: how the schema is chosen, where none is known
 	public static chooseSchema = (xmlUri: vscode.Uri) => SchematronValidation.pickSchema(xmlUri);
 
@@ -78,7 +96,7 @@ export class SchematronValidation {
 		SchematronValidation.collection = vscode.languages.createDiagnosticCollection('schematron');
 		SchematronValidation.state = context.workspaceState;
 		SchematronValidation.extensionPath = context.extensionUri.fsPath;
-		context.subscriptions.push(SchematronValidation.collection, SchematronValidation.coverageChanged,
+		context.subscriptions.push(SchematronValidation.collection, SchematronValidation.coverageChanged, SchematronValidation.outcomeEmitter,
 			// above each rule and pattern of a schema: how it was used in the last validation with it
 			vscode.languages.registerCodeLensProvider({ language: 'sch' }, {
 				onDidChangeCodeLenses: SchematronValidation.coverageChanged.event,
@@ -118,6 +136,11 @@ export class SchematronValidation {
 				if (SchematronValidation.validated.has(document.fileName)) {
 					SchematronValidation.validated.delete(document.fileName);
 					SchematronValidation.collection.delete(document.uri);
+				}
+				const outcome = SchematronValidation.outcomes.get(document.fileName);
+				if (outcome && outcome.state !== 'running') {
+					SchematronValidation.outcomes.delete(document.fileName);
+					SchematronValidation.outcomeEmitter.fire(outcome);
 				}
 			}));
 	}
@@ -298,6 +321,9 @@ export class SchematronValidation {
 		const svrl = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'schematron-')), 'report.svrl');
 		const schemaText = fs.readFileSync(schema, 'utf8');
 		const phase = SchematronValidation.validPhase(xmlUri.fsPath, schema, schemaText);
+		const previous = SchematronValidation.outcomes.get(xmlUri.fsPath);
+		SchematronValidation.setOutcome({ xml: xmlUri.fsPath, schema, phase: SchematronValidation.phaseName(phase, schemaText), state: 'running',
+			errors: previous?.errors ?? 0, warnings: previous?.warnings ?? 0, infos: previous?.infos ?? 0, at: new Date() });
 		const extensions = XSpecRunner.schematronSyntaxExtensions(xmlUri, schema, schemaText);
 		const catalog = CatalogSetting.taskOption({});
 		const transpiler = path.join(XSpecRunner.home(xmlUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
@@ -319,6 +345,7 @@ export class SchematronValidation {
 			SchematronValidation.collection.delete(xmlUri);
 			SchematronValidation.coverage.delete(schema);
 			SchematronValidation.coverageChanged.fire();
+			SchematronValidation.setOutcome({ xml: xmlUri.fsPath, schema, phase: SchematronValidation.phaseName(phase, schemaText), state: 'failed', errors: 0, warnings: 0, infos: 0, at: new Date() });
 			const action = await vscode.window.showErrorMessage(`Schematron: the validation of ${path.basename(xmlUri.fsPath)} with ${path.basename(schema)} failed - see the Schematron output`, 'Show Output');
 			if (action) {
 				channel.show(true);
@@ -346,8 +373,16 @@ export class SchematronValidation {
 		const summary = results.length === 0 ? `Schematron: ${path.basename(xmlUri.fsPath)} is valid with ${withSchema}` :
 			`Schematron: ${results.length} problem${results.length === 1 ? '' : 's'} in ${path.basename(xmlUri.fsPath)} with ${withSchema}`;
 		channel.appendLine(summary);
-		vscode.window.setStatusBarMessage(`$(${results.length === 0 ? 'pass' : 'warning'}) ${summary}`, 6000);
+		const count = (severity: vscode.DiagnosticSeverity) => results.filter((result) => SchematronValidation.severity(result) === severity).length;
+		// kept in the status bar while the file - or the schema - is in the editor (see SchematronStatus)
+		SchematronValidation.setOutcome({ xml: xmlUri.fsPath, schema, phase: phaseName, state: 'done', errors: count(vscode.DiagnosticSeverity.Error),
+			warnings: count(vscode.DiagnosticSeverity.Warning), infos: count(vscode.DiagnosticSeverity.Information), at: new Date() });
 		return results;
+	}
+
+	private static setOutcome(outcome: SchematronOutcome) {
+		SchematronValidation.outcomes.set(outcome.xml, outcome);
+		SchematronValidation.outcomeEmitter.fire(outcome);
 	}
 
 	// Schematron: Export Standard Copy...: a copy of the schema - with the files sch:include brings in - with the text value
