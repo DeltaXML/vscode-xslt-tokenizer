@@ -8,6 +8,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
 import * as vscode from 'vscode';
+import { revertAndCloseEditorsIn } from './testEditors';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSpecConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
@@ -40,6 +41,10 @@ suite('XSpec', () => {
 
 	suiteSetup(async () => {
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+	});
+	// its editors, with their changes reverted - e.g. a quick fix's in compat*.xspec (see revertAndCloseEditorsIn)
+	suiteTeardown(async () => {
+		await revertAndCloseEditorsIn(dir);
 	});
 
 	const moduleDiagnostics = (XsltSymbolProvider as unknown as { moduleDiagnostics(d: vscode.TextDocument, parent: boolean, config: LanguageConfiguration): Promise<vscode.Diagnostic[]> }).moduleDiagnostics;
