@@ -15,6 +15,7 @@ import { SchIncludes } from '../../src/schIncludes';
 import { XsltEmptySteps } from '../../src/xsltEmptySteps';
 import { XsltDebugAdapterProcess } from '../../src/xsltDebug';
 import { XsltNodeRules } from '../../src/xsltNodeRules';
+import { SchBreakpoints } from '../../src/schBreakpoints';
 
 const iso = 'xmlns="http://purl.oclc.org/dsdl/schematron"';
 const schemaText = `<schema ${iso} queryBinding="xslt3">
@@ -64,6 +65,55 @@ suite('Schematron: debugging - the paths checked for empty steps', () => {
 	test('a parameter\'s value is checked as the start of a path only if, put in its place as text, it still is', () => {
 		['@name', 'customer', 'order/line', 'f(a, b)', '*', 'item[@x = 1]', '(a | b)', '"a b"', 'order-line'].forEach((value) => assert.isTrue(XsltEmptySteps.isPrimary(value), value));
 		['a | b', '$x + 1', 'a, b', 'a and b', '', '(not supplied)', '-1', 'a!b'].forEach((value) => assert.isFalse(XsltEmptySteps.isPrimary(value), value));
+	});
+
+	test('a breakpoint where there\'s no step: moved to the step it\'s in - a parameter\'s to its pattern - else removed', () => {
+		const text = [
+			'<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" queryBinding="xslt3">',
+			'  <sch:ns prefix="xs" uri="http://www.w3.org/2001/XMLSchema"/>',
+			'  <sch:title>Orders</sch:title>',
+			'  <sch:let name="g" value="1"/>',
+			'  <sch:pattern abstract="true" id="required">',
+			'    <sch:param name="attribute"/>',
+			'    <sch:rule context="order">',
+			'      <sch:extends rule="base"/>',
+			'      <sch:assert test="$attribute" id="a">Order',
+			'        <sch:value-of select="@id"/> needs',
+			'        <sch:emph>it</sch:emph></sch:assert>',
+			'    </sch:rule>',
+			'  </sch:pattern>',
+			'  <sch:pattern id="ids" is-a="required">',
+			'    <sch:param name="attribute" value="@id"/>',
+			'    <sch:let name="p" value="2"/>',
+			'  </sch:pattern>',
+			'  <sch:pattern id="one" is-a="required"><sch:param name="attribute" value="@n"/></sch:pattern>',
+			'  <sch:phase id="all"><sch:active pattern="ids"/></sch:phase>',
+			'  <xsl:function name="f"><xsl:sequence select="1"/></xsl:function>',
+			'</sch:schema>'].join('\n');
+		// 1-based lines, as in the editor
+		const step = (line: number) => {
+			const result = SchBreakpoints.stepLine(text, line - 1);
+			return result.line === undefined ? undefined : `${result.line + 1}${result.why ? ' (parameter)' : ''}`;
+		};
+		assert.isUndefined(step(2), 'sch:ns');
+		assert.isUndefined(step(3), 'the schema\'s title');
+		assert.isUndefined(step(4), 'a global let');
+		assert.include(SchBreakpoints.stepLine(text, 3).why, 'Globals scope');
+		assert.strictEqual(step(5), '5', 'an abstract pattern');
+		assert.strictEqual(step(6), '5 (parameter)', 'an abstract pattern\'s param');
+		assert.strictEqual(step(7), '7', 'a rule');
+		assert.strictEqual(step(8), '7', 'extends');
+		assert.strictEqual(step(9), '9', 'an assert');
+		assert.strictEqual(step(10), '10', 'a value-of in its message');
+		assert.strictEqual(step(11), '9', 'the rest of its message');
+		assert.strictEqual(step(12), '7', 'the rule\'s end tag');
+		assert.strictEqual(step(15), '14 (parameter)', 'a param of a pattern with is-a');
+		assert.strictEqual(step(16), '14', 'a pattern\'s let');
+		assert.strictEqual(step(18), '18', 'a pattern with is-a and its param on one line');
+		assert.isUndefined(step(19), 'a phase');
+		assert.isUndefined(step(20), 'xsl:function');
+		// with Schematron as the default namespace
+		assert.strictEqual(SchBreakpoints.stepLine(`<schema ${iso}>\n  <pattern id="p" is-a="a">\n    <param name="x" value="1"/>\n  </pattern>\n</schema>`, 2).line, 1);
 	});
 
 	test('an expression evaluated in an abstract pattern\'s rule: its parameters replaced as SchXslt2 replaces them - as text, the longest name first', () => {
@@ -143,6 +193,15 @@ suite('Schematron: debugging', () => {
 		});
 	});
 	const lineOf = (text: string) => schemaText.split('\n').findIndex((line) => line.includes(text));
+	// once the breakpoints added are where they're moved to (see SchBreakpoints): their 0-based lines in the file
+	const breakpointsAt = async (uri: vscode.Uri, expected: number[]) => {
+		const lines = () => vscode.debug.breakpoints.filter((b): b is vscode.SourceBreakpoint => b instanceof vscode.SourceBreakpoint && b.location.uri.fsPath === uri.fsPath)
+			.map((b) => b.location.range.start.line).sort((a, b) => a - b);
+		for (let i = 0; i < 50 && JSON.stringify(lines()) !== JSON.stringify(expected); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		assert.deepEqual(lines(), expected);
+	};
 
 	test('a breakpoint on an assertion: paused at the schema\'s line, with the node, the rule\'s let - not SchXslt2\'s variables - and its test evaluated', async () => {
 		const schema = vscode.Uri.file(file('orders.sch'));
@@ -178,17 +237,17 @@ suite('Schematron: debugging', () => {
 			['Order B2 has an invalid date', 'Order B2 has no lines']);
 	});
 
-	test('a breakpoint where SchXslt2 has no step, e.g. on a title, isn\'t verified - one on a rule pauses where it fires, for each node', async () => {
+	test('a breakpoint where SchXslt2 has no step, e.g. on the schema\'s title, is removed when it\'s added - one on a rule pauses where it fires, for each node', async () => {
 		const schema = vscode.Uri.file(file('orders.sch'));
 		breakpointResponses.length = 0;
 		vscode.debug.addBreakpoints([lineOf('<title>'), lineOf('<rule')].map((line) => new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(line, 0)))));
+		await breakpointsAt(schema, [lineOf('<rule')]);
 		const finished = ended();
 		assert.isTrue(await SchematronDebug.debug(schema));
 		const first = await nextStop();
-		const response = breakpointResponses.find((r) => r.session === first.session && r.body.breakpoints?.length === 2)?.body;
+		const response = breakpointResponses.find((r) => r.session === first.session && r.body.breakpoints?.length === 1)?.body;
 		assert.isDefined(response, JSON.stringify(breakpointResponses));
-		assert.deepEqual(response.breakpoints.map((b: any) => b.verified), [false, true]);
-		assert.include(response.breakpoints[0].message, 'Schematron: no step here');
+		assert.deepEqual(response.breakpoints.map((b: any) => b.verified), [true]);
 		const frame = (await first.session.customRequest('stackTrace', { threadId: 1 })).stackFrames[0];
 		assert.strictEqual(frame.line, lineOf('<rule') + 1);
 		const context = await first.session.customRequest('evaluate', { expression: 'string(@id)', frameId: frame.id, context: 'watch' });
@@ -425,5 +484,48 @@ suite('Schematron: debugging', () => {
 		const ruleLine = text.split('\n').findIndex((l) => l.includes('<rule context="$element">')) + 1;
 		assert.deepEqual(names, [`rule order - order-dates (is-a required) @${ruleLine}`, `rule order - order-dates (is-a required) @${ruleLine}`]);
 		assert.deepEqual(parameters, ['$element=order', '$attribute=@date']);
+	});
+
+	test('a breakpoint on a parameter is moved to its pattern when it\'s added - an is-a pattern\'s pauses in its copy, the abstract pattern\'s in each - and one on a global let is removed', async () => {
+		fs.writeFileSync(file('orders.sch'), `<schema ${iso} queryBinding="xslt3">
+  <let name="today" value="current-date()"/>
+  <pattern abstract="true" id="required">
+    <param name="attribute"/>
+    <rule context="order"><assert test="$attribute" id="required-attribute">needs it</assert></rule>
+  </pattern>
+  <pattern id="order-ids" is-a="required">
+    <param name="attribute" value="@id"/>
+  </pattern>
+  <pattern id="order-dates" is-a="required">
+    <param name="attribute" value="@date"/>
+  </pattern>
+</schema>`);
+		const lines = fs.readFileSync(file('orders.sch'), 'utf8').split('\n');
+		const line = (text: string, from = 0) => lines.findIndex((l, i) => i >= from && l.includes(text));
+		const schema = vscode.Uri.file(file('orders.sch'));
+		const datesPattern = line('id="order-dates"');
+		const abstractPattern = line('abstract="true"');
+		const condition = 'string(@id) = \'A1\'';
+		vscode.debug.addBreakpoints([line('<param', datesPattern), line('<param')].map((l) => new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(l, 0)), true, condition)));
+		await breakpointsAt(schema, [abstractPattern, datesPattern]);
+		assert.isTrue(vscode.debug.breakpoints.every((b) => b.condition === condition), 'the condition is kept');
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(schema, new vscode.Position(line('name="today"'), 0)))]);
+		await breakpointsAt(schema, [abstractPattern, datesPattern]);
+		const finished = ended();
+		assert.isTrue(await SchematronDebug.debug(schema));
+		const names: string[] = [];
+		for (let i = 0; i < 10; i++) {
+			const stop = await Promise.race([nextStop(), finished.then(() => undefined)]);
+			if (!stop) {
+				break;
+			}
+			const frame = (await stop.session.customRequest('stackTrace', { threadId: 1 })).stackFrames[0];
+			names.push(`${frame.line - 1}: ${frame.name}`);
+			await stop.session.customRequest('continue', { threadId: 1 });
+		}
+		await finished;
+		// for order A1: in order-ids' copy (the abstract pattern's breakpoint), then order-dates' (both)
+		const rule = line('<rule');
+		assert.deepEqual(names, [`${rule}: rule order - order-ids (is-a required)`, `${rule}: rule order - order-dates (is-a required)`]);
 	});
 });

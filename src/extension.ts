@@ -31,6 +31,7 @@ import { HrefCompletion } from './hrefCompletion';
 import { XSpecPackages } from './xspecPackages';
 import { XSpecTestController } from './xspecTestController';
 import { XSpecBreakpoints } from './xspecBreakpoints';
+import { SchBreakpoints } from './schBreakpoints';
 import * as vscode from 'vscode';
 import { XdocNotes } from './xdocNote';
 import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLexer';
@@ -1782,6 +1783,7 @@ export function activate(context: vscode.ExtensionContext) {
 	XSpecRunner.extensionUri = context.extensionUri;
 	new XSpecTestController(context);
 	XSpecBreakpoints.register(context);
+	SchBreakpoints.register(context);
 	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.command, (uri: vscode.Uri, offset: number) => XSpecScenario.create(uri, offset)));
 	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.fileCommand, (uri?: vscode.Uri, xspecUri?: vscode.Uri, packageForm?: XSpecPackageForm) => {
 		const stylesheetUri = uri ?? vscode.window.activeTextEditor?.document.uri;

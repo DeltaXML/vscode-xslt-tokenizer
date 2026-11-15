@@ -20,7 +20,9 @@ import { XSpecSourceMap } from './xspecSourceMap';
 //   with is-a for an abstract pattern
 // - assert and report: the xsl:if that tests it, which reports it - for each copy, e.g. in each rule that extends an
 //   abstract rule
-// - let: its xsl:variable in the rule's template - or the schema's, its global parameter
+// - let: its xsl:variable in the rule's template
+// - pattern: where its rules fire - an abstract pattern's for each pattern that uses it - and an abstract rule's, where
+//   the rules that extend it fire
 // - value-of in a message: its xsl:value-of
 // A source line can have more than one generated line - and a generated line in a step's element is shown at the step's
 export class SchematronSourceMap implements DebugSourceMap {
@@ -177,6 +179,12 @@ export class SchematronSourceMap implements DebugSourceMap {
 			}
 			const abstractId = pattern?.element.attributes.get('is-a')?.trim();
 			const abstractPattern = abstractId ? patterns.get(abstractId) : undefined;
+			// and the abstract pattern's line: where its rules fire, for each pattern that uses it - as for the abstract rules
+			// the rule extends, in turn
+			if (abstractPattern) {
+				add(abstractPattern.file, abstractPattern.element, fired, fired);
+			}
+			this.extendedRules(rule, rules).forEach((extended) => add(extended.file, extended.element, fired, fired));
 			const parameters = pattern && abstractPattern ? abstractPattern.element.children.filter((c) => abstractPattern.local(c) === 'param').map((p) => {
 				const name = p.attributes.get('name')?.trim() ?? '';
 				const given = pattern.element.children.find((c) => pattern.local(c) === 'param' && c.attributes.get('name')?.trim() === name);
@@ -226,15 +234,8 @@ export class SchematronSourceMap implements DebugSourceMap {
 				}
 			});
 		});
-		// the schema's global sch:let and sch:param, and its phases' sch:let: the stylesheet's global parameters
-		const globals = entries.filter((entry) => (entry.local(entry.element) === 'let' || entry.local(entry.element) === 'param') &&
-			entry.element.parent && ['schema', 'library', 'phase'].includes(entry.local(entry.element.parent) ?? ''));
-		root.children.filter((c) => isXslt(c) && (local(c) === 'param' || local(c) === 'variable')).forEach((global) => {
-			const declaration = globals.find((g) => g.element.attributes.get('name')?.trim() === global.attributes.get('name'));
-			if (declaration) {
-				add(declaration.file, declaration.element, global);
-			}
-		});
+		// not the schema's global sch:let and sch:param, or its phases' sch:let: the stylesheet's global parameters, which
+		// the debugger never pauses at - their values are in the Globals scope (see SchBreakpoints)
 	}
 
 	public static load(schemaPath: string, generatedPath: string, phase?: string): SchematronSourceMap | undefined {
@@ -259,6 +260,19 @@ export class SchematronSourceMap implements DebugSourceMap {
 			}
 			const extended = name === 'extends' ? rules.get(c.attributes.get('rule')?.trim() ?? '') : undefined;
 			return extended ? this.letsOf(extended, rules, seen) : [];
+		});
+	}
+
+	// the abstract rules a rule extends - and those they extend, in turn
+	private extendedRules(rule: { file: string, element: XmlElement, local: (e: XmlElement) => string | undefined }, rules: Map<string, { file: string, element: XmlElement, local: (e: XmlElement) => string | undefined }>,
+		seen = new Set<XmlElement>([rule.element])): { file: string, element: XmlElement }[] {
+		return rule.element.children.filter((c) => rule.local(c) === 'extends').flatMap((c) => {
+			const extended = rules.get(c.attributes.get('rule')?.trim() ?? '');
+			if (!extended || seen.has(extended.element)) {
+				return [];
+			}
+			seen.add(extended.element);
+			return [extended, ...this.extendedRules(extended, rules, seen)];
 		});
 	}
 
