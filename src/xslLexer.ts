@@ -366,6 +366,9 @@ export class XslLexer {
         } else if (this.docType === DocumentTypes.SCH && name === 'value' && parentElement === 'dir') {
             // Schematron: sch:dir's value is ltr or rtl - unlike that of sch:let and sch:param
             return false;
+        } else if (this.docType === DocumentTypes.DCP && name === 'literalValue') {
+            // DCP: literalValue is XPath for the elements that set the XPath to a referenced image or SVG - else a value
+            return parentElement === 'imageXpath' || parentElement === 'xPathToReferencedSVG';
         } else if (parentElement === 'record') {
             // xsl:record: each no-namespace attribute is a map entry expression
             return name === this.nativePrefix + ':duplicates' || name.indexOf(':') === -1;
@@ -1858,6 +1861,8 @@ export class XslLexer {
             }
             return { isNative: true, instructionType, nativeName, isEmbeddedXslt: true };
         } else if (this.languageConfiguration.docType === DocumentTypes.DCP) {
+            // no namespace: e.g. for imageXpath's literalValue, which is XPath (see isExpressionAtt)
+            nativeName = elementName;
             if (this.languageConfiguration.variableElementNames && this.languageConfiguration.variableElementNames.indexOf(elementName) !== -1) {
                 instructionType = GlobalInstructionType.Variable;
             }

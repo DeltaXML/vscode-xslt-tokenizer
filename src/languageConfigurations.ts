@@ -52,7 +52,7 @@ export class XPathConfiguration {
 export class DCPConfiguration {
 	// initial configuration is for basic DCP support only
 	public static configuration: LanguageConfiguration = {
-		expressionAtts: ['attributeXpath', 'classXpath', 'elemXpath', 'when', 'xpath', 'childXpath', 'keyXpath', 'ignoreXpath', 'imageXpath'],
+		expressionAtts: ['attributeXpath', 'classXpath', 'elemXpath', 'when', 'xpath', 'childXpath', 'keyXpath', 'ignoreXpath'],
 		variableElementNames: ['stringParameter', 'booleanParameter'],
 		linkElementAttrNames: ['file', 'path'],
 		nativePrefix: '',

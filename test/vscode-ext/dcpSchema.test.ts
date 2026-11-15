@@ -99,4 +99,29 @@ suite('DCP schema (DeltaNova 2026.1)', () => {
 		assert.include(document.getText(), '<modifiedWhitespaceBehaviour literalValue=""/>');
 		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 	});
+
+	test('literalValue is checked as XPath where it sets the XPath to a referenced image or SVG - not elsewhere', async () => {
+		const file3 = path.join(folder, 'xpaths.dcp');
+		fs.writeFileSync(file3, `<documentComparator version="1.0" id="xpaths">
+  <standardConfig>
+    <svgConfiguration>
+      <svgInputAMarkupStyle literalValue="//img["/>
+      <xPathToReferencedSVG literalValue="//svg["/>
+    </svgConfiguration>
+    <imageConfiguration>
+      <imageXpath literalValue="//img["/>
+    </imageConfiguration>
+  </standardConfig>
+</documentComparator>`);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file3));
+		await vscode.window.showTextDocument(document);
+		const lines = () => vscode.languages.getDiagnostics(document.uri).map((d) => d.range.start.line).sort();
+		for (let i = 0; i < 40 && lines().length < 2; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		// xPathToReferencedSVG's and imageXpath's - not svgInputAMarkupStyle's, a colour
+		assert.deepEqual([...new Set(lines())], [4, 7], vscode.languages.getDiagnostics(document.uri).map((d) => `${d.range.start.line}: ${d.message}`).join('\n'));
+		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+	});
 });
