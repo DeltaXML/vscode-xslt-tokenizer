@@ -1903,8 +1903,9 @@ export class XsltTokenDiagnostics {
 						}
 
 						// the name of a package is a URI, e.g. urn:simple or http://example.com/pkg, not a QName
-						// - as is a DCP feature's, e.g. http://xml.org/sax/features/namespaces
-						const isPackageName = attType === AttributeType.InstructionName && (tagElementName === 'xsl:package' || tagElementName === 'xsl:use-package' || (docType === DocumentTypes.DCP && tagElementName === 'feature'));
+						// - and in a DCP file, only a parameter's name is a name: e.g. a feature's is a URI, a resource's a path
+						const isPackageName = attType === AttributeType.InstructionName && (tagElementName === 'xsl:package' || tagElementName === 'xsl:use-package' ||
+							(docType === DocumentTypes.DCP && !languageConfig.variableElementNames.includes(tagElementName)));
 						if (!hasProblem && !isPackageName && (attType === AttributeType.Variable || attType === AttributeType.InstructionName)) {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute') ? ValidationType.XMLAttribute : ValidationType.PrefixedName;

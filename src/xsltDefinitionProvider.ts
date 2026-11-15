@@ -138,6 +138,16 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 		}
 
+		// DCP: a parameter's name in parameterRef, if or unless - its declaration
+		const dcpReference = this.docType === DocumentTypes.DCP ? XsltDefinitionProvider.dcpParameterReference(document, position, globalInstructionData) : undefined;
+		if (dcpReference) {
+			const dcpLocation = dcpReference.definitionLocation;
+			if (dcpLocation) {
+				dcpLocation.extractedImportData = extractedImportData;
+			}
+			return dcpLocation;
+		}
+
 		return new Promise((resolve, reject) => {
 			let location: DefinitionLocation|undefined = undefined;
 
@@ -181,6 +191,14 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			return defnData;
 		}
+		// DCP: a parameter's name in parameterRef, if or unless - as for $name in its XPath
+		const dcpReference = this.docType === DocumentTypes.DCP ? XsltDefinitionProvider.dcpParameterReference(document, position, globalInstructionData) : undefined;
+		if (dcpReference) {
+			if (dcpReference.definitionLocation) {
+				dcpReference.definitionLocation.extractedImportData = extractedImportData;
+			}
+			return dcpReference;
+		}
 		// uses, such as an xsl:apply-templates mode, are not declarations
 		let matchingGlobal = globalInstructionData.find(global => { 
 			return global.type !== GlobalInstructionType.AccumulatorUse && global.type !== GlobalInstructionType.Mode && global.token.line === position.line &&
@@ -206,6 +224,34 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			resolve(defnData);
 		});
+	}
+
+	// DCP: the parameter whose name is the value of a parameterRef, if or unless attribute at the position - its
+	// declaration, with the value as the reference (an XML token: its quotes are left out by Rename)
+	public static dcpParameterReference(document: vscode.TextDocument, position: vscode.Position, globals: GlobalInstructionData[]): DefinitionData | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset);
+		const tagEnd = text.indexOf('>', tagStart);
+		if (tagStart < 0 || tagEnd < offset) {
+			return undefined;
+		}
+		const tag = text.substring(tagStart, tagEnd);
+		for (const match of tag.matchAll(/\s(parameterRef|if|unless)\s*=\s*(["'])([^"']*)\2/g)) {
+			const valueStart = tagStart + match.index! + match[0].length - match[3].length - 1;
+			if (offset < valueStart || offset > valueStart + match[3].length) {
+				continue;
+			}
+			const name = match[3].trim();
+			const global = globals.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === name);
+			if (!global) {
+				return undefined;
+			}
+			const start = document.positionAt(valueStart - 1);
+			const token: BaseToken = { line: start.line, startCharacter: start.character, length: match[3].length + 2, value: match[2] + match[3] + match[2], tokenType: XsltTokenDefinitions.xsltStartTokenNumber };
+			return { definitionLocation: XsltTokenDefinitions.createLocationFromInstruction(global, document), inputSymbol: { token, type: global.type } };
+		}
+		return undefined;
 	}
 
 	private static nameCharRgx = new RegExp(/[A-Z]|[a-z]|_|-|:/);

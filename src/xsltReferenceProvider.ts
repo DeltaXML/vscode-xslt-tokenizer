@@ -1,7 +1,7 @@
 import { XSpecReferences } from './xspecReferences';
 import * as vscode from 'vscode';
 import { XSLTnamespaces, FunctionData } from './functionData';
-import { XSLTConfiguration, SchConfiguration } from './languageConfigurations';
+import { XSLTConfiguration, SchConfiguration, DCPConfiguration } from './languageConfigurations';
 import { SchIncludes } from './schIncludes';
 import { XslLexerLight } from './xslLexerLight';
 import { SchemaQuery } from './schemaQuery';
@@ -209,7 +209,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			return enumValue.literals.map((literal) => literal.location);
 		}
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
-		const langConfig = XSLTConfiguration.configuration;
+		// a DCP file: its parameters, referred to by parameterRef, if and unless, and as $name in its XPath
+		const isDCP = document.languageId === 'dcp';
+		const langConfig = isDCP ? DCPConfiguration.configuration : XSLTConfiguration.configuration;
 		// TODO: first check if position is on a definition already
 		const dProvider = new XsltDefinitionProvider(langConfig);
 		this.definitionData = await dProvider.seekDefinition(document, position, token);
@@ -241,7 +243,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				// for a function or named template: its calls in the other stylesheets that use it
 				const otherModules = declaration && declarationDocument && !declaration.isParam ?
 					(await XSLTReferenceProvider.usingModules(declarationDocument, declaration)).filter((file) => !eid.accumulatedHrefs.includes(file)) : [];
-				const searchedModules = eid.accumulatedHrefs.concat(otherModules);
+				// not, for a DCP file, the XSLT filters it loads: its parameters aren't theirs
+				const searchedModules = isDCP ? [] : eid.accumulatedHrefs.concat(otherModules);
 				// a parameter of a template, e.g. f:width, isn't a global with the bindings of its module: they're found for
 				// it, as for a global, so that a prefixed name is found with another prefix, e.g. in an xsl:with-param
 				const seekInstruction = instruction.prefixBindings || !instruction.name.includes(':') ? instruction :
@@ -952,6 +955,11 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 									xpathStack, inScopeVariablesList, elementStack);
 								if (unResolvedToken !== null) {
 									unresolvedXsltVariableReferences.push(unResolvedToken);
+								}
+								// DCP: parameterRef, if and unless name a parameter - each is global
+								if (docType === DocumentTypes.DCP && (seekInstruction.type === GlobalInstructionType.Variable || seekInstruction.type === GlobalInstructionType.Parameter) &&
+									seekInstruction.name === variableName.trim()) {
+									referenceTokens.push(token);
 								}
 								break;
 							case AttributeType.InstructionName:

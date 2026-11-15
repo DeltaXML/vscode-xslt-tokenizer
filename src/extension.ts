@@ -20,6 +20,7 @@ import { SchExpandText } from './schExpandText';
 import { SchReferences } from './schReferences';
 import { SchRequired } from './schRequired';
 import { DcpValueAttributes } from './dcpValueAttributes';
+import { DcpParameters } from './dcpParameters';
 import { SchHover } from './schHover';
 import { SchVariables } from './schVariables';
 import { SchematronValidation } from './schematronValidation';
@@ -503,6 +504,12 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xspec' }, { provideDefinition: (document, position) => XSpecSchematron.definition(document, position) }));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp' }, dcpDefintiionProvider));
+	// DCP: its parameters - Go to Definition, Find All References, Rename and hover, from parameterRef, if, unless and $name
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'dcp' }, dcpDefintiionProvider));
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'dcp' }, { provideHover: (document, position) => DcpParameters.hover(document, position) }));
+	const dcpReferenceProvider = new XSLTReferenceProvider();
+	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'dcp' }, dcpReferenceProvider));
+	context.subscriptions.push(vscode.languages.registerRenameProvider({ language: 'dcp' }, dcpReferenceProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'sch' }, schDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, xspecDefinitionProvider));
 	// in an XSpec file with no outermost element yet, as '<' is typed: x:description (see XSpecScenario.rootCompletions)

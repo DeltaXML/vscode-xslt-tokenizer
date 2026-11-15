@@ -100,6 +100,77 @@ suite('DCP schema (DeltaNova 2026.1)', () => {
 		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 	});
 
+	test('parameters: Go to Definition, Find All References, Rename and hover - from parameterRef, if, unless and $name in XPath', async () => {
+		const file4 = path.join(folder, 'parameters.dcp');
+		const text = `<documentComparator version="1.0" id="parameters">
+  <pipelineParameters>
+    <booleanParameter name="ws" defaultValue="true">
+      <description>Whitespace changes</description>
+    </booleanParameter>
+    <stringParameter name="other" defaultValue="x"/>
+  </pipelineParameters>
+  <extensionPoints>
+    <inputPreFlatteningPoint>
+      <filter if="ws" when="$ws and $other = 'x'">
+        <resource name="xsl/clean-house.xsl"/>
+      </filter>
+      <filter unless="ws">
+        <resource name="xsl/clean-house.xsl"/>
+      </filter>
+    </inputPreFlatteningPoint>
+  </extensionPoints>
+  <standardConfig>
+    <resultReadabilityOptions>
+      <changeGatheringEnabled parameterRef="ws"/>
+    </resultReadabilityOptions>
+  </standardConfig>
+</documentComparator>`;
+		fs.writeFileSync(file4, text);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file4));
+		await vscode.window.showTextDocument(document);
+		for (let i = 0; i < 20; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		assert.deepEqual(vscode.languages.getDiagnostics(document.uri).map((d) => d.message), []);
+		const at = (snippet: string, offset: number) => document.positionAt(text.indexOf(snippet) + offset);
+		const declaration = text.indexOf('name="ws"') + 6;
+		const where = (locations: (vscode.Location | vscode.LocationLink)[] | undefined) =>
+			(locations ?? []).map((l) => 'uri' in l ? document.offsetAt(l.range.start) : document.offsetAt(l.targetSelectionRange?.start ?? l.targetRange.start));
+		// Go to Definition: from each kind of reference to the declaration's name
+		const results: string[] = [];
+		for (const [snippet, offset] of [['parameterRef="ws"', 14], ['if="ws"', 5], ['unless="ws"', 9], ['$ws and', 2]] as [string, number][]) {
+			const definitions = await vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>('vscode.executeDefinitionProvider', document.uri, at(snippet, offset));
+			results.push(`${snippet}: ${JSON.stringify(where(definitions))}`);
+		}
+		assert.isTrue(results.every((r) => r.includes(String(declaration)) || r.includes(String(declaration - 1)) || r.includes(String(declaration + 1))), results.join(' | '));
+		// Find All References: from the declaration - and from a reference
+		const references = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, document.positionAt(declaration + 1));
+		const lines = (locations: vscode.Location[]) => [...new Set(locations.map((l) => l.range.start.line + 1))].sort((a, b) => a - b);
+		assert.deepEqual(lines(references), [3, 10, 13, 20], JSON.stringify(references.map((r) => [r.range.start.line + 1, r.range.start.character])));
+		const fromReference = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, at('parameterRef="ws"', 14));
+		assert.deepEqual(lines(fromReference), [3, 10, 13, 20]);
+		// Rename: the declaration and each reference
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', document.uri, at('parameterRef="ws"', 14), 'spaces');
+		await vscode.workspace.applyEdit(edit);
+		const renamed = document.getText();
+		['name="spaces"', 'if="spaces"', 'unless="spaces"', '$spaces and', 'parameterRef="spaces"'].forEach((s) => assert.include(renamed, s));
+		assert.notInclude(renamed, '"ws"');
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+		// hover: the parameter's declaration
+		const reopened = await vscode.workspace.openTextDocument(vscode.Uri.file(file4));
+		await vscode.window.showTextDocument(reopened);
+		for (const [snippet, offset] of [['$ws and', 2], ['parameterRef="ws"', 14]] as [string, number][]) {
+			const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', reopened.uri, at(snippet, offset));
+			const hoverText = hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n');
+			assert.include(hoverText, '<booleanParameter name="ws" defaultValue="true"/>', snippet);
+			assert.include(hoverText, 'Whitespace changes', snippet);
+		}
+		// not on another attribute's value
+		const none = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', reopened.uri, at('defaultValue="x"', 15));
+		assert.isFalse(none.some((h) => h.contents.some((c) => (typeof c === 'string' ? c : c.value).includes('Parameter name='))));
+		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+	});
+
 	test('literalValue is checked as XPath where it sets the XPath to a referenced image or SVG - not elsewhere', async () => {
 		const file3 = path.join(folder, 'xpaths.dcp');
 		fs.writeFileSync(file3, `<documentComparator version="1.0" id="xpaths">
