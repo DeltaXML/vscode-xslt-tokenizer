@@ -12,6 +12,7 @@ import * as crypto from 'crypto';
 import * as http from 'http';
 import { McpServer, StreamableHTTPServerTransport, z } from './sdk';
 import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools';
+import { RunConfiguration } from './runConfiguration';
 
 // The extension's MCP server, for AI assistants: tools that use its linter and its knowledge of XSLT modules (see
 // XsltMcpTools). It runs in the extension host, so the tools use the same code as the editor - with the Streamable
@@ -288,6 +289,16 @@ export class XsltMcpServer {
 			},
 			annotations: readOnly
 		}, async (args) => tools.xpathFunction(args.name, args.xpathVersion));
+		mcp.registerTool('run_configuration', {
+			title: 'How the user runs stylesheets',
+			description: 'The configuration the user runs stylesheets and XSpec tests with in VS Code: the Saxon jar (with its edition, version and ' +
+				'licence), the XML catalog, the XSpec installation and the XSLT packages. With a stylesheet, also its Quick Run: the XML source ' +
+				'(its XML context file), its parameters, the classpath and the exact java command line - with the options the extension adds, ' +
+				'e.g. --allowSyntaxExtensions:on, -catalog and -lib. Call it before running Saxon yourself, and use that command, so that the ' +
+				'result is the same as the user\'s.',
+			inputSchema: { path: filePath.optional().describe('A stylesheet (.xsl, .xslt) to describe the Quick Run of: absolute, or relative to the first workspace folder') },
+			annotations: readOnly
+		}, async (args) => ({ content: [{ type: 'text' as const, text: await RunConfiguration.describe(args.path) }] }));
 		return mcp;
 	}
 }

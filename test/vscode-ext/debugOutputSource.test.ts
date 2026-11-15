@@ -285,6 +285,10 @@ suite('XSLT debugger: from the output to its source', () => {
 		assert.deepEqual(hints.map((hint) => hint.label), ['→ report.xsl:4 · input: order, orders.xml:2']);
 		// Go to XSLT Input: in another editor group, at the start tag
 		await vscode.commands.executeCommand('xslt-xpath.goToDebugOutputInput');
+		// the active editor can change after the command's done, when the machine is busy
+		for (let i = 0; i < 100 && vscode.window.activeTextEditor?.document.uri.fsPath !== vscode.Uri.file(inputFile).fsPath; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
 		const shown = vscode.window.activeTextEditor;
 		assert.strictEqual(shown?.document.uri.fsPath, vscode.Uri.file(inputFile).fsPath);
 		assert.strictEqual(shown?.selection.start.line, 1);

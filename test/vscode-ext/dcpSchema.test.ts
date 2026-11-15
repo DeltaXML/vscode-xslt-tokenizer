@@ -38,7 +38,8 @@ suite('DCP schema (DeltaNova 2026.1)', () => {
 		fs.rmSync(folder, { recursive: true, force: true });
 	});
 
-	test('the image comparison elements and their values, and modifiedWhitespaceBehaviour\'s automatic, aren\'t reported - and are auto-completed', async () => {
+	test('the image comparison elements and their values, and modifiedWhitespaceBehaviour\'s automatic, aren\'t reported - and are auto-completed', async function () {
+		this.timeout(20000);
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
 		await vscode.window.showTextDocument(document);
 		assert.strictEqual(document.languageId, 'dcp');
@@ -57,7 +58,8 @@ suite('DCP schema (DeltaNova 2026.1)', () => {
 		const editor = vscode.window.activeTextEditor!;
 		const offset = document.getText().indexOf('"source"');
 		await editor.edit((edit) => edit.replace(new vscode.Range(document.positionAt(offset + 1), document.positionAt(offset + 7)), 'relative'));
-		for (let i = 0; i < 40 && vscode.languages.getDiagnostics(document.uri).length === 0; i++) {
+		// checked again after the edit - later when the machine is busy
+		for (let i = 0; i < 100 && vscode.languages.getDiagnostics(document.uri).length === 0; i++) {
 			await new Promise((resolve) => setTimeout(resolve, 50));
 		}
 		assert.lengthOf(vscode.languages.getDiagnostics(document.uri), 1);

@@ -10,6 +10,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
 import { XsltMcpServer } from '../../src/mcp/xsltMcpServer';
+import { RunConfiguration } from '../../src/mcp/runConfiguration';
+import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 
@@ -151,6 +153,79 @@ suite('MCP server', function () {
 		}
 	});
 
+	test('run_configuration: the Saxon jar, with its edition, version and licence - and for a stylesheet, its Quick Run\'s source and command line', async () => {
+		assert.strictEqual(RunConfiguration.saxonEdition('/a/saxon-pe-13.1.jar'), 'PE');
+		assert.strictEqual(RunConfiguration.saxonVersion('/a/saxon-pe-13.1.jar'), '13.1');
+		assert.strictEqual(RunConfiguration.saxonEdition('/a/Saxon-HE-12.9.jar'), 'HE');
+		assert.strictEqual(RunConfiguration.saxonVersion('/a/Saxon-HE-12.9.jar'), '12.9');
+		assert.strictEqual(RunConfiguration.saxonEdition('/a/saxon9ee.jar'), 'EE');
+		assert.isUndefined(RunConfiguration.saxonEdition('/a/other.jar'));
+		const saxonDir = fs.mkdtempSync(path.join(os.tmpdir(), 'saxon-'));
+		const jar = path.join(saxonDir, 'saxon-pe-13.1.jar');
+		fs.writeFileSync(jar, '');
+		// Saxon's report, as it runs: replaced, for each case - the jar here isn't a real one
+		const runSaxon = RunConfiguration.runSaxon;
+		const reporting = (output: string, error?: string) => {
+			RunConfiguration.runSaxon = async () => ({ output, error });
+			// a new report: the jar changed
+			fs.utimesSync(jar, new Date(), new Date(Date.now() + Math.random() * 100000));
+		};
+		const data = path.join(dir, 'data.xml');
+		fs.writeFileSync(data, '<data/>');
+		const tasks = vscode.workspace.getConfiguration('XSLT.tasks');
+		const savedJar = tasks.inspect<string>('saxonJar')?.globalValue;
+		const savedContext = await DocumentChangeHandler.contextFor(undefined);
+		await tasks.update('saxonJar', jar, vscode.ConfigurationTarget.Global);
+		DocumentChangeHandler.setLastPicked(vscode.Uri.file(data), false);
+		try {
+			reporting('SaxonJ-PE 13.1 from Saxonica\nJava version 17.0.20\nUsing license serial number A014667\n');
+			const workspace = text(await call('run_configuration', {}));
+			assert.include(workspace, `Saxon jar: ${jar} - SaxonJ-PE 13.1\nSaxon licence: Using license serial number A014667`);
+			// no licence: as Saxon says - it runs without its licensed features
+			reporting('SaxonJ-PE 13.1 from Saxonica\nJava version 17.0.20\nNo license file found - running with licensable features disabled\n');
+			assert.include(text(await call('run_configuration', {})), 'Saxon licence: No license file found - running with licensable features disabled');
+			reporting('SaxonJ-HE 12.9 from Saxonica\nJava version 17.0.20\n');
+			assert.include(text(await call('run_configuration', {})), 'Saxon licence: none needed (Saxon-HE)');
+			// Saxon not run: from the jar's name, and why
+			reporting('', '\'java\' wasn\'t found on the PATH');
+			assert.include(text(await call('run_configuration', {})), `Saxon jar: ${jar} - Saxon-PE 13.1, from its name\nSaxon licence: unknown - Saxon couldn't be run to report it: 'java' wasn't found on the PATH`);
+			// the same jar, unchanged: Saxon isn't run again
+			let runs = 0;
+			RunConfiguration.runSaxon = async () => (runs++, { output: 'SaxonJ-PE 13.1 from Saxonica\n' });
+			await call('run_configuration', {});
+			assert.strictEqual(runs, 0);
+			assert.include(workspace, 'XSpec: ');
+			assert.notInclude(workspace, 'For ');
+			const forMain = text(await call('run_configuration', { path: main }));
+			assert.include(forMain, `For ${main}:`);
+			assert.include(forMain, 'this is the one Quick Run would create');
+			assert.include(forMain, `XML source: ${data}`);
+			const command = forMain.split('\n').find((line) => line.trim().startsWith('Command:'))!;
+			assert.include(command, `java -cp ${jar} net.sf.saxon.Transform`, 'Saxon\'s own Transform - not the extension\'s terminal-output variant');
+			assert.include(command, `-xsl:${main}`);
+			assert.include(command, `-s:${data}`);
+			assert.notInclude(command, '${', 'no variables left for VS Code to substitute');
+			assert.include(text(await call('run_configuration', { path: path.join(dir, 'missing.xsl') })), 'Stylesheet not found');
+		} finally {
+			RunConfiguration.runSaxon = runSaxon;
+			await tasks.update('saxonJar', savedJar, vscode.ConfigurationTarget.Global);
+			DocumentChangeHandler.setLastPicked(savedContext.uri, savedContext.isNone);
+			fs.rmSync(saxonDir, { recursive: true, force: true });
+		}
+	});
+
+	test('run_configuration: Saxon\'s own report of its edition and licence - with a real Saxon jar, in XSLT_TEST_SAXON_JAR', async function () {
+		const saxonJar = process.env.XSLT_TEST_SAXON_JAR;
+		if (!saxonJar) {
+			this.skip();
+		}
+		const report = await RunConfiguration.saxonReport(saxonJar!);
+		assert.match(report.product ?? '', /^SaxonJ-(HE|PE|EE) \d+/, JSON.stringify(report));
+		if (!/-HE /.test(report.product!)) {
+			assert.match(report.licence ?? '', /licen[cs]e/i, JSON.stringify(report));
+		}
+	});
+
 	test('a second server for the port: not started', async () => {
 		const other = new XsltMcpServer(memorySecrets(), { problems: async () => [], declarations: async () => ({ own: [], imported: [] }) });
 		assert.isFalse(await other.start(port));
@@ -169,7 +244,7 @@ suite('MCP server', function () {
 
 	test('the tools', async () => {
 		const response = await post({ jsonrpc: '2.0', id: ++id, method: 'tools/list' }, { Authorization: `Bearer ${token}` });
-		assert.deepEqual(response.message.result.tools.map((tool: { name: string }) => tool.name), ['lint_file', 'lint_files', 'module_imports', 'find_declaration', 'find_references', 'describe_type', 'xpath_function']);
+		assert.deepEqual(response.message.result.tools.map((tool: { name: string }) => tool.name), ['lint_file', 'lint_files', 'module_imports', 'find_declaration', 'find_references', 'describe_type', 'xpath_function', 'run_configuration']);
 	});
 
 	test('lint_file: a module that is not open, checked with its imports', async () => {
