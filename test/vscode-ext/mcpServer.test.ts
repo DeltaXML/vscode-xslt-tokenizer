@@ -112,6 +112,45 @@ suite('MCP server', function () {
 
 	suiteTeardown(() => server.stop());
 
+	test('each window has a server of its own: at its workspace\'s port, kept for the workspace - the next free one, if it\'s taken', async () => {
+		const base = XsltMcpServer.basePort();
+		const forA = XsltMcpServer.portFor('/projects/a', base);
+		assert.strictEqual(XsltMcpServer.portFor('/projects/a', base), forA, 'the same each time');
+		assert.isTrue(forA > base && forA < base + 1000);
+		assert.notStrictEqual(XsltMcpServer.portFor('/projects/b', base), forA);
+		// a workspace's state, as a Memento
+		const memento = (): vscode.Memento => {
+			const values = new Map<string, unknown>();
+			return { keys: () => [...values.keys()], get: <T>(key: string, defaultValue?: T) => (values.has(key) ? values.get(key) : defaultValue) as T, update: async (key: string, value: unknown) => { values.set(key, value); } };
+		};
+		const modules = { problems: async () => [], declarations: async () => ({ own: [], imported: [] }) };
+		const stateA = memento();
+		const first = new XsltMcpServer(memorySecrets(), modules, stateA);
+		const second = new XsltMcpServer(memorySecrets(), modules, memento());
+		const third = new XsltMcpServer(memorySecrets(), modules, stateA);
+		try {
+			// two starts at once: one server, at the workspace's port
+			const [started, again] = await Promise.all([first.start(undefined, '/projects/a'), first.start(undefined, '/projects/a')]);
+			assert.isTrue(started && again);
+			assert.strictEqual(first.port, forA);
+			assert.strictEqual(first.url, `http://127.0.0.1:${forA}/mcp`);
+			assert.strictEqual(stateA.get('xslt-xpath.mcpPort'), forA);
+			// another window, with a workspace whose port is taken: the next free one
+			assert.isTrue(await second.start(undefined, '/projects/a'));
+			assert.strictEqual(second.port, forA + 1);
+			// the workspace opened again: its port, from its state - free again, so the same URL as before
+			first.stop();
+			second.stop();
+			assert.isTrue(await third.start(undefined, '/projects/a'));
+			assert.strictEqual(third.previousPort, forA);
+			assert.strictEqual(third.port, forA);
+		} finally {
+			first.stop();
+			second.stop();
+			third.stop();
+		}
+	});
+
 	test('a second server for the port: not started', async () => {
 		const other = new XsltMcpServer(memorySecrets(), { problems: async () => [], declarations: async () => ({ own: [], imported: [] }) });
 		assert.isFalse(await other.start(port));

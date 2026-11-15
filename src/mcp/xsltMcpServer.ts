@@ -15,8 +15,9 @@ import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools'
 
 // The extension's MCP server, for AI assistants: tools that use its linter and its knowledge of XSLT modules (see
 // XsltMcpTools). It runs in the extension host, so the tools use the same code as the editor - with the Streamable
-// HTTP transport, on 127.0.0.1 at the port of XSLT.mcp.port, as VS Code (for GitHub Copilot) and command-line agents
-// (e.g. Claude Code) can both connect to it. Each request needs the token, kept in the secret storage - the same for
+// HTTP transport, on 127.0.0.1, as VS Code (for GitHub Copilot) and command-line agents (e.g. Claude Code) can both
+// connect to it. Each window has a server of its own, for its workspace, at a port that's the same each time the
+// workspace is opened (see start) - so with several windows, an assistant in each project uses that project's window. Each request needs the token, kept in the secret storage - the same for
 // each window and session, so an assistant's setup keeps working until the token is reset. The server is stateless: a
 // new SDK server and transport for each request
 export class XsltMcpServer {
@@ -29,7 +30,8 @@ export class XsltMcpServer {
 	private token: string | undefined;
 	private readonly tools: XsltMcpTools;
 
-	public constructor(private readonly secrets: vscode.SecretStorage, modules: XsltModules) {
+	// state: the workspace's state, where its port is kept
+	public constructor(private readonly secrets: vscode.SecretStorage, modules: XsltModules, private readonly state?: vscode.Memento) {
 		this.tools = new XsltMcpTools(modules);
 		// reset in this window or another: the new token is used from the next request
 		secrets.onDidChange((event) => {
@@ -43,12 +45,31 @@ export class XsltMcpServer {
 		return vscode.workspace.getConfiguration('XSLT.mcp').get<boolean>('enabled', false);
 	}
 
-	public static port() {
+	// the setting: the port of a window with no folder open, and the start of the range of each workspace's port
+	public static basePort() {
 		return vscode.workspace.getConfiguration('XSLT.mcp').get<number>('port', 6745);
 	}
 
-	public static url(port = XsltMcpServer.port()) {
+	public static url(port: number) {
 		return `http://127.0.0.1:${port}/mcp`;
+	}
+
+	// what identifies the window's workspace: its .code-workspace file, else its first folder - none with no folder open
+	public static workspaceKey(): string | undefined {
+		return vscode.workspace.workspaceFile?.scheme === 'file' ? vscode.workspace.workspaceFile.fsPath : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	}
+
+	// a workspace's port, from its key: each of up to 999 ports after the base port, so that each window - with another
+	// workspace - has a server of its own, at a port that's the same each time the workspace is opened
+	public static portFor(key: string, base = XsltMcpServer.basePort()) {
+		return base + 1 + crypto.createHash('sha256').update(key).digest().readUInt32BE(0) % 999;
+	}
+
+	// the port the server is listening on - the URL an assistant connects to - while it's running
+	public port: number | undefined;
+
+	public get url(): string | undefined {
+		return this.port !== undefined ? XsltMcpServer.url(this.port) : undefined;
 	}
 
 	// the token: made once, then kept
@@ -74,8 +95,48 @@ export class XsltMcpServer {
 		return !!this.httpServer?.listening;
 	}
 
-	// listening - or not, e.g. when another window has the port: false
-	public async start(port = XsltMcpServer.port()): Promise<boolean> {
+	private static readonly portKey = 'xslt-xpath.mcpPort';
+
+	// the port of the last start in this workspace - before it, if it was another
+	public previousPort: number | undefined;
+
+	// listening - or not: false. At the port given - else for the window's workspace: the one it had before, else the one
+	// for its key (see portFor), or the next free one, kept for the workspace; with no folder open, the setting's
+	// key: what identifies the workspace - for testing, another than the window's
+	public async start(port?: number, key = XsltMcpServer.workspaceKey()): Promise<boolean> {
+		// a start under way, e.g. from the setting changed and a command at once: that one's result - not a second server
+		// trying the next port
+		if (!this.starting) {
+			this.starting = this.startAt(port, key).finally(() => this.starting = undefined);
+		}
+		return this.starting;
+	}
+
+	private starting: Promise<boolean> | undefined;
+
+	private async startAt(port: number | undefined, key: string | undefined): Promise<boolean> {
+		if (this.isRunning) {
+			return true;
+		}
+		if (port !== undefined) {
+			return this.listen(port, true);
+		}
+		if (!key) {
+			return this.listen(XsltMcpServer.basePort(), true);
+		}
+		this.previousPort = this.state?.get<number>(XsltMcpServer.portKey);
+		const first = this.previousPort ?? XsltMcpServer.portFor(key);
+		for (let candidate = first; candidate < first + 20; candidate++) {
+			if (await this.listen(candidate, candidate === first + 19)) {
+				await this.state?.update(XsltMcpServer.portKey, candidate);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// logged: whether a port in use is reported - e.g. not each one tried before a free one
+	private async listen(port: number, logInUse: boolean): Promise<boolean> {
 		if (this.httpServer) {
 			return this.isRunning;
 		}
@@ -91,12 +152,16 @@ export class XsltMcpServer {
 		this.httpServer = server;
 		return new Promise((resolve) => {
 			server.once('error', (error: NodeJS.ErrnoException) => {
-				XsltMcpServer.log.warn(error.code === 'EADDRINUSE' ? `port ${port} is in use - e.g. by the MCP server of another VS Code window` : `not started: ${error.message}`);
+				if (error.code !== 'EADDRINUSE' || logInUse) {
+					XsltMcpServer.log.warn(error.code === 'EADDRINUSE' ? `port ${port} is in use - e.g. by the MCP server of another VS Code window` : `not started: ${error.message}`);
+				}
 				this.httpServer = undefined;
 				resolve(false);
 			});
 			server.listen(port, '127.0.0.1', () => {
-				XsltMcpServer.log.info(`listening at ${XsltMcpServer.url(port)}`);
+				this.port = port;
+				const key = XsltMcpServer.workspaceKey();
+				XsltMcpServer.log.info(`listening at ${XsltMcpServer.url(port)}${key ? ` for ${key}` : ''}`);
 				resolve(true);
 			});
 		});
@@ -105,6 +170,7 @@ export class XsltMcpServer {
 	public stop() {
 		this.httpServer?.close();
 		this.httpServer = undefined;
+		this.port = undefined;
 	}
 
 	private async handle(request: http.IncomingMessage, response: http.ServerResponse, port: number) {
@@ -239,10 +305,12 @@ export class XsltMcpDefinitionProvider implements vscode.McpServerDefinitionProv
 	}
 
 	public async provideMcpServerDefinitions(): Promise<vscode.McpHttpServerDefinition[]> {
-		if (!XsltMcpServer.isEnabled()) {
+		// this window's server - at its own port, for its workspace
+		const url = this.server.url;
+		if (!XsltMcpServer.isEnabled() || !url) {
 			return [];
 		}
 		const token = await this.server.getToken();
-		return [new vscode.McpHttpServerDefinition('XSLT/XPath', vscode.Uri.parse(XsltMcpServer.url()), { Authorization: `Bearer ${token}` })];
+		return [new vscode.McpHttpServerDefinition('XSLT/XPath', vscode.Uri.parse(url), { Authorization: `Bearer ${token}` })];
 	}
 }

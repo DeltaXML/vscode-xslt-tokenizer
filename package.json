@@ -1182,13 +1182,13 @@
 					"type": "boolean",
 					"default": false,
 					"scope": "application",
-					"markdownDescription": "Run an MCP server for AI assistants, such as GitHub Copilot or Claude Code, with tools that use the extension's linter and its knowledge of XSLT modules: e.g. the problems of a stylesheet that isn't open, or its imports. The server listens on `127.0.0.1` only, at the port of `#XSLT.mcp.port#`, and needs a token that only VS Code and the assistants it's set up for have. GitHub Copilot finds it by itself; for Claude Code, run **XSLT: Set Up MCP Server for Claude Code**."
+					"markdownDescription": "Run an MCP server for AI assistants, such as GitHub Copilot or Claude Code, with tools that use the extension's linter and its knowledge of XSLT modules: e.g. the problems of a stylesheet that isn't open, or its imports. The server listens on `127.0.0.1` only - each window's at a port of its own, for its workspace (see `#XSLT.mcp.port#`) - and needs a token that only VS Code and the assistants it's set up for have. GitHub Copilot finds it by itself; for Claude Code, run **XSLT: Set Up MCP Server for Claude Code**."
 				},
 				"XSLT.mcp.port": {
 					"type": "number",
 					"default": 6745,
 					"scope": "application",
-					"markdownDescription": "The port of the MCP server (see `#XSLT.mcp.enabled#`). With more than one VS Code window, the first window opened has the server."
+					"markdownDescription": "The MCP server's port (see `#XSLT.mcp.enabled#`) in a window with no folder open. Each window with a workspace has a server of its own, for that workspace, at a port in the 999 after this one: the same each time the workspace is opened. So with a window for each project, an assistant started in a project's folder uses that project's window."
 				},
 				"XSLT.xspec.legacyCompatibility": {
 					"type": "boolean",

@@ -39,11 +39,12 @@ export class ClaudeCodeSetup {
 		return ClaudeCodeSetup.run(['mcp', 'add', '--transport', 'http', '--scope', scope, ClaudeCodeSetup.serverName, url, '--header', `Authorization: Bearer ${token}`], folder);
 	}
 
-	// sets it up again, with the new token, where it's set up now: for all projects, and for each of the folders - the
-	// scopes and folders updated
-	public static async update(url: string, token: string, folders: string[]): Promise<{ updated: string[], result?: ClaudeResult }> {
+	// sets it up again, e.g. with a new token or URL, where it's set up now: for all projects (unless not includeUser),
+	// and for each of the folders - the scopes and folders updated
+	public static async update(url: string, token: string, folders: string[], includeUser = true): Promise<{ updated: string[], result?: ClaudeResult }> {
 		const updated: string[] = [];
-		const places: { scope: ClaudeScope, folder?: string, name: string }[] = [{ scope: 'user', name: 'all projects' }, ...folders.map((folder) => ({ scope: 'local' as ClaudeScope, folder, name: folder }))];
+		const places: { scope: ClaudeScope, folder?: string, name: string }[] = [...(includeUser ? [{ scope: 'user' as ClaudeScope, name: 'all projects' }] : []),
+			...folders.map((folder) => ({ scope: 'local' as ClaudeScope, folder, name: folder }))];
 		for (const place of places) {
 			const removed = await ClaudeCodeSetup.remove(place.scope, place.folder);
 			if (removed.notFound) {
