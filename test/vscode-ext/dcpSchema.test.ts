@@ -33,7 +33,8 @@ suite('DCP schema (DeltaNova 2026.1)', () => {
 		fs.writeFileSync(file, content);
 	});
 	suiteTeardown(async () => {
-		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		// this suite's editors only: closing another suite's unsaved one would ask to save it
+		await vscode.window.tabGroups.close(vscode.window.tabGroups.all.flatMap((group) => group.tabs).filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath.startsWith(folder)));
 		fs.rmSync(folder, { recursive: true, force: true });
 	});
 
@@ -124,9 +125,6 @@ suite('DCP schema (DeltaNova 2026.1)', () => {
       <changeGatheringEnabled parameterRef="ws"/>
       <elementSplittingEnabled xpath="not($ws)"/>
     </resultReadabilityOptions>
-    <imageConfiguration>
-      <imageXpath literalValue="//img[$ws]"/>
-    </imageConfiguration>
   </standardConfig>
 </documentComparator>`;
 		fs.writeFileSync(file4, text);
@@ -142,7 +140,7 @@ suite('DCP schema (DeltaNova 2026.1)', () => {
 			(locations ?? []).map((l) => 'uri' in l ? document.offsetAt(l.range.start) : document.offsetAt(l.targetSelectionRange?.start ?? l.targetRange.start));
 		// Go to Definition: from each kind of reference to the declaration's name
 		const results: string[] = [];
-		for (const [snippet, offset] of [['parameterRef="ws"', 14], ['if="ws"', 5], ['unless="ws"', 9], ['$ws and', 2], ['$ws)', 1], ['$ws]', 1]] as [string, number][]) {
+		for (const [snippet, offset] of [['parameterRef="ws"', 14], ['if="ws"', 5], ['unless="ws"', 9], ['$ws and', 2], ['$ws)', 1]] as [string, number][]) {
 			const definitions = await vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>('vscode.executeDefinitionProvider', document.uri, at(snippet, offset));
 			results.push(`${snippet}: ${JSON.stringify(where(definitions))}`);
 		}
@@ -150,14 +148,14 @@ suite('DCP schema (DeltaNova 2026.1)', () => {
 		// Find All References: from the declaration - and from a reference
 		const references = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, document.positionAt(declaration + 1));
 		const lines = (locations: vscode.Location[]) => [...new Set(locations.map((l) => l.range.start.line + 1))].sort((a, b) => a - b);
-		assert.deepEqual(lines(references), [3, 10, 13, 20, 21, 24], JSON.stringify(references.map((r) => [r.range.start.line + 1, r.range.start.character])));
+		assert.deepEqual(lines(references), [3, 10, 13, 20, 21], JSON.stringify(references.map((r) => [r.range.start.line + 1, r.range.start.character])));
 		const fromReference = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, at('parameterRef="ws"', 14));
-		assert.deepEqual(lines(fromReference), [3, 10, 13, 20, 21, 24]);
+		assert.deepEqual(lines(fromReference), [3, 10, 13, 20, 21]);
 		// Rename: the declaration and each reference
 		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', document.uri, at('parameterRef="ws"', 14), 'spaces');
 		await vscode.workspace.applyEdit(edit);
 		const renamed = document.getText();
-		['name="spaces"', 'if="spaces"', 'unless="spaces"', '$spaces and', 'parameterRef="spaces"', 'not($spaces)', '//img[$spaces]'].forEach((s) => assert.include(renamed, s));
+		['name="spaces"', 'if="spaces"', 'unless="spaces"', '$spaces and', 'parameterRef="spaces"', 'not($spaces)'].forEach((s) => assert.include(renamed, s));
 		assert.notInclude(renamed, '"ws"');
 		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 		// hover: the parameter's declaration
@@ -172,6 +170,45 @@ suite('DCP schema (DeltaNova 2026.1)', () => {
 		// not on another attribute's value
 		const none = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', reopened.uri, at('defaultValue="x"', 15));
 		assert.isFalse(none.some((h) => h.contents.some((c) => (typeof c === 'string' ? c : c.value).includes('Parameter name='))));
+		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+	});
+
+	test('an XPath on the input documents - imageXpath\'s literalValue - has no parameters: reported, and not navigated - and a booleanParameter\'s defaultValue is true or false', async () => {
+		const file5 = path.join(folder, 'input-xpath.dcp');
+		const text = `<documentComparator version="1.0" id="input-xpath">
+  <pipelineParameters>
+    <booleanParameter name="ws" defaultValue="true"/>
+    <booleanParameter name="avt" defaultValue="{$ws}"/>
+    <stringParameter name="s" defaultValue="a{$ws}b"/>
+  </pipelineParameters>
+  <standardConfig>
+    <resultReadabilityOptions>
+      <elementSplittingEnabled xpath="not($ws)"/>
+    </resultReadabilityOptions>
+    <imageConfiguration>
+      <imageXpath literalValue="*:img[@alt != '$ws']/@src[$ws]"/>
+    </imageConfiguration>
+  </standardConfig>
+</documentComparator>`;
+		fs.writeFileSync(file5, text);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file5));
+		await vscode.window.showTextDocument(document);
+		const messages = () => vscode.languages.getDiagnostics(document.uri).filter((d) => !d.message.includes('unused')).map((d) => `${d.range.start.line + 1}: ${d.message}`).sort();
+		for (let i = 0; i < 40 && messages().length < 2; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		// the $ws in the predicate, not the one in a string literal - once, not also as unresolved; and the AVT in a boolean
+		assert.deepEqual(messages(), [
+			'12: DCP: $ws isn\'t in scope here - this XPath is evaluated on the input documents, where pipeline parameters aren\'t declared',
+			'4: DCP: a booleanParameter\'s defaultValue must be true or false - it isn\'t an attribute value template']);
+		// not a reference to the parameter: no definition, not in its references
+		const inImage = document.positionAt(text.indexOf('[$ws]') + 2);
+		const definitions = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', document.uri, inImage);
+		assert.lengthOf(definitions ?? [], 0);
+		const references = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, document.positionAt(text.indexOf('name="ws"') + 7));
+		assert.notInclude(references.map((r) => r.range.start.line + 1), 12);
+		assert.include(references.map((r) => r.range.start.line + 1), 9);
 		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
 	});
 

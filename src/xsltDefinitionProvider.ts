@@ -33,6 +33,7 @@ import { XPathVersion } from './xpathVersion';
 import { XSpecNodeNames } from './xspecNodeNames';
 import { SchReferences } from './schReferences';
 import { XSpecSchematron } from './xspecSchematron';
+import { DcpParameters } from './dcpParameters';
 
 interface ImportedGlobals {
 	href: string;
@@ -138,6 +139,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 		}
 
+		// DCP: not in an XPath evaluated on the input documents, where a $name isn't a parameter (see DcpParameters)
+		if (this.docType === DocumentTypes.DCP && DcpParameters.isInInputXPath(document.getText(), document.offsetAt(position))) {
+			return undefined;
+		}
 		// DCP: a parameter's name in parameterRef, if or unless - its declaration
 		const dcpReference = this.docType === DocumentTypes.DCP ? XsltDefinitionProvider.dcpParameterReference(document, position, globalInstructionData) : undefined;
 		if (dcpReference) {
@@ -190,6 +195,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				defnData.definitionLocation.extractedImportData = extractedImportData;
 			}
 			return defnData;
+		}
+		// DCP: not in an XPath evaluated on the input documents, where a $name isn't a parameter (see DcpParameters)
+		if (this.docType === DocumentTypes.DCP && DcpParameters.isInInputXPath(document.getText(), document.offsetAt(position))) {
+			return undefined;
 		}
 		// DCP: a parameter's name in parameterRef, if or unless - as for $name in its XPath
 		const dcpReference = this.docType === DocumentTypes.DCP ? XsltDefinitionProvider.dcpParameterReference(document, position, globalInstructionData) : undefined;

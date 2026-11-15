@@ -38,8 +38,54 @@ export class DcpParameters {
 		return undefined;
 	}
 
+	// the XPath of imageXpath's and xPathToReferencedSVG's literalValue: passed, once the DCP is loaded, to the image and
+	// SVG comparison, which evaluates it on the input documents, relative to the element, e.g. *:img/@src - where pipeline
+	// parameters aren't in scope. Its value's offsets in the text
+	public static inputXPaths(text: string): { start: number, end: number }[] {
+		const values: { start: number, end: number }[] = [];
+		for (const match of text.matchAll(/<(imageXpath|xPathToReferencedSVG)\b[^>]*?\sliteralValue\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+			const value = match[2] ?? match[3];
+			const start = match.index! + match[0].length - value.length - 1;
+			values.push({ start, end: start + value.length });
+		}
+		return values;
+	}
+
+	public static isInInputXPath(text: string, offset: number) {
+		return DcpParameters.inputXPaths(text).some((v) => offset >= v.start && offset <= v.end);
+	}
+
+	// - a $name in an input document XPath (see inputXPaths): parameters aren't in scope there - not in string literals
+	// - a booleanParameter's defaultValue that isn't true or false: it's not an attribute value template - DeltaNova makes
+	//   it the expression true() or false()
+	public static problems(document: vscode.TextDocument): vscode.Diagnostic[] {
+		const text = document.getText();
+		const problems: vscode.Diagnostic[] = [];
+		const rangeOf = (start: number, length: number) => new vscode.Range(document.positionAt(start), document.positionAt(start + length));
+		DcpParameters.inputXPaths(text).forEach(({ start, end }) => {
+			const value = text.substring(start, end);
+			for (const match of value.matchAll(/"[^"]*"|'[^']*'|\$([\w.-]+)/g)) {
+				if (match[1]) {
+					problems.push(new vscode.Diagnostic(rangeOf(start + match.index!, match[0].length),
+						`DCP: ${match[0]} isn't in scope here - this XPath is evaluated on the input documents, where pipeline parameters aren't declared`, vscode.DiagnosticSeverity.Error));
+				}
+			}
+		});
+		for (const match of text.matchAll(/<booleanParameter\b[^>]*?\sdefaultValue\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+			const value = match[1] ?? match[2];
+			if (value.trim() !== 'true' && value.trim() !== 'false') {
+				problems.push(new vscode.Diagnostic(rangeOf(match.index! + match[0].length - value.length - 1, value.length),
+					`DCP: a booleanParameter's defaultValue must be true or false - it isn't an attribute value template`, vscode.DiagnosticSeverity.Error));
+			}
+		}
+		return problems;
+	}
+
 	public static hover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
 		const text = document.getText();
+		if (DcpParameters.isInInputXPath(text, document.offsetAt(position))) {
+			return undefined;
+		}
 		const name = DcpParameters.nameAt(text, document.offsetAt(position));
 		const root = name ? parseXml(text) : undefined;
 		const declaration = root ? descendants(root).find((e) => DcpParameters.parameterElements.includes(e.name) && e.attributes.get('name')?.trim() === name) : undefined;

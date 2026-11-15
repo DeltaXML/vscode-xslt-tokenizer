@@ -73,7 +73,9 @@ suite('Timeline: clearing profiles and XSpec runs', function () {
 		// a file given, as from the Timeline view's title menu
 		await vscode.commands.executeCommand(TimelineCommands.clearFile, vscode.Uri.file(fileB));
 		assert.lengthOf(runsOf(fileB), 0);
-		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		// this suite's editors only: closing another suite's unsaved one would ask to save it, stopping the test run
+		await vscode.window.tabGroups.close(vscode.window.tabGroups.all.flatMap((group) => group.tabs)
+			.filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath.startsWith(dir)));
 	});
 
 	test('clear for all files: every profile and XSpec run - only once confirmed', async () => {

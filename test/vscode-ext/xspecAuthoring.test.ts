@@ -7,6 +7,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
 import * as vscode from 'vscode';
+import { revertAndCloseEditorsIn } from './testEditors';
 import { XSpecScenario } from '../../src/xspecScenario';
 import { XSpecSnippets } from '../../src/xspecSnippets';
 import { XSpecRequired } from '../../src/xspecRequired';
@@ -46,6 +47,13 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 
 	suiteSetup(async () => {
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+	});
+	// this suite's editors, with their changes reverted: closing an unsaved one later, e.g. with closeAllEditors in another
+	// suite, would ask to save it - a modal dialog that stops the test run
+	suiteTeardown(async () => {
+		await revertAndCloseEditorsIn(dir);
+		// the folders of single tests, e.g. xspec-root-
+		await revertAndCloseEditorsIn(os.tmpdir());
 	});
 
 	test('an XSpec file created for a stylesheet, then deleted: the stylesheet isn\'t checked as a module of it', async () => {

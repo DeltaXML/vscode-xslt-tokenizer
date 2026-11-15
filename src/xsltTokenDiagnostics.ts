@@ -38,6 +38,7 @@ import { SchXslt2Checks } from './schXslt2Checks';
 import { SchReferences } from './schReferences';
 import { SchRequired } from './schRequired';
 import { DcpValueAttributes } from './dcpValueAttributes';
+import { DcpParameters } from './dcpParameters';
 import { XSpecSchematron } from './xspecSchematron';
 import { SchSchema } from './schSchema';
 import { XSpecFocus } from './xspecFocus';
@@ -3742,6 +3743,16 @@ export class XsltTokenDiagnostics {
 		if (docType === DocumentTypes.DCP) {
 			// an element with none of literalValue, parameterRef and xpath, or more than one
 			allDiagnostics.push(...DcpValueAttributes.problems(document));
+			// parameters in an XPath evaluated on the input documents - reported once, by DcpParameters, not also as unresolved -
+			// and a booleanParameter's defaultValue that isn't true or false
+			const inputXPaths = DcpParameters.inputXPaths(documentText);
+			if (inputXPaths.length > 0) {
+				allDiagnostics = allDiagnostics.filter((d) => {
+					const offset = document.offsetAt(d.range.start);
+					return !(documentText.charAt(offset) === '$' && inputXPaths.some((v) => offset >= v.start && offset <= v.end));
+				});
+			}
+			allDiagnostics.push(...DcpParameters.problems(document));
 		}
 		if (docType === DocumentTypes.XSPEC) {
 			// the files it refers to that aren't found

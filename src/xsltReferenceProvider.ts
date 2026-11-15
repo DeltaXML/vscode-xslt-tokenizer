@@ -22,6 +22,7 @@ import { ImportIndex } from './importIndex';
 import { XdocReferences } from './xdocReferences';
 import { PackageScope } from './packageScope';
 import { PackageNavigationProvider } from './packageNavigation';
+import { DcpParameters } from './dcpParameters';
 
 // an xsl:function or named xsl:template, for a rename of it or of one of its parameters - with, for a function, the
 // numbers of arguments it can be called with
@@ -222,7 +223,12 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			if (instruction && eid) {
 				// find all references to this instruction
 				let refTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, document, eid.allTokens, eid.globalInstructionData, eid.allImportedGlobals);
-				const refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
+				let refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
+				if (isDCP) {
+					// not a $name in an XPath evaluated on the input documents, where it isn't the parameter (see DcpParameters)
+					const text = document.getText();
+					refLocations = refLocations.filter((location) => !DcpParameters.isInInputXPath(text, document.offsetAt(location.range.start)));
+				}
 				locations = refLocations;
 				locations.push(this.definition);
 				// XSLT 4.0: references in documentation notes, e.g. @see my:area#2

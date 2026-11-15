@@ -13,6 +13,21 @@ The aim is to make writing, reviewing and debugging XSLT easier. The extension u
 
 See the [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) for the full description of each feature.
 
+**Where it goes further:**
+
+- **Debugging inside XPath** - the [debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html) stops within multi-line XPath expressions and inline functions, not only at XSLT instructions - and can [step back](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html#step-back).
+- **Schematron debugging** - [breakpoints and stepping](https://deltaxml.github.io/vscode-xslt-xpath/schematron.html#debugging) at a schema's rules, lets and assertions.
+- **XSpec in the editor** - [debug a test](https://deltaxml.github.io/vscode-xslt-xpath/xspec.html#debugging) from the XSpec file or the XSLT, with [coverage](https://deltaxml.github.io/vscode-xslt-xpath/xspec.html#coverage) in the editor's margin and test times in the Test Explorer.
+- **XSLT 4.0 as Saxon 13 implements it** - [record and enum types](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-records.html) checked as you type, and [path expressions on JSON](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-jnodes.html).
+- **Checks that understand XPath** - every variable, function and template reference is checked as you type, across imported modules, without compiling the stylesheet.
+- **Profiling in the editor** - [times shown at each template and function](https://deltaxml.github.io/vscode-xslt-xpath/profiler.html), with earlier profiles to compare (Saxon-PE/EE).
+- **Documentation in the code** - [notes](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-notes.html) in Markdown, with Javadoc-style tags such as `@param` and `@see`, shown in hover help wherever a function or template is used, and checked against its parameters - in XSLT 3.0 too.
+- **Help moving to packages** - [Analyse as Package](https://deltaxml.github.io/vscode-xslt-xpath/xslt-packages.html#converting) shows what would change before a library becomes a package. Packages in the workspace are found with no setup, and `xsl:override` declarations are written for you.
+- **Ready for AI assistants** - GitHub Copilot, Claude Code and other assistants in VS Code [see the extension's problems](https://deltaxml.github.io/vscode-xslt-xpath/ai-assistants.html) and fix them.
+- **Free and open source** - MIT licensed, and running and debugging work with the free Saxon-HE.
+
+**XML schema validation:** this extension checks that XML files are well-formed, but doesn't validate them against an XML Schema, RELAX NG schema or DTD - for that, install [Red Hat's XML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-xml) alongside it. The two work together: XSLT, XSpec and Schematron files are handled by this extension, and while Red Hat's extension is validating XML files, this one doesn't report the same well-formedness problems again. Schema-aware XSLT isn't supported.
+
 ---
 
 <p align="center">
@@ -374,13 +389,17 @@ The [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) provi
 The main documentation pages are linked below:
 
 - [Overview](https://deltaxml.github.io/vscode-xslt-xpath/index.html)
-- [Release 2.0 Highlights](https://deltaxml.github.io/vscode-xslt-xpath/new-release.html)
+- [What's New](https://deltaxml.github.io/vscode-xslt-xpath/new-release.html)
+- [Features](https://deltaxml.github.io/vscode-xslt-xpath/features.html)
 - [Editing XML](https://deltaxml.github.io/vscode-xslt-xpath/editing.html)
 - [Editing XSLT/XPath](https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html)
 - [Code Navigation](https://deltaxml.github.io/vscode-xslt-xpath/navigation.html)
 - [Quick Run](https://deltaxml.github.io/vscode-xslt-xpath/quick-run.html)
 - [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html)
 - [XSLT Debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html)
+- [Profiler](https://deltaxml.github.io/vscode-xslt-xpath/profiler.html)
+- [XSpec Tests](https://deltaxml.github.io/vscode-xslt-xpath/xspec.html)
+- [Schematron](https://deltaxml.github.io/vscode-xslt-xpath/schematron.html)
 - [Debugging with xsl:message](https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html)
 - [Settings](https://deltaxml.github.io/vscode-xslt-xpath/settings.html)
 - [XSLT 4.0](https://deltaxml.github.io/vscode-xslt-xpath/xslt40.html)
@@ -395,7 +414,7 @@ The main documentation pages are linked below:
 
 In addition to XSLT, XPath embedded in these XML vocabularies is highlighted, checked and auto-completed:
 
-- Schematron (`.sch`) - basic support, for the XPath in attributes such as `context` and `test`
+- Schematron (`.sch`) - checked as SchXslt2 runs it, with completion, quick fixes, validation of XML files and debugging - see [Schematron](https://deltaxml.github.io/vscode-xslt-xpath/schematron.html)
 - DeltaXignia's [Document Comparison Pipeline (DCP)](https://docs.deltaxml.com/xml-compare/latest/dcp-user-guide-9340381.html) format (`.dcp`)
 
 ---
