@@ -12,6 +12,9 @@
 /*
  NOTE: this code was auto-generated using .resources/xsd-to-typescript
  to transform core-dcp-v1_0.xsd - included in XML Compare
+ Updated by hand for document-comparator-1_1.xsd in DeltaNova 2026.1: the imageConfiguration elements imageGranularity,
+ imageInputAMarkupStyle, imageInputBMarkupStyle, outputRefForm and outputImageRefFavourSourceDoc, with their types,
+ and modifiedWhitespaceType's 'automatic' (was 'useDefault')
 */
 
 import { SchemaData, ComplexType, SimpleType } from './xsltSchema';
@@ -99,9 +102,9 @@ export class DCPSchema implements SchemaData {
         },
         "modifiedWhitespaceType": {
             base: ['xs:string'],
-            enum: ['useDefault', 'ignore', 'keepA', 'normalize', 'show'],
+            enum: ['automatic', 'ignore', 'keepA', 'normalize', 'show'],
             detail: {
-                'useDefault': `The context dependent automatic whitespace setting.`,
+                'automatic': `The context dependent automatic whitespace setting.`,
                 'ignore': `Ignore differences in whitespace that is not explicitly preserved.`,
                 'keepA': `Similar to 'ignore' except that 'A' document's whitespace is kept (instead of the 'B' document's whitespace).`,
                 'normalize': `Normalize whitespace in inputs before comparison.`,
@@ -134,6 +137,26 @@ export class DCPSchema implements SchemaData {
                 'adjacent': `Reports the differences by repeating A and B MathML adjacent to each other.`,
                 'detailed-adjacent': `Reports the differences by repeating the A and B MathML adjacent to each other. Content within the adjacent A and B views is highlighted at the specific parts where it is different.`,
                 'inline': `Reports the differences inline within the MathML without duplicating A and B. If the differences are too complex to easily render inline, the 'detailed-adjacent' view is used.`
+            }
+        },
+        "imageGranularityType": {
+            base: ['xs:string'],
+            enum: ['adjacent', 'detailed-adjacent'],
+            detail: {
+                'adjacent': `Reports the differences by repeating A and B images adjacent to each other.`,
+                'detailed-adjacent': `Reports the differences by repeating the A and B images adjacent to each other. Content within the adjacent A and B views is highlighted at the specific parts where it is different.`
+            }
+        },
+        "outputRefFormType": {
+            base: ['xs:string'],
+            enum: ['absolute', 'source']
+        },
+        "outputImageRefFavourSourceDocType": {
+            base: ['xs:string'],
+            enum: ['A', 'B'],
+            detail: {
+                'A': `The value from the 'A' source document will be used.`,
+                'B': `The value from the 'B' source document will be used.`
             }
         },
         "svgGranularityType": {
@@ -1037,7 +1060,7 @@ export class DCPSchema implements SchemaData {
             detail: `Sets XPath to the referenced SVG.`
         },
         "imageConfiguration": {
-            elementNames: ['isEnabled', 'imageXpath'],
+            elementNames: ['isEnabled', 'imageXpath', 'imageGranularity', 'imageInputAMarkupStyle', 'imageInputBMarkupStyle', 'outputRefForm', 'outputImageRefFavourSourceDoc'],
             detail: `Specifies configuration options for Binary Image Comparison. These configuration options can be specified on a
  DocumentComparator to configure its behavior when comparing images. Binary Image Comparison is on by default,
  but still requires the defining of XPaths to the referenced images.`},
@@ -1046,6 +1069,38 @@ export class DCPSchema implements SchemaData {
                 'literalValue': 'xs:string'
             },
             detail: `Sets XPath to the referenced binary image.`
+        },
+        "imageGranularity": {
+            attrs: {
+                'literalValue': 'imageGranularityType'
+            },
+            detail: `Sets the granularity at which the differences between two binary images will be represented.`
+        },
+        "imageInputAMarkupStyle": {
+            attrs: {
+                'literalValue': 'xs:string'
+            },
+            detail: `Sets the Input A image markup style setting for binary image comparison results. The default is "red" and an image color can be provided as color names, RGB or RGBA values, HEX values, HSL or HSLA values.`
+        },
+        "imageInputBMarkupStyle": {
+            attrs: {
+                'literalValue': 'xs:string'
+            },
+            detail: `Sets the Input B image markup style setting for binary image comparison results. The default is "green" and an image color can be provided as color names, RGB or RGBA values, HEX values, HSL or HSLA values.`
+        },
+        "outputRefForm": {
+            attrs: {
+                'literalValue': 'outputRefFormType'
+            },
+            detail: `When image comparison is enabled, this parameter controls the form in which your ref attributes of image xpath
+ elements are presented.`
+        },
+        "outputImageRefFavourSourceDoc": {
+            attrs: {
+                'literalValue': 'outputImageRefFavourSourceDocType'
+            },
+            detail: `When image comparison is enabled, this parameter controls which image xpath fileref attribute, either from A or B,
+ is used to derive the resulting fileref value when the image has not changed.`
         },
         "preAttributePoint": {
             type: 'filterChainType',
