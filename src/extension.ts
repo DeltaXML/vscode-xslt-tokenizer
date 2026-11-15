@@ -1737,9 +1737,9 @@ export function activate(context: vscode.ExtensionContext) {
 		xsltFormatter, '\n', '/'));
 
 	// Tab on an empty line, in XSLT and XML: to the indentation for its context (see the keybinding's 'when')
+	const tabFormatters: { [languageId: string]: XMLDocumentFormattingProvider } = { xslt: xsltFormatter, xspec: xspecFormatter, sch: schFormatter, dcp: dcpFormatter };
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.tabToIndentation', () =>
-		XMLDocumentFormattingProvider.tabToIndentation(vscode.window.activeTextEditor, vscode.window.activeTextEditor?.document.languageId === 'xslt' ? xsltFormatter :
-			vscode.window.activeTextEditor?.document.languageId === 'xspec' ? xspecFormatter : xmlFormatter)));
+		XMLDocumentFormattingProvider.tabToIndentation(vscode.window.activeTextEditor, tabFormatters[vscode.window.activeTextEditor?.document.languageId ?? ''] ?? xmlFormatter)));
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xpath',
 		xpathFormatter));
