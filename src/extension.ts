@@ -19,6 +19,7 @@ import { SchXslt2Checks } from './schXslt2Checks';
 import { SchExpandText } from './schExpandText';
 import { SchReferences } from './schReferences';
 import { SchRequired } from './schRequired';
+import { DcpValueAttributes } from './dcpValueAttributes';
 import { SchHover } from './schHover';
 import { SchVariables } from './schVariables';
 import { SchematronValidation } from './schematronValidation';
@@ -1860,6 +1861,9 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 	// Schematron: quick fixes for the attributes ISO Schematron requires that an element is missing (see SchRequired)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('sch', { provideCodeActions: (document, _range, context) => SchRequired.codeActions(document, context.diagnostics) },
+		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
+	// DCP: a quick fix adding literalValue to an element with none of literalValue, parameterRef and xpath (see DcpValueAttributes)
+	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('dcp', { provideCodeActions: (document, _range, context) => DcpValueAttributes.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 	// Schematron: quick fixes for the XSLT SchXslt2 ignores or doesn't run, and for a prefix not declared with sch:ns (see SchXslt2Checks)
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('sch', { provideCodeActions: (document, _range, context) => SchXslt2Checks.codeActions(document, context.diagnostics) },

@@ -37,6 +37,7 @@ import { XSpecExpectResult } from './xspecExpectResult';
 import { SchXslt2Checks } from './schXslt2Checks';
 import { SchReferences } from './schReferences';
 import { SchRequired } from './schRequired';
+import { DcpValueAttributes } from './dcpValueAttributes';
 import { XSpecSchematron } from './xspecSchematron';
 import { SchSchema } from './schSchema';
 import { XSpecFocus } from './xspecFocus';
@@ -1902,7 +1903,8 @@ export class XsltTokenDiagnostics {
 						}
 
 						// the name of a package is a URI, e.g. urn:simple or http://example.com/pkg, not a QName
-						const isPackageName = attType === AttributeType.InstructionName && (tagElementName === 'xsl:package' || tagElementName === 'xsl:use-package');
+						// - as is a DCP feature's, e.g. http://xml.org/sax/features/namespaces
+						const isPackageName = attType === AttributeType.InstructionName && (tagElementName === 'xsl:package' || tagElementName === 'xsl:use-package' || (docType === DocumentTypes.DCP && tagElementName === 'feature'));
 						if (!hasProblem && !isPackageName && (attType === AttributeType.Variable || attType === AttributeType.InstructionName)) {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute') ? ValidationType.XMLAttribute : ValidationType.PrefixedName;
@@ -3735,6 +3737,10 @@ export class XsltTokenDiagnostics {
 			allDiagnostics.push(...SchReferences.problems(document));
 			// the attributes ISO Schematron requires that elements are missing, e.g. a rule's context
 			allDiagnostics.push(...SchRequired.problems(document));
+		}
+		if (docType === DocumentTypes.DCP) {
+			// an element with none of literalValue, parameterRef and xpath, or more than one
+			allDiagnostics.push(...DcpValueAttributes.problems(document));
 		}
 		if (docType === DocumentTypes.XSPEC) {
 			// the files it refers to that aren't found
