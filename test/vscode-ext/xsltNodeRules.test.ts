@@ -146,9 +146,15 @@ suite('XSLT debugger: the template rules each input node was processed by', func
 			names: ['element:line'],
 			files: { [xml]: [5, 38, 1, 0, 0, 3] }
 		});
-		// formatted differently: the same elements
-		fs.writeFileSync(xml, fs.readFileSync(xml, 'utf8').replace(/\n\s*/g, ' ').replace('<orders>', '<orders>\n'));
+		// formatted differently in VS Code, and saved: the same elements
 		const formatted = await vscode.workspace.openTextDocument(vscode.Uri.file(xml));
+		const reformat = new vscode.WorkspaceEdit();
+		reformat.replace(formatted.uri, new vscode.Range(formatted.positionAt(0), formatted.positionAt(formatted.getText().length)),
+			formatted.getText().replace(/\n\s*/g, ' ').replace('<orders>', '<orders>\n'));
+		await vscode.workspace.applyEdit(reformat);
+		await formatted.save();
+		// after the file watcher has had time to report the save
+		await new Promise((resolve) => setTimeout(resolve, 1000));
 		const lineAt = formatted.positionAt(formatted.getText().indexOf('<line') + 1);
 		assert.match(await hoverText(formatted.uri, lineAt), /`line`: `match="line"` \[node-rules\.xsl:11\]\([^)]*#L11\) ×3/);
 		// an element added before it: not the same element any more
@@ -213,6 +219,29 @@ suite('XSLT debugger: the template rules each input node was processed by', func
 		// cleared: none
 		await vscode.commands.executeCommand('xslt-xpath.clearInputMapping');
 		assert.deepStrictEqual(XsltNodeRules.markers(input), { processed: [], builtIn: [] });
+	});
+
+	test('the input file replaced outside VS Code - e.g. deleted and copied again by a script: what was recorded for it is dropped', async () => {
+		const xml = file('node-rules.xml');
+		const products = file('node-rules-products.xml');
+		XsltNodeRules.update({
+			rules: [{ path: file('node-rules.xsl'), line: 11, column: 3, label: 'xsl:template match="line"' }],
+			names: ['element:line', 'element:product'],
+			files: { [xml]: [5, 38, 1, 0, 0, 1], [products]: [2, 22, 1, 1, 0, 1] }
+		});
+		const input = await vscode.workspace.openTextDocument(vscode.Uri.file(xml));
+		const other = await vscode.workspace.openTextDocument(vscode.Uri.file(products));
+		assert.lengthOf(XsltNodeRules.markers(input).processed, 1);
+		const text = fs.readFileSync(xml, 'utf8');
+		fs.rmSync(xml);
+		fs.writeFileSync(xml, text);
+		// as reported by the file watcher
+		for (let waited = 0; waited < 5000 && XsltNodeRules.markers(input).processed.length > 0; waited += 100) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		assert.deepStrictEqual(XsltNodeRules.markers(input), { processed: [], builtIn: [] });
+		// the other input file's kept
+		assert.lengthOf(XsltNodeRules.markers(other).processed, 1);
 	});
 
 	test('line starts: lines end with \\n, \\r\\n or \\r', () => {

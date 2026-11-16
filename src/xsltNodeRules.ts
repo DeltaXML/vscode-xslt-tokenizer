@@ -90,6 +90,15 @@ export class XsltNodeRules {
 			}
 		}));
 		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.clearInputMapping', () => XsltNodeRules.clear()));
+		// saved by VS Code: not changed outside it (see watch) - when about to be written, as the watcher may report it first
+		const saving = (document: vscode.TextDocument) => {
+			if (XsltNodeRules.files.size > 0 && document.uri.scheme === 'file') {
+				XsltNodeRules.savedAt.set(XsltNodeRules.key(document.fileName), Date.now());
+			}
+		};
+		context.subscriptions.push(vscode.workspace.onWillSaveTextDocument((event) => saving(event.document)));
+		context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(saving));
+		context.subscriptions.push({ dispose: () => XsltNodeRules.unwatch() });
 		context.subscriptions.push(vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
 			if (event.session.type === debugType && event.event === 'xsltNodeRules') {
 				XsltNodeRules.update(event.body as NodeRulesEvent, event.session.name);
@@ -108,7 +117,41 @@ export class XsltNodeRules {
 	public static clear() {
 		XsltNodeRules.rules = [];
 		XsltNodeRules.files.clear();
+		XsltNodeRules.unwatch();
 		XsltNodeRules.changed.fire();
+	}
+
+	// each input file is watched: replaced, changed or deleted outside VS Code - e.g. by a script, or a git checkout -
+	// it's another file, so what was recorded for it is dropped. Not when VS Code saved it: edited or formatted, its
+	// elements are found again by their position (see elementAt)
+	private static watchers: vscode.Disposable[] = [];
+	private static savedAt = new Map<string, number>();
+	// how long after VS Code saves a file a change to it on disk is taken as that save
+	public static saveWindow = 2000;
+
+	private static unwatch() {
+		XsltNodeRules.watchers.forEach((w) => w.dispose());
+		XsltNodeRules.watchers = [];
+	}
+
+	private static watch(file: string) {
+		const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(file)), path.basename(file)));
+		const changedOnDisk = () => {
+			const key = XsltNodeRules.key(file);
+			if (Date.now() - (XsltNodeRules.savedAt.get(key) ?? 0) < XsltNodeRules.saveWindow || !XsltNodeRules.files.has(key)) {
+				return;
+			}
+			XsltNodeRules.files.delete(key);
+			if (XsltNodeRules.files.size === 0) {
+				XsltNodeRules.rules = [];
+				XsltNodeRules.unwatch();
+			}
+			XsltNodeRules.changed.fire();
+		};
+		watcher.onDidChange(changedOnDisk);
+		watcher.onDidCreate(changedOnDisk);
+		watcher.onDidDelete(changedOnDisk);
+		XsltNodeRules.watchers.push(watcher);
 	}
 
 	// the last run's, replacing the one before - the input files as they were when it ended
@@ -123,6 +166,7 @@ export class XsltNodeRules {
 			}
 		});
 		XsltNodeRules.files.clear();
+		XsltNodeRules.unwatch();
 		XsltNodeRules.stylesheet = sessionName;
 		for (const [file, flat] of Object.entries(body.files ?? {})) {
 			let text: string;
@@ -157,6 +201,7 @@ export class XsltNodeRules {
 				input.elements.set(ordinal, { name: all[ordinal].name, processed });
 			}
 			XsltNodeRules.files.set(XsltNodeRules.key(file), input);
+			XsltNodeRules.watch(file);
 		}
 		XsltNodeRules.changed.fire();
 	}
