@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
+import { XPathBranches } from './xpathBranches';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import * as url from 'url';
@@ -56,6 +57,9 @@ interface XPathData {
 	functionArity?: number;
 	isRangeVar?: boolean;
 	awaitingArity: boolean;
+	// see XPathBranches
+	opensBranch?: boolean;
+	branch?: string;
 }
 
 interface VariableData {
@@ -574,32 +578,19 @@ export class XsltTokenDefinitions {
 							case 'some':
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
-								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
+								// a copy: the variables it declares are added to the list in scope, not to those before it
+								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true, opensBranch: true });
 								break;
 							case 'then':
-								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
+								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, opensBranch: true });
 								inScopeXPathVariablesList = [];
 								break;
 							case 'return':
 							case 'satisfies':
 							case 'else':
-								if (xpathStack.length > 0) {
-									let poppedData = xpathStack.pop();
-									if (poppedData) {
-										inScopeXPathVariablesList = poppedData.variables;
-										if (valueText === 'else') {
-											preXPathVariable = poppedData.preXPathVariable;
-										} else {
-											// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c
-											preXPathVariable = false;
-										}
-										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
-									} else {
-										inScopeXPathVariablesList = [];
-										preXPathVariable = false;
-										xpathVariableCurrentlyBeingDefined = false;
-									}
-								}
+								// the branch keeps the variables of its for, let, some or every in scope until a ',' or bracket ends it
+								({ inScopeXPathVariablesList, preXPathVariable, xpathVariableCurrentlyBeingDefined } = XPathBranches.startBranch(xpathStack, token, valueText,
+									{ inScopeXPathVariablesList, preXPathVariable, xpathVariableCurrentlyBeingDefined }));
 								break;
 						}
 						break;
@@ -648,6 +639,8 @@ export class XsltTokenDefinitions {
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
+								// the bracket ends the branches in it, e.g. (let $v := 1 return $v)
+								XPathBranches.endBranches(xpathStack);
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
 									if (poppedData) {
@@ -678,6 +671,9 @@ export class XsltTokenDefinitions {
 								break;
 							case CharLevelState.sep:
 								if (token.value === ',') {
+									// the comma ends the branches before it, e.g. the last $v in let $v := 1 return $v, $v is another variable
+									({ inScopeXPathVariablesList, preXPathVariable, xpathVariableCurrentlyBeingDefined } = XPathBranches.afterComma(xpathStack,
+										{ inScopeXPathVariablesList, preXPathVariable, xpathVariableCurrentlyBeingDefined }));
 									if (xpathStack.length > 0) {
 										let xp = xpathStack[xpathStack.length - 1];
 										if (xp.functionArity !== undefined) {

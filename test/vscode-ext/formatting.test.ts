@@ -168,6 +168,35 @@ suite('Formatting', () => {
 		}
 	});
 
+	test('after a comma that ends else, return or satisfies branches - however many - the next item is indented as the first', async () => {
+		// a map's entries: the value of 'x', on lines of its own, then 'y'
+		const entries = async (value: string[]) => {
+			const { lines } = await format(stylesheet(['<xsl:template match="/">', '<xsl:sequence select="map {', `'x': ${value[0]}`, ...value.slice(1, -1), `${value[value.length - 1]},`, `'y': 2`, '}"/>', '</xsl:template>']));
+			const indent = (start: string) => lines.find((line) => line.trimStart().startsWith(start))!.search(/\S/);
+			return { lines, x: indent(`'x'`), y: indent(`'y'`) };
+		};
+		const cases: { [name: string]: string[] } = {
+			'if': ['if (1)', 'then 1', 'else 2'],
+			'else if': ['if (1)', 'then 1', 'else if (2)', 'then 2', 'else 3'],
+			'let return': ['let $v := 1', 'return $v'],
+			'for return': ['for $v in 1', 'return $v'],
+			'some satisfies': ['some $v in 1', 'satisfies $v'],
+			'let return if': ['let $v := 1', 'return if ($v)', 'then 1', 'else 2'],
+			'let return let return': ['let $v := 1', 'return let $w := 2', 'return $w'],
+			'let with two variables': ['let $v := 1,', '$w := 2', 'return $v + $w']
+		};
+		for (const [name, value] of Object.entries(cases)) {
+			const { lines, x, y } = await entries(value);
+			assert.strictEqual(y, x, `${name}:\n${lines.join('\n')}`);
+		}
+		// a sequence: as after a plain value
+		const sequence = async (first: string[]) => (await format(stylesheet(['<xsl:template match="/">', `<xsl:sequence select="(${first[0]}`, ...first.slice(1, -1), `${first[first.length - 1]},`, '4)"/>', '</xsl:template>']))).lines
+			.find((line) => line.trimStart().startsWith('4)'))!.search(/\S/);
+		const plain = await sequence(['1']);
+		assert.strictEqual(await sequence(['let $v := 1', 'return $v']), plain);
+		assert.strictEqual(await sequence(['if (1)', 'then 1', 'else if (2)', 'then 2', 'else 3']), plain);
+	});
+
 	test('xsl:text content is kept as it is', async () => {
 		const { lines } = await format(stylesheet(['  <xsl:template match="/">', '<xsl:text>', '   a', ' b</xsl:text>', '  </xsl:template>']));
 		assert.deepEqual(lines.slice(3, 5), ['   a', ' b</xsl:text>']);

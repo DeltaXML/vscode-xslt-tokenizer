@@ -1174,6 +1174,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 										}
 									}
 									if (deleteCount > 0) {
+										// the branches it ends, e.g. the 'return' in if (1) then let $v := 1 return $v else $v: the
+										// variables in scope are those before the outermost
+										inScopeXPathVariablesList = xpathStack[xpathStack.length - deleteCount].variables;
 										xpathStack.splice(xpathStack.length - deleteCount);
 									}
 								}
@@ -1207,8 +1210,14 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						const sv = stackItem?.token.value;
 						const tokenIsComma = tv === ',';
 						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies');
-						if (popStackLaterForComma && xpathStack.length > 1) {
-							stackItem = xpathStack[xpathStack.length - 2];
+						if (popStackLaterForComma) {
+							// the item below the 'return', 'else' and 'satisfies' items the comma ends (see the ',' below), e.g.
+							// a map constructor whose next key follows
+							let below = xpathStack.length - 1;
+							while (below > -1 && ['return', 'else', 'satisfies'].includes(xpathStack[below].token.value)) {
+								below--;
+							}
+							stackItem = below > -1 ? xpathStack[below] : undefined;
 						}
 						if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
 							if (tokenIsComma) {
@@ -1347,6 +1356,25 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								break;
 							case CharLevelState.sep:
 								if (token.value === ',') {
+									// the comma ends each 'return', 'else' and 'satisfies' it follows - several, for a cascade, e.g.
+									// let $v := 1 return if ($v) then 1 else 2, $v - so the variables in scope are those before the
+									// outermost, where the last $v is another variable
+									while (xpathStack.length > 0) {
+										const sv = xpathStack[xpathStack.length - 1].token.value;
+										if (!(sv === 'return' || sv === 'else' || sv === 'satisfies')) {
+											break;
+										}
+										const poppedData = xpathStack.pop()!;
+										inScopeXPathVariablesList = poppedData.variables;
+										if (sv === 'else') {
+											preXPathVariable = poppedData.preXPathVariable;
+										} else {
+											// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c.
+											preXPathVariable = false;
+										}
+									}
+									// then the item it's in: a function call's next argument, e.g. f(let $v := 1 return $v, 2), or the
+									// next variable of a for or let clause
 									if (xpathStack.length > 0) {
 										let xp = xpathStack[xpathStack.length - 1];
 										if (xp.functionArity !== undefined) {
@@ -1354,30 +1382,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 										}
 										if (xp.isRangeVar) {
 											preXPathVariable = xp.preXPathVariable;
-										}
-										let nonBracketedThen = -1;
-										for (let i = xpathStack.length - 1; i > -1; i--) {
-											const xpathItem = xpathStack[i].token;
-											const val = xpathItem.value;
-											if (!(val === 'return' || val === 'else' || val === 'satisfies' || val === 'then')) {
-												break;
-											} else if (val === 'then') {
-												nonBracketedThen = i;
-											}
-										}
-										const sv = xp.token.value;
-										if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
-											let poppedData = xpathStack.pop();
-											if (poppedData) {
-												inScopeXPathVariablesList = poppedData.variables;
-												if (sv === 'else') {
-													preXPathVariable = poppedData.preXPathVariable;
-												} else {
-													// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c.
-													preXPathVariable = false;
-												}
-												xpathVariableCurrentlyBeingDefined = false;
-											}
 										}
 									}
 									xpathVariableCurrentlyBeingDefined = false;
