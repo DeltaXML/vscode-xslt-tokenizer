@@ -2647,25 +2647,26 @@ export class XsltTokenDiagnostics {
 						const tokenIsComma = tv === ',';
 						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies');
 						if (popStackLaterForComma && xpathStack.length > 1) {
-							latestStackItem = xpathStack[xpathStack.length - 2];
-							if (xpathStack.length > 1) {
-								let deleteCount = 0;
-								for (let i = xpathStack.length - 1; i > -1; i--) {
-									const loopStackItem = xpathStack[i];
-									const sv = loopStackItem.token.value;
-									if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
-										inScopeXPathVariablesList = loopStackItem.variables;
-										xpathVariableCurrentlyBeingDefined = loopStackItem.xpathVariableCurrentlyBeingDefined;
-										preXPathVariable = loopStackItem.xpathVariableCurrentlyBeingDefined;
-										deleteCount++;
-									} else {
-										break;
-									}
-								}
-								if (deleteCount > 0) {
-									xpathStack.splice(xpathStack.length - deleteCount);
+							// the comma ends each 'return', 'else' and 'satisfies' it follows - several, for a cascade, e.g.
+							// if (a) then 1 else if (b) then 2 else 3, or let $x := 1 return if (a) then 1 else 2 - so the stack
+							// item for the comma is the one below them all, e.g. a map constructor whose next key follows
+							let deleteCount = 0;
+							for (let i = xpathStack.length - 1; i > -1; i--) {
+								const loopStackItem = xpathStack[i];
+								const sv = loopStackItem.token.value;
+								if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
+									inScopeXPathVariablesList = loopStackItem.variables;
+									xpathVariableCurrentlyBeingDefined = loopStackItem.xpathVariableCurrentlyBeingDefined;
+									preXPathVariable = loopStackItem.xpathVariableCurrentlyBeingDefined;
+									deleteCount++;
+								} else {
+									break;
 								}
 							}
+							if (deleteCount > 0) {
+								xpathStack.splice(xpathStack.length - deleteCount);
+							}
+							latestStackItem = xpathStack[xpathStack.length - 1];
 						}
 						// XPath 4.0 empty map constructor without the 'map' keyword
 						const isBareEmptyMap = tv === '{}' && token.charType === CharLevelState.dSep && XsltTokenDiagnostics.isOperandExpected(prevToken);

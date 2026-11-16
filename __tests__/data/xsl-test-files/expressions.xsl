@@ -176,5 +176,12 @@
   <xsl:variable name="mapFn5" select="function() { 22 }"/>
   <xsl:variable name="mapFn6" select="function($a as xs:integer) as function(xs:integer) as xs:integer { function($b) as xs:integer { $a + $b + 1 } }"/>
   <xsl:variable name="mapFnNoError7" select="function($a as xs:integer) as function() as xs:integer { function() as xs:integer { $a + 1 } }"/>
+  <!-- a map entry's value that's a cascade, ended by the ',' before the next key: else if, let/for ... return if, some ... satisfies -->
+  <xsl:variable name="mapCascade1" select="map { 'x': if (1) then 1 else if (2) then 2 else 3, 'y': 4 }"/>
+  <xsl:variable name="mapCascade2" select="map { 'x': if (1) then 1 else if (2) then 2 else if (3) then 3 else 4, 'y': 5, 'z': 6 }"/>
+  <xsl:variable name="mapCascade3" select="map { 'x': let $v := 1 return if ($v) then 1 else 2, 'y': 3 }"/>
+  <xsl:variable name="mapCascade4" select="map { 'x': for $v in 1 return if ($v) then 1 else if ($v) then 2 else 3, 'y': 4 }"/>
+  <xsl:variable name="mapCascade5" select="map { 'x': some $v in 1 satisfies if ($v) then true() else false(), 'y': 2 }"/>
+  <xsl:variable name="mapCascade6" select="map { 'x': map { 'a': if (1) then 1 else if (2) then 2 else 3, 'b': 4 }, 'y': 5 }"/>
 
 </xsl:stylesheet>
