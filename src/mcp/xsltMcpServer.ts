@@ -322,6 +322,8 @@ export class XsltMcpDefinitionProvider implements vscode.McpServerDefinitionProv
 			return [];
 		}
 		const token = await this.server.getToken();
-		return [new vscode.McpHttpServerDefinition('XSLT/XPath', vscode.Uri.parse(url), { Authorization: `Bearer ${token}` })];
+		// the extension's version: when it changes, VS Code refreshes the tools it has cached, so a release's new tools are seen
+		const version: string = vscode.extensions.getExtension('deltaxml.xslt-xpath')?.packageJSON.version ?? '0';
+		return [new vscode.McpHttpServerDefinition('XSLT/XPath', vscode.Uri.parse(url), { Authorization: `Bearer ${token}` }, version)];
 	}
 }
