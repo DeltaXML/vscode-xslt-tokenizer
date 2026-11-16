@@ -12,12 +12,14 @@ import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 import { RecordTypes } from '../../src/recordTypes';
+import { XMLDocumentFormattingProvider } from '../../src/xmlDocumentFormattingProvider';
 
 const xsltNamespace = 'http://www.w3.org/1999/XSL/Transform';
 
 // the module with XSLT as its default namespace: its element names lose the prefix xsl, which stays bound, e.g. for
 // system-property('xsl:version')
-const toDefault = (text: string) => text.replace(/(<\/?)xsl:/g, '$1').replace(/(<(?:stylesheet|transform|package)\b)/, `$1 xmlns="${xsltNamespace}"`);
+// - declared at the end of the outermost start tag, which keeps its layout, e.g. with its attributes on the lines after
+const toDefault = (text: string) => text.replace(/(<\/?)xsl:/g, '$1').replace(/(<(?:stylesheet|transform|package)\b[^>]*?)(\/?>)/, `$1 xmlns="${xsltNamespace}"$2`);
 
 // the documents checked: files, not untitled documents (see xsltPrefix.test.ts)
 const problemsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-default-ns-'));
@@ -54,6 +56,25 @@ suite('XSLT as the default namespace', function () {
 		test(`the same problems and declarations: ${sample.name}`, async () => {
 			assert.deepEqual(await problems(toDefault(sample.text)), await problems(sample.text));
 		});
+	});
+
+	samples.forEach((sample) => {
+		test(`the same formatting: ${sample.name}`, async () => {
+			// as the xsl prefix's, apart from a continuation line aligned with an attribute of the tag it continues: less
+			// indented by the length of 'xsl:', e.g. version="3.0" under xmlns:xs on <stylesheet
+			const formattedDefault = await formatted(toDefault(sample.text));
+			const expected = toDefault((await formatted(sample.text)).join('\n')).split('\n');
+			const differences = formattedDefault.map((line, i) => ({ line, expected: expected[i], i })).filter((d) => d.line !== d.expected);
+			assert.deepEqual(differences.filter((d) => !isAlignedContinuation(formattedDefault, d.i) || d.expected === undefined || ' '.repeat(4) + d.line !== d.expected), []);
+		});
+	});
+
+	test('formatting: elements are indented by nesting level, end tags outdented, and xsl:text and xsl:note kept', async () => {
+		const withDefault = (body: string[]) => [`<stylesheet xmlns="${xsltNamespace}" xmlns:out="urn:out" version="3.0">`, ...body, '</stylesheet>'];
+		const lines = await formatted(withDefault(['<template match="/">', '<if test="true()">', '<out:a>', '<value-of select="1"/>', '</out:a>', '</if>',
+			'<text>  a', '     b</text>', '</template>']).join('\n'));
+		assert.deepEqual(lines, withDefault(['  <template match="/">', '    <if test="true()">', '      <out:a>', '        <value-of select="1"/>', '      </out:a>', '    </if>',
+			'    <text>  a', '     b</text>', '  </template>']));
 	});
 
 	test('the lexer: elements with no prefix are XSLT, and prefixed ones literal result elements', () => {
@@ -102,6 +123,25 @@ suite('XSLT as the default namespace', function () {
 		assert.include(diagnostics[0].message, 'f:missing');
 	});
 });
+
+// the lines of a module, formatted with 2 spaces for each level
+async function formatted(text: string) {
+	const file = path.join(problemsDir, `module${problemsCount++}.xsl`);
+	fs.writeFileSync(file, text);
+	const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+	const edits = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration).provideDocumentFormattingEdits(document, { tabSize: 2, insertSpaces: true }, new vscode.CancellationTokenSource().token);
+	return applied(text, edits.map((e) => ({ start: document.offsetAt(e.range.start), end: document.offsetAt(e.range.end), text: e.newText }))).split('\n');
+}
+
+// the text with the edits made, which don't overlap
+function applied(text: string, edits: { start: number, end: number, text: string }[]) {
+	return [...edits].sort((a, b) => b.start - a.start).reduce((result, e) => result.substring(0, e.start) + e.text + result.substring(e.end), text);
+}
+
+// whether a line continues a tag or an expression from the line before - not the start of an element or other markup
+function isAlignedContinuation(lines: string[], index: number) {
+	return index > 0 && !/^\s*<(?!=)/.test(lines[index]);
+}
 
 // the diagnostics of a document once it's linted, waiting up to 10 seconds for the first
 async function waitForDiagnostics(uri: vscode.Uri) {
