@@ -70,15 +70,16 @@ export class XsltNodeRules {
 	private static decorateTimer: NodeJS.Timeout | undefined;
 
 	public static register(context: vscode.ExtensionContext, debugType: string) {
+		// a stripe in the gutter, as test coverage has - which colors the line number's background, with the theme's
+		// colors: extensions can't, but can have an icon there, of a fixed color. 'cover': the full height of the line,
+		// so the lines of a start tag, or consecutive elements, have one stripe
 		const icon = (name: string) => vscode.Uri.joinPath(context.extensionUri, 'resources', 'icons', name);
-		XsltNodeRules.processedDecoration = vscode.window.createTextEditorDecorationType({
-			gutterIconPath: icon('input-processed.svg'), gutterIconSize: 'contain',
-			overviewRulerColor: new vscode.ThemeColor('testing.coveredGutterBackground'), overviewRulerLane: vscode.OverviewRulerLane.Left
+		const stripe = (iconName: string, rulerColor: string) => vscode.window.createTextEditorDecorationType({
+			gutterIconPath: icon(iconName), gutterIconSize: 'cover',
+			overviewRulerColor: new vscode.ThemeColor(rulerColor), overviewRulerLane: vscode.OverviewRulerLane.Left
 		});
-		XsltNodeRules.builtInDecoration = vscode.window.createTextEditorDecorationType({
-			gutterIconPath: icon('input-built-in.svg'), gutterIconSize: 'contain',
-			overviewRulerColor: new vscode.ThemeColor('editorOverviewRuler.warningForeground'), overviewRulerLane: vscode.OverviewRulerLane.Left
-		});
+		XsltNodeRules.processedDecoration = stripe('input-processed.svg', 'testing.coveredGutterBackground');
+		XsltNodeRules.builtInDecoration = stripe('input-built-in.svg', 'editorOverviewRuler.warningForeground');
 		context.subscriptions.push(XsltNodeRules.processedDecoration, XsltNodeRules.builtInDecoration);
 		context.subscriptions.push(XsltNodeRules.changed.event(() => XsltNodeRules.decorate()));
 		context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(() => XsltNodeRules.decorate()));
@@ -176,7 +177,7 @@ export class XsltNodeRules {
 
 	// the start tags of the elements in the input file that the hover has something for: those processed - or whose
 	// attributes, text etc. were - by a template rule or an instruction, and those only by built-in rules (not counting
-	// whitespace-only text). One marker a line, processed first: a line's gutter has room for one
+	// whitespace-only text). One marker a line, processed first
 	public static markers(document: vscode.TextDocument): { processed: vscode.Range[], builtIn: vscode.Range[] } {
 		const result = { processed: [] as vscode.Range[], builtIn: [] as vscode.Range[] };
 		const input = document.uri.scheme === 'file' ? XsltNodeRules.files.get(XsltNodeRules.key(document.fileName)) : undefined;
