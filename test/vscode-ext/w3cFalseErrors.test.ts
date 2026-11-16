@@ -273,7 +273,7 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		const sheet = (uri: string) => stylesheet(body(uri), 'xsl:stylesheet', ` xmlns:hoo="urn:a" xmlns:woo="${uri}" xmlns:txt="urn:a" xmlns:new="${uri}"`);
 		assert.deepEqual(await problems(sheet('urn:a')), []);
 		// still reported: another namespace
-		assert.lengthOf((await problems(sheet('urn:b'))).filter((m) => /not found|not used|cannot be resolved/.test(m)), 5);
+		assert.lengthOf((await problems(sheet('urn:b'))).filter((m) => /not found|No template rule|cannot be resolved/.test(m)), 5);
 	});
 
 	test('names matched by namespace, not prefix: namespaces declared on an inner element (output-0205, character-map-008, call-template-0702, call-template-0703)', async () => {

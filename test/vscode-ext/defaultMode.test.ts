@@ -26,7 +26,7 @@ async function problems(xslt: string, imported: GlobalInstructionData[] = []) {
 	return diagnostics.map((d) => [d.message, document.getText(d.range)]);
 }
 
-const notUsed = (mode: string) => [`XSLT: Template mode '${mode}' not used`, `"${mode}"`];
+const notUsed = (mode: string) => [`XSLT: No template rule has the mode '${mode}'`, `"${mode}"`];
 const applyTemplates = (mode: string) => `<xsl:template name="t"><xsl:apply-templates select="." mode="${mode}"/></xsl:template>`;
 
 const cases: [string, string, string[][]][] = [

@@ -367,6 +367,14 @@ suite('Schematron', () => {
 		assert.deepEqual(SchXslt2Checks.codeActions(document, diagnostics), []);
 	});
 
+	test('modes: no problem for a mode with no template rule in a message, whose XSLT isn\'t run - but one in an xsl:function', async () => {
+		const messages = await problems(prefixed(`<sch:ns prefix="f" uri="urn:f"/>
+<xsl:function ${xsl} name="f:x"><xsl:apply-templates select="." mode="nope"/></xsl:function>
+<sch:pattern><sch:rule context="a"><sch:assert test="f:x()" diagnostics="d">x</sch:assert></sch:rule></sch:pattern>
+<sch:diagnostics><sch:diagnostic id="d"><out:at xmlns:out="urn:out"><xsl:apply-templates ${xsl} select="." mode="schematron-get-full-path"/></out:at></sch:diagnostic></sch:diagnostics>`));
+		assert.deepEqual(messages.filter((m) => m.includes('No template rule')), ["2: XSLT: No template rule has the mode 'nope'"]);
+	});
+
 	test('SchXslt2: a subject that is a sequence - path() with more than one argument - an error', async () => {
 		assert.deepEqual(await problems(unprefixed(`<pattern><rule context="a" subject="., ../b">
 <assert test="true()" subject="(., ../b)[1]">x</assert>

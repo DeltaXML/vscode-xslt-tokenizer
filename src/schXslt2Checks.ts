@@ -44,7 +44,7 @@ export class SchXslt2Checks {
 	private static readonly isoNamespace = 'http://purl.oclc.org/dsdl/schematron';
 	private static readonly xsltNamespace = 'http://www.w3.org/1999/XSL/Transform';
 	// the Schematron elements whose content is a message, copied into the report
-	private static readonly messages = ['assert', 'report', 'diagnostic', 'property', 'name', 'emph', 'dir', 'span', 'p', 'title', 'active'];
+	public static readonly messages = ['assert', 'report', 'diagnostic', 'property', 'name', 'emph', 'dir', 'span', 'p', 'title', 'active'];
 	// the namespaces of the prefixes commonly used without being declared - for the quick fix adding an sch:ns
 	private static readonly knownNamespaces: { [prefix: string]: string } = {
 		xs: 'http://www.w3.org/2001/XMLSchema', fn: 'http://www.w3.org/2005/xpath-functions', map: 'http://www.w3.org/2005/xpath-functions/map',

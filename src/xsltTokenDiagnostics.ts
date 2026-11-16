@@ -1876,7 +1876,11 @@ export class XsltTokenDiagnostics {
 						// XSpec: the mode of the stylesheet under test whose template rules x:context applies
 						const isXSpecContextMode = tagElementName === 'x:context' && !!xspecScope?.testsStylesheet && !variableName.trim().startsWith('Q{') &&
 							!RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(valueToken.line, valueToken.startCharacter)), currentWrittenAttName)?.includes('&');
-						if (!hasProblem && attType === AttributeType.InstructionMode && (tagElementName === 'xsl:apply-templates' || isXSpecContextMode)) {
+						// Schematron: not XSLT in a message, e.g. sch:diagnostic, which SchXslt2 copies into the report without
+						// running it - reported as such (see SchXslt2Checks), e.g. in a schema written for the ISO skeleton, whose
+						// templates have the mode
+						const isInSchMessage = isSchematron && elementStack.some((e) => e.symbolName.startsWith('sch:') && SchXslt2Checks.messages.includes(e.symbolName.substring(4)));
+						if (!hasProblem && !isInSchMessage && attType === AttributeType.InstructionMode && (tagElementName === 'xsl:apply-templates' || isXSpecContextMode)) {
 							if (globalModes.indexOf(variableName) < 0 && !isDeclaredByNamespace([GlobalInstructionType.ModeInstruction, GlobalInstructionType.ModeTemplate], variableName, valueToken)) {
 								valueToken['error'] = ErrorType.TemplateModeUnresolved;
 								valueToken.value = variableName;
@@ -3812,7 +3816,7 @@ export class XsltTokenDiagnostics {
 				.replace(/^XSLT: Invalid XSLT name/, 'XSpec: Invalid name')
 				.replace(/^XSLT: xsl:template with name '(.*)' not found$/, "XSpec: template '$1' not found in the stylesheet under test")
 				.replace(/^XSLT: xsl:param '(.*)' is not declared for template '(.*)'$/, "XSpec: parameter '$1' is not declared for template '$2'")
-				.replace(/^XSLT: Template mode '(.*)' not used$/, "XSpec: mode '$1' not found in the stylesheet under test"));
+				.replace(/^XSLT: No template rule has the mode '(.*)'$/, "XSpec: mode '$1' not found in the stylesheet under test"));
 		}
 		// the quick fixes for missing record fields
 		const recordFixes = new Map<string, RecordFix>();
@@ -5694,7 +5698,7 @@ export class XsltTokenDiagnostics {
 					msg = `XSLT: Duplicate xsl:character-map name '${tokenValue}'`;
 					break;
 				case ErrorType.TemplateModeUnresolved:
-					msg = `XSLT: Template mode '${tokenValue}' not used`;
+					msg = `XSLT: No template rule has the mode '${tokenValue}'`;
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.ParentLessText:

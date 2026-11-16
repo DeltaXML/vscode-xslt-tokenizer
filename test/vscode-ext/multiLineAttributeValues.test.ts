@@ -44,7 +44,7 @@ suite('Attribute values on more than one line', () => {
 	const nameCases: [string, string, string[]][] = [
 		['a mode with spaces', '    <xsl:apply-templates mode=" a "/>', []],
 		['a mode on a line of its own', '    <xsl:apply-templates mode="\n      a\n    "/>', []],
-		['an undeclared mode on a line of its own, reported there', '    <xsl:apply-templates mode="\n      z\n    "/>', ['7: XSLT: Template mode \'z\' not used']],
+		['an undeclared mode on a line of its own, reported there', '    <xsl:apply-templates mode="\n      z\n    "/>', ['7: XSLT: No template rule has the mode \'z\'']],
 		['a template name with spaces, and a parameter name', '    <xsl:call-template name=" t "><xsl:with-param name=" p " select="1"/></xsl:call-template>', []],
 		['a template name on a line of its own', '    <xsl:call-template name="\n      t\n    "/>', []],
 		['an unknown template name on a line of its own, reported there', '    <xsl:call-template name="\n      u\n    "/>', ['7: XSLT: xsl:template with name \'u\' not found']],
