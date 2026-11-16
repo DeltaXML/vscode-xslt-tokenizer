@@ -929,6 +929,41 @@ suite('Schematron', () => {
 		assert.include(await problems(content), '0: SchXslt2: no phase has the id nophase - no pattern is active');
 	});
 
+	test('ids: Rename of an id in a list, e.g. diagnostics="d1 d2" - only that id, and its declaration', async () => {
+		const content = unprefixed(`<pattern id="p1"><rule context="a">
+<assert test="1" diagnostics="d1 d2" properties="pr1">x</assert><report test="0" diagnostics="d2  d1">y</report></rule></pattern>
+<diagnostics><diagnostic id="d1">one</diagnostic><diagnostic id="d2">two</diagnostic></diagnostics>
+<properties><property id="pr1">p</property></properties>`);
+		const { document, at } = await opened(content);
+		// the document's text with the edit's changes - all in this file
+		const renamed = (edit: vscode.WorkspaceEdit | undefined) => {
+			const entries = edit?.entries() ?? [];
+			assert.deepEqual(entries.map(([uri]) => uri.fsPath), [document.uri.fsPath]);
+			let text = document.getText();
+			[...entries[0][1]].sort((a, b) => document.offsetAt(b.range.start) - document.offsetAt(a.range.start)).forEach((e) => {
+				text = text.substring(0, document.offsetAt(e.range.start)) + e.newText + text.substring(document.offsetAt(e.range.end));
+			});
+			return text;
+		};
+		// from a reference in a list: the token only, with the other ids and the spacing kept
+		const range = SchReferences.renameRange(document, at('diagnostics="d1 d2'));
+		assert.strictEqual(document.getText(range), 'd2');
+		const fromReference = renamed(SchReferences.rename(document, at('diagnostics="d1 d2'), 'dTwo'));
+		assert.include(fromReference, 'diagnostics="d1 dTwo"');
+		assert.include(fromReference, 'diagnostics="dTwo  d1"');
+		assert.include(fromReference, '<diagnostic id="dTwo">two</diagnostic>');
+		assert.include(fromReference, '<diagnostic id="d1">one</diagnostic>');
+		// from the declaration: each list that refers to it
+		const fromDeclaration = renamed(SchReferences.rename(document, at('diagnostic id="d1'), 'first'));
+		assert.include(fromDeclaration, 'diagnostics="first d2"');
+		assert.include(fromDeclaration, 'diagnostics="d2  first"');
+		assert.include(fromDeclaration, '<diagnostic id="first">one</diagnostic>');
+		// properties too - a different kind of id, so a diagnostic's id of the same name isn't changed
+		const fromProperty = renamed(SchReferences.rename(document, at('properties="pr1'), 'prop'));
+		assert.include(fromProperty, 'properties="prop"');
+		assert.include(fromProperty, '<property id="prop">p</property>');
+	});
+
 	test('text value templates: an abstract pattern\'s parameter in them is replaced - as sch:value-of\'s select - renamed with it, and its hover', async () => {
 		const content = withXsl(`<pattern abstract="true" id="ap"><param name="required"/><rule context="a">
 <assert test="normalize-space($required)">needs {$required}</assert></rule></pattern>
