@@ -204,7 +204,7 @@ suite('Schematron', () => {
 
 	test('XSLT: a top-level XSLT declaration that SchXslt2 ignores, e.g. xsl:param, declares nothing', async () => {
 		assert.deepEqual((await problems(unprefixed(`<xsl:param ${xsl} name="OTP" select="false()"/>
-<pattern><rule context="a"><assert test="$OTP">x</assert></rule></pattern>`))).sort(), ['1: SchXslt2: xsl:param is ignored - only xsl:accumulator, xsl:function, xsl:include, xsl:import, xsl:import-schema, xsl:key, xsl:use-package are copied into its validation stylesheet - use sch:param', '2: XPath: The variable/parameter $OTP cannot be resolved']);
+<pattern><rule context="a"><assert test="$OTP">x</assert></rule></pattern>`))).sort(), ['1: SchXslt2: xsl:param is ignored - only xsl:accumulator, xsl:function, xsl:include, xsl:import, xsl:import-schema, xsl:key, xsl:use-package are copied into its validation stylesheet - use sch:param, or move it to an included XSLT module', '2: XPath: The variable/parameter $OTP cannot be resolved']);
 	});
 
 	test('formatting: an XSLT element\'s end tag is outdented', async () => {
@@ -221,8 +221,10 @@ suite('Schematron', () => {
 		const diagnostics = await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration);
 		const diagnostic = diagnostics.find((d) => message.test(d.message));
 		assert.isDefined(diagnostic, diagnostics.map((d) => d.message).join('\n'));
-		// the one that changes the text - not one that runs a command, e.g. opening a setting
-		const actions = SchXslt2Checks.codeActions(document, [diagnostic!]).filter((action) => action.edit);
+		// the one that changes the text - not one that runs a command, e.g. opening a setting - the preferred one, if there are
+		// others, e.g. moving a top-level declaration to an included module
+		const all = SchXslt2Checks.codeActions(document, [diagnostic!]).filter((action) => action.edit);
+		const actions = all.length > 1 ? all.filter((action) => action.isPreferred) : all;
 		assert.lengthOf(actions, 1, diagnostic!.message);
 		// applied to the text, not the document - which, left with unsaved changes, would be checked again as other tests run
 		const edits = actions[0].edit!.get(document.uri).map((edit) => [document.offsetAt(edit.range.start), document.offsetAt(edit.range.end), edit.newText] as const);
@@ -332,8 +334,8 @@ suite('Schematron', () => {
 <assert test="true()">at <xsl:value-of ${xsl} select="path()"/></assert></rule></pattern>
 <properties><property id="p1"><xsl:copy-of ${xsl} select="."/></property></properties>`))).map((m) => m.replace(/ - only .* are copied into its validation stylesheet/, ' - only ...'));
 		assert.deepEqual(messages, [
-			'2: SchXslt2: xsl:param is ignored - only ... - use sch:param',
-			'3: SchXslt2: xsl:template is ignored - only ...',
+			'2: SchXslt2: xsl:param is ignored - only ... - use sch:param, or move it to an included XSLT module',
+			'3: SchXslt2: xsl:template is ignored - only ... - move it to an included XSLT module',
 			'5: SchXslt2: xsl:sequence isn\'t run in the content of sch:let - it\'s copied into the value as it is: use the value attribute for an expression',
 			'6: SchXslt2: xsl:variable is ignored in sch:rule - use sch:let',
 			'7: SchXslt2: xsl:value-of isn\'t run in a message - it\'s copied into the report as it is - use sch:value-of'
@@ -347,6 +349,126 @@ suite('Schematron', () => {
 		assert.include(await fixed(prefixed(`<xsl:param ${xsl} name="OTP" select="false()"/>`), /xsl:param is ignored/), '<sch:param name="OTP" value="false()"/>');
 		assert.include(await fixed(unprefixed(`<pattern><rule context="a"><assert test="true()">at <xsl:value-of ${xsl} select="path()"/></assert></rule></pattern>`), /xsl:value-of isn't run/),
 			'at <value-of select="path()"/></assert>');
+	});
+
+	test('SchXslt2: XSLT within other elements in a message isn\'t run either - but a property\'s xsl:copy-of is, wherever it is', async () => {
+		const messages = await problems(prefixed(`<sch:pattern><sch:rule context="a"><sch:assert test="true()" diagnostics="d">x</sch:assert></sch:rule></sch:pattern>
+<sch:diagnostics><sch:diagnostic id="d"><out:details xmlns:out="urn:out"><out:at><xsl:value-of ${xsl} select="path()"/></out:at></out:details></sch:diagnostic></sch:diagnostics>
+<sch:properties><sch:property id="p"><out:copy xmlns:out="urn:out"><xsl:copy-of ${xsl} select="."/></out:copy></sch:property></sch:properties>`));
+		assert.deepEqual(messages, ['2: SchXslt2: xsl:value-of isn\'t run in a message - it\'s copied into the report as it is, as is the out:at element it\'s in - use sch:value-of']);
+		// xsl:value-of to sch:value-of, which SchXslt2 runs within other elements too - but not xsl:variable to sch:let, not allowed in a message
+		assert.include(await fixed(prefixed(`<sch:pattern><sch:rule context="a"><sch:report test="true()"><out:at xmlns:out="urn:out"><xsl:value-of ${xsl} select="1"/></out:at></sch:report></sch:rule></sch:pattern>`), /xsl:value-of isn't run/),
+			'<out:at xmlns:out="urn:out"><sch:value-of select="1"/></out:at>');
+		const file = path.join(dir, `message${count++}.sch`);
+		fs.writeFileSync(file, prefixed(`<sch:pattern><sch:rule context="a"><sch:report test="true()"><out:at xmlns:out="urn:out"><xsl:variable ${xsl} name="v" select="1"/></out:at></sch:report></sch:rule></sch:pattern>`));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const diagnostics = (await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration)).filter((d) => d.code === SchXslt2Checks.notRunCode);
+		assert.lengthOf(diagnostics, 1);
+		assert.deepEqual(SchXslt2Checks.codeActions(document, diagnostics), []);
+	});
+
+	test('SchXslt2: a subject that is a sequence - path() with more than one argument - an error', async () => {
+		assert.deepEqual(await problems(unprefixed(`<pattern><rule context="a" subject="., ../b">
+<assert test="true()" subject="(., ../b)[1]">x</assert>
+<report test="false()" subject=". , ../b, ../c">y</report>
+<assert test="true()" subject="f(., 'a,b') (: x, y :)">z</assert>
+</rule></pattern>`)).then((m) => m.filter((p) => p.includes('subject'))), [
+			'1: SchXslt2: the subject is a sequence - SchXslt2 reports the location with path(., ../b), a call with 2 arguments that fails (XPST0017): use one node',
+			'3: SchXslt2: the subject is a sequence - SchXslt2 reports the location with path(. , ../b, ../c), a call with 3 arguments that fails (XPST0017): use one node'
+		]);
+		assert.strictEqual(SchXslt2Checks.topLevelCommas('concat("a,", \'b\'\',\'), [1, 2], map { 1: 2, 3: 4 }'), 2);
+	});
+
+	test('SchXslt2: a schema written for the ISO Schematron skeleton with allow-foreign - one note, with more than one sign', async () => {
+		const body = `<sch:pattern><sch:rule context="a"><sch:assert test="$v" diagnostics="d">x</sch:assert></sch:rule></sch:pattern>
+<sch:diagnostics><sch:diagnostic id="d"><out:where xmlns:out="urn:out"><xsl:apply-templates ${xsl} select="." mode="schematron-get-full-path"/></out:where></sch:diagnostic></sch:diagnostics>`;
+		const note = (messages: string[]) => messages.filter((m) => m.includes('ISO Schematron skeleton'));
+		assert.deepEqual(note(await problems(prefixed(`<xsl:variable ${xsl} name="v" select="1"/>\n${body}`))), [
+			'0: SchXslt2: the schema seems to be written for the ISO Schematron skeleton (iso_schematron_skeleton_for_saxon.xsl) with allow-foreign="true", which SchXslt2 doesn\'t emulate - it has a top-level xsl:variable; a mode the skeleton generates, e.g. schematron-get-full-path; XSLT run in a message, within other elements, e.g. xsl:apply-templates in out:where'
+		]);
+		// one sign: no note
+		assert.deepEqual(note(await problems(prefixed(`<xsl:variable ${xsl} name="v" select="1"/>\n<sch:pattern><sch:rule context="a"><sch:assert test="$v">x</sch:assert></sch:rule></sch:pattern>`))), []);
+	});
+
+	test('SchXslt2: quick fix - xsl:variable with content and as to sch:let with the content, but not without as, whose value is a document node', async () => {
+		assert.include(await fixed(unprefixed(`<xsl:variable ${xsl} name="v" as="element()*"><a n="1"/><b/></xsl:variable>`), /xsl:variable is ignored/),
+			'<let name="v" as="element()*"><a n="1"/><b/></let>');
+		// without as, or with an attribute value template or XSLT in the content: only moved to a module
+		for (const variable of [`<xsl:variable ${xsl} name="v"><a/></xsl:variable>`, `<xsl:variable ${xsl} name="v" as="element()"><a n="{1}"/></xsl:variable>`,
+			`<xsl:variable ${xsl} name="v" as="element()"><a><xsl:value-of select="1"/></a></xsl:variable>`]) {
+			const file = path.join(dir, `content${count++}.sch`);
+			fs.writeFileSync(file, unprefixed(variable));
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+			const diagnostics = (await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration)).filter((d) => d.code === SchXslt2Checks.ignoredCode);
+			assert.deepEqual(SchXslt2Checks.codeActions(document, diagnostics).map((a) => [a.title, !!a.isPreferred]), [[`Move to an included XSLT module, content${count - 1}-declarations.xsl`, true]], variable);
+		}
+	});
+
+	test('SchXslt2: quick fix - a top-level declaration moved to an included XSLT module: new, with the schema\'s namespaces, or the one it includes', async () => {
+		const folder = fs.mkdtempSync(path.join(dir, 'move-'));
+		const file = path.join(folder, 'rules.sch');
+		const schema = `<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" queryBinding="xslt2">
+  <sch:ns prefix="nem" uri="urn:nem"/>
+  <xsl:variable name="lookup">
+    <nem:items>
+      <nem:item name="a">A</nem:item>
+    </nem:items>
+  </xsl:variable>
+  <xsl:template match="nem:item" mode="m"/>
+  <sch:pattern><sch:rule context="a"><sch:assert test="$lookup">x</sch:assert></sch:rule></sch:pattern>
+</sch:schema>`;
+		fs.writeFileSync(file, schema);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const moduleUri = vscode.Uri.file(path.join(folder, 'rules-declarations.xsl'));
+		const diagnostics = (await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration)).filter((d) => d.code === SchXslt2Checks.ignoredCode);
+		assert.lengthOf(diagnostics, 2);
+		const edited = (action: vscode.CodeAction, uri: vscode.Uri, from: string) => action.edit!.get(uri).map((e) => [e.range, e.newText] as const)
+			.sort((a, b) => b[0].start.compareTo(a[0].start))
+			.reduce((text, [range, newText]) => {
+				const lines = text.split('\n');
+				const offset = (p: vscode.Position) => lines.slice(0, p.line).reduce((n, l) => n + l.length + 1, 0) + p.character;
+				return text.substring(0, offset(range.start)) + newText + text.substring(offset(range.end));
+			}, from);
+		const [one, all] = SchXslt2Checks.codeActions(document, [diagnostics[0]]);
+		assert.deepEqual([one.title, all.title], ['Move to an included XSLT module, rules-declarations.xsl',
+			'Move each ignored top-level XSLT declaration to an included XSLT module, rules-declarations.xsl (2)']);
+		assert.strictEqual(edited(one, document.uri, schema), schema.replace(/<xsl:variable[\s\S]*?<\/xsl:variable>/, '<xsl:include href="rules-declarations.xsl"/>'));
+		assert.strictEqual(edited(one, moduleUri, ''), `<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" xmlns:nem="urn:nem" exclude-result-prefixes="#all" version="2.0">
+  <!-- declarations moved from rules.sch: SchXslt2 only copies some XSLT declarations of a schema into its validation stylesheet, xsl:include among them -->
+  <xsl:variable name="lookup">
+    <nem:items>
+      <nem:item name="a">A</nem:item>
+    </nem:items>
+  </xsl:variable>
+</xsl:stylesheet>
+`);
+		// both: the template's line removed
+		assert.notInclude(edited(all, document.uri, schema), 'xsl:template');
+		assert.include(edited(all, moduleUri, ''), '  </xsl:variable>\n  <xsl:template match="nem:item" mode="m"/>\n</xsl:stylesheet>');
+
+		// the module, once it's there and included: the declaration added to it, and removed from the schema
+		const module = '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">\n  <xsl:variable name="lookup" select="1"/>\n</xsl:stylesheet>\n';
+		fs.writeFileSync(moduleUri.fsPath, module);
+		const includingFile = path.join(folder, 'rules2.sch');
+		const including = schema.replace('<xsl:variable', '<xsl:include href="rules2-declarations.xsl"/>\n  <xsl:variable').replace(/lookup/g, 'other');
+		fs.writeFileSync(includingFile, including);
+		fs.writeFileSync(path.join(folder, 'rules2-declarations.xsl'), module);
+		const includingDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(includingFile));
+		const ignored = (await moduleDiagnostics.call(XsltSymbolProvider, includingDocument, false, SchConfiguration.configuration)).filter((d) => d.code === SchXslt2Checks.ignoredCode);
+		const [move] = SchXslt2Checks.codeActions(includingDocument, [ignored.find((d) => d.message.includes('xsl:template'))!]);
+		assert.strictEqual(edited(move, includingDocument.uri, including), including.replace('  <xsl:template match="nem:item" mode="m"/>\n', ''));
+		assert.strictEqual(edited(move, vscode.Uri.file(path.join(folder, 'rules2-declarations.xsl')), module), module.replace('</xsl:stylesheet>', '  <xsl:template match="nem:item" mode="m"/>\n</xsl:stylesheet>'));
+	});
+
+	test('SchXslt2: a variable declared in an included XSLT module is in scope, as SchXslt2 copies xsl:include', async () => {
+		const folder = fs.mkdtempSync(path.join(dir, 'included-'));
+		fs.writeFileSync(path.join(folder, 'm.xsl'), '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"><xsl:variable name="lookup"><a/></xsl:variable></xsl:stylesheet>');
+		const file = path.join(folder, 'rules.sch');
+		fs.writeFileSync(file, unprefixed(`<xsl:include ${xsl} href="m.xsl"/>\n<let name="items" value="$lookup/a"/>\n<pattern><rule context="a"><assert test="$items and $nope">x</assert></rule></pattern>`));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const diagnostics = await moduleDiagnostics.call(XsltSymbolProvider, document, false, SchConfiguration.configuration);
+		assert.deepEqual(diagnostics.filter((d) => d.severity !== vscode.DiagnosticSeverity.Hint).map((d) => `${d.range.start.line}: ${d.message}`), ['3: XPath: The variable/parameter: $nope cannot be resolved here, but it may be defined in an external module.']);
 	});
 
 	test('SchXslt2: a prefix not declared with sch:ns - one problem, with a quick fix adding the sch:ns', async () => {
