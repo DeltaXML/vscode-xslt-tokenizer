@@ -3424,6 +3424,7 @@ export class XsltTokenCompletions {
 						const item = new vscode.CompletionItem(snippet.label, vscode.CompletionItemKind.Struct);
 						item.documentation = tagDetail.length > 0 ? tagDetail : undefined;
 						item.insertText = new vscode.SnippetString(snippet.body);
+						item.detail = snippet.detail;
 						if (snippet.suggest) {
 							item.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 						}

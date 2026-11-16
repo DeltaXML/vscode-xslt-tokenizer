@@ -464,6 +464,9 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		// with the prefix the file uses
 		assert.strictEqual(XSpecSnippets.forElement('t:like', 'scenario')![0].body, 't:like label="$1"/>$0');
 		assert.isUndefined(XSpecSnippets.forElement('x:param', 'call'));
+		// x:context with the document node its content is in as the context - select="/", as without it, the children
+		const documentNode = XSpecSnippets.forElement('x:context', 'scenario')!.find((s) => s.label === 'x:context (document node)');
+		assert.strictEqual(documentNode?.body, 'x:context select="${1:/}">\n\t$0\n</x:context>');
 	});
 
 	test('XSpec element completion: each form of an element, with the list of values shown where they have completion', async () => {

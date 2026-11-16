@@ -16,6 +16,8 @@ export interface XSpecSnippet {
 	label: string;
 	body: string;
 	suggest?: boolean;
+	// shown beside the label, where the form's purpose isn't obvious
+	detail?: string;
 }
 
 export class XSpecSnippets {
@@ -46,6 +48,9 @@ export class XSpecSnippets {
 			case 'context':
 				return [
 					{ label: tagName, body: withContent('') },
+					// the content is in a document node, but without select the context is its children: select="/" for the
+					// document node, e.g. to test a match="/" template, or root() and / in the element's template
+					{ label: `${tagName} (document node)`, body: withContent(' select="${1:/}"'), detail: 'The context is the document node the content is in - without select, it\'s the content\'s nodes' },
 					{ label: `${tagName} (href)`, body: empty(' href="$1" select="$2"'), suggest: true },
 					{ label: `${tagName} (mode)`, body: withContent(' mode="$1"'), suggest: true }
 				];
