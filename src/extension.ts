@@ -790,8 +790,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// the MCP server for AI assistants, while XSLT.mcp.enabled is on - its tools check a document as when it's open
 	const mcpSymbolProvider = (document: vscode.TextDocument) => document.languageId === 'xslt' ? xsltSymbolProvider : document.languageId === 'xspec' ? xspecSymbolProvider : undefined;
 	const mcpServer = new XsltMcpServer(context.secrets, {
-		problems: (document) => mcpSymbolProvider(document)?.diagnosticsFor(document),
-		declarations: (document) => mcpSymbolProvider(document)?.declarationsFor(document)
+		problems: (document, topLevel) => mcpSymbolProvider(document)?.diagnosticsFor(document, topLevel),
+		declarations: (document, topLevel) => mcpSymbolProvider(document)?.declarationsFor(document, topLevel)
 	}, context.workspaceState);
 	const mcpDefinitions = new XsltMcpDefinitionProvider(mcpServer);
 	context.subscriptions.push(vscode.lm.registerMcpServerDefinitionProvider(XsltMcpServer.providerId, mcpDefinitions));

@@ -104,6 +104,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	// and its declarations: its own, then those of the modules it imports or includes and the packages it uses, highest
 	// import precedence first
 	private lastDeclarations = new Map<string, { own: GlobalInstructionData[], imported: GlobalInstructionData[] }>();
+	// the results of checks with a top-level stylesheet given (see getDocumentSymbols), by the document and the stylesheet
+	private topLevelChecks = new Map<string, { diagnostics: vscode.Diagnostic[], own: GlobalInstructionData[], imported: GlobalInstructionData[] }>();
 	// false when another extension already reports the same problems, e.g. Red Hat's XML extension for XML files
 	private readonly showDiagnostics: () => boolean;
 
@@ -172,7 +174,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return matchingKey;
 	}
 
-	public async getDocumentSymbols(document: vscode.TextDocument, onlyActiveDocument: boolean): Promise<vscode.DocumentSymbol[] | undefined> {
+	// topLevel: a top-level stylesheet to check the module with, instead of the one found for it, e.g. given to the MCP
+	// server's lint_file tool - a check that's kept apart from the editor's: its problems aren't shown, nor cached for the
+	// document, and the stylesheet isn't remembered as the module's parent
+	public async getDocumentSymbols(document: vscode.TextDocument, onlyActiveDocument: boolean, topLevel?: string): Promise<vscode.DocumentSymbol[] | undefined> {
 		if (onlyActiveDocument && vscode.window.activeTextEditor) {
 			if (document.fileName !== vscode.window.activeTextEditor.document.fileName) {
 				return [];
@@ -194,7 +199,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
 		let { importedGlobals1, accumulatedHrefs }:
 			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[] }
-			= await XsltSymbolProvider.processTopLevelImports(true, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
+			= await XsltSymbolProvider.processTopLevelImports(!topLevel, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages, topLevel ?? true);
 
 		let topLevelHrefs = XsltSymbolProvider.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
 
@@ -258,7 +263,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
-			this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
+			if (!topLevel) {
+				this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
+			}
 			let diagnostics = XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, prefixBindings, xsltPackages, allImportedGlobals,
 				XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols));
 			let importDiagnostics: vscode.Diagnostic[] = [];
@@ -278,6 +285,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				importDiagnostics.push(diagnostic);
 			});
 			const allDiagnostics = importDiagnostics.concat(diagnostics);
+			if (topLevel) {
+				// a check with a top-level stylesheet given: only its results, apart from the editor's
+				this.topLevelChecks.set(XsltSymbolProvider.topLevelKey(document, topLevel), { diagnostics: allDiagnostics, own: globalInstructionData, imported: allImportedGlobals });
+				resolve(symbols);
+				return;
+			}
 			// for a document that isn't open in an editor too, e.g. checked by the MCP server's lint_file tool
 			this.lastDiagnostics.set(document.uri.toString(), { version, diagnostics: allDiagnostics });
 			this.lastDeclarations.set(document.uri.toString(), { own: globalInstructionData, imported: allImportedGlobals });
@@ -321,15 +334,29 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	
 	// the problems of a document, as it is now - whether or not it's open in an editor: checked again, as a module it
 	// imports may have changed since its last check
-	public async diagnosticsFor(document: vscode.TextDocument): Promise<vscode.Diagnostic[]> {
-		await this.getDocumentSymbols(document, false);
-		return this.lastDiagnostics.get(document.uri.toString())?.diagnostics ?? [];
+	// - with the top-level stylesheet given, if there is one, instead of the one found for it (see getDocumentSymbols)
+	public async diagnosticsFor(document: vscode.TextDocument, topLevel?: string): Promise<vscode.Diagnostic[]> {
+		await this.getDocumentSymbols(document, false, topLevel);
+		return (topLevel ? this.takeTopLevelCheck(document, topLevel)?.diagnostics : this.lastDiagnostics.get(document.uri.toString())?.diagnostics) ?? [];
 	}
 
 	// the declarations of a document and of the modules it imports or includes, as it is now (see diagnosticsFor)
-	public async declarationsFor(document: vscode.TextDocument): Promise<{ own: GlobalInstructionData[], imported: GlobalInstructionData[] }> {
-		await this.getDocumentSymbols(document, false);
-		return this.lastDeclarations.get(document.uri.toString()) ?? { own: [], imported: [] };
+	public async declarationsFor(document: vscode.TextDocument, topLevel?: string): Promise<{ own: GlobalInstructionData[], imported: GlobalInstructionData[] }> {
+		await this.getDocumentSymbols(document, false, topLevel);
+		const check = topLevel ? this.takeTopLevelCheck(document, topLevel) : this.lastDeclarations.get(document.uri.toString());
+		return check ? { own: check.own, imported: check.imported } : { own: [], imported: [] };
+	}
+
+	// the results of a check with a top-level stylesheet given - removed, as each check is made again when asked for
+	private takeTopLevelCheck(document: vscode.TextDocument, topLevel: string) {
+		const key = XsltSymbolProvider.topLevelKey(document, topLevel);
+		const check = this.topLevelChecks.get(key);
+		this.topLevelChecks.delete(key);
+		return check;
+	}
+
+	private static topLevelKey(document: vscode.TextDocument, topLevel: string) {
+		return `${document.uri.toString()}\n${topLevel}`;
 	}
 
 	public get diagnosticsArray() : vscode.Diagnostic[] {

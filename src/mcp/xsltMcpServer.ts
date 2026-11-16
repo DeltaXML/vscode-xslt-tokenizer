@@ -225,14 +225,22 @@ export class XsltMcpServer {
 		const name = z.string().describe('The name as written in the module, e.g. f:area, or $config for a variable, or f:area#2 for a function of arity 2');
 		const kind = z.enum(declarationKindNames).optional().describe('The kind of declaration - any kind, if not given');
 		const readOnly = { readOnlyHint: true, openWorldHint: false };
+		const topLevelStylesheet = (use: string) => z.string().optional().describe(`For an XSLT module: the top-level stylesheet to ${use} - one ` +
+			'that imports or includes it, directly or indirectly - instead of the one found for it, e.g. one outside the workspace, or ' +
+			'another of the stylesheets that include it. Absolute, or relative to the first workspace folder');
 		mcp.registerTool('lint_file', {
 			title: 'Lint an XSLT or XSpec file',
 			description: 'The problems in an XSLT module (.xsl, .xslt) or XSpec file (.xspec), as the XSLT/XPath extension reports them in the ' +
-				'Problems panel - with its imports, includes and packages - whether or not the file is open in an editor. ' +
-				'Each problem is given as line:column (1-based), severity and message.',
-			inputSchema: { path: filePath, minSeverity: minSeverity.optional().describe('Only problems of this severity or worse - all, if not given') },
+				'Problems panel - with its imports, includes and packages - whether or not the file is open in an editor. A module ' +
+				'that a top-level stylesheet imports or includes is checked with that stylesheet\'s declarations too: the one found ' +
+				'for it in the workspace, or topLevelStylesheet. Each problem is given as line:column (1-based), severity and message.',
+			inputSchema: {
+				path: filePath,
+				minSeverity: minSeverity.optional().describe('Only problems of this severity or worse - all, if not given'),
+				topLevelStylesheet: topLevelStylesheet('check it with')
+			},
 			annotations: readOnly
-		}, async (args) => tools.lintFile(args.path, args.minSeverity));
+		}, async (args) => tools.lintFile(args.path, args.minSeverity, args.topLevelStylesheet));
 		mcp.registerTool('lint_files', {
 			title: 'Lint the XSLT and XSpec files in a folder',
 			description: 'The problems in each XSLT module and XSpec file in a folder and its subfolders, as lint_file finds them - only the files ' +
@@ -259,10 +267,14 @@ export class XsltMcpServer {
 				'character map is declared, as seen from an XSLT module - in the module, the modules it imports or includes, or the packages it uses - ' +
 				'with its parameters and types, and its documentation: its xsl:note, or a comment just before it. When more than one module ' +
 				'declares it, the one used (with the highest import precedence) is first. Use it for a function declared in a stylesheet; ' +
-				'for a built-in function, use xpath_function.',
-			inputSchema: { path: filePath.describe('The XSLT module or XSpec file the name is used in'), name, kind },
+				'for a built-in function, use xpath_function. A module that a top-level stylesheet imports or includes sees that ' +
+				'stylesheet\'s declarations too: the one found for it in the workspace, or topLevelStylesheet.',
+			inputSchema: {
+				path: filePath.describe('The XSLT module or XSpec file the name is used in'), name, kind,
+				topLevelStylesheet: topLevelStylesheet('find the declarations with')
+			},
 			annotations: readOnly
-		}, async (args) => tools.findDeclaration(args.path, args.name, args.kind));
+		}, async (args) => tools.findDeclaration(args.path, args.name, args.kind, args.topLevelStylesheet));
 		mcp.registerTool('find_references', {
 			title: 'Find the references to an XSLT component',
 			description: 'The references to a function, named template, global variable or parameter, mode, attribute set, key, accumulator or ' +
@@ -276,10 +288,15 @@ export class XsltMcpServer {
 			title: 'Describe an XSLT 4.0 item type',
 			description: 'A named item type (xsl:item-type), as seen from an XSLT module: its declaration, and for a record type its fields - each with ' +
 				'its type, ? for an optional field and its @field documentation - or for an enumeration type its values. A record(...) type ' +
-				'written out can be given too.',
-			inputSchema: { path: filePath.describe('The XSLT module or XSpec file the type is used in'), name: z.string().describe('The item type\'s name, e.g. cx:complex, or a record(...) type') },
+				'written out can be given too. A module that a top-level stylesheet imports or includes sees that stylesheet\'s types too: ' +
+				'the one found for it in the workspace, or topLevelStylesheet.',
+			inputSchema: {
+				path: filePath.describe('The XSLT module or XSpec file the type is used in'),
+				name: z.string().describe('The item type\'s name, e.g. cx:complex, or a record(...) type'),
+				topLevelStylesheet: topLevelStylesheet('find the types with')
+			},
 			annotations: readOnly
-		}, async (args) => tools.describeType(args.path, args.name));
+		}, async (args) => tools.describeType(args.path, args.name, args.topLevelStylesheet));
 		mcp.registerTool('xpath_function', {
 			title: 'Describe a built-in XPath or XSLT function',
 			description: 'The signature and description of a built-in function - from XPath and XSLT, including the map:, array: and math: functions - ' +

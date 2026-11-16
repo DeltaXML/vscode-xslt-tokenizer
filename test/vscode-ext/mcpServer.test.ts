@@ -14,6 +14,7 @@ import { RunConfiguration } from '../../src/mcp/runConfiguration';
 import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
+import { ImportIndex } from '../../src/importIndex';
 
 const port = 6799;
 
@@ -104,7 +105,7 @@ suite('MCP server', function () {
 </xsl:stylesheet>`);
 
 	const symbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, null);
-	const server = new XsltMcpServer(memorySecrets(), { problems: (document) => symbolProvider.diagnosticsFor(document), declarations: (document) => symbolProvider.declarationsFor(document) });
+	const server = new XsltMcpServer(memorySecrets(), { problems: (document, topLevel) => symbolProvider.diagnosticsFor(document, topLevel), declarations: (document, topLevel) => symbolProvider.declarationsFor(document, topLevel) });
 	let token = '';
 	let id = 0;
 	const call = (name: string, args: object) => post({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } }, { Authorization: `Bearer ${token}` });
@@ -288,6 +289,82 @@ suite('MCP server', function () {
 
 	test('lint_file: only problems of a severity or worse', async () => {
 		assert.match(text(await call('lint_file', { path: main, minSeverity: 'error' })), /^No problems/);
+	});
+
+	// a top-level stylesheet and a module it includes, which uses its variable - in a folder of their own, so not lint_files'
+	const withTopLevel = (name: string) => {
+		const folder = fs.mkdtempSync(path.join(os.tmpdir(), `xslt-mcp-${name}-`));
+		const top = path.join(folder, 'top.xsl');
+		const part = path.join(folder, 'part.xsl');
+		const other = path.join(folder, 'other.xsl');
+		fs.writeFileSync(top, `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" version="4.0">
+  <xsl:include href="part.xsl"/>
+  <xsl:variable name="fromTop" select="1"/>
+  <xsl:item-type name="t:size" as="record(w as xs:double, h? as xs:double)"/>
+  <xsl:function name="t:area" as="xs:double"><xsl:param name="s" as="t:size"/><xsl:sequence select="$s?w * ($s?h, $s?w)[1]"/></xsl:function>
+</xsl:stylesheet>`);
+		// with the prefix bound, as names are matched by namespace URI within the module
+		fs.writeFileSync(part, `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:t="urn:t" exclude-result-prefixes="t" version="3.0">
+  <xsl:template match="/"><xsl:sequence select="$fromTop"/></xsl:template>
+</xsl:stylesheet>`);
+		fs.writeFileSync(other, `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>`);
+		return { top, part, other };
+	};
+
+	test('lint_file: a module with the top-level stylesheet given - one that includes it, not a stylesheet that doesn\'t, nor the module itself', async () => {
+		const { top, part, other } = withTopLevel('given');
+		// not in the index of the workspace's modules, so on its own
+		assert.match(text(await call('lint_file', { path: part })), /\$fromTop/);
+		const withTop = text(await call('lint_file', { path: part, topLevelStylesheet: top }));
+		assert.match(withTop, /^No problems: .*part\.xsl - checked with the top-level stylesheet .*top\.xsl$/, withTop);
+		// kept apart from the editor's check: on its own again, without it
+		assert.match(text(await call('lint_file', { path: part })), /\$fromTop/);
+		const notIncluding = await call('lint_file', { path: part, topLevelStylesheet: other });
+		assert.isTrue(notIncluding.message.result.isError);
+		assert.match(text(notIncluding), /other\.xsl doesn't import or include .*part\.xsl/);
+		assert.match(text(await call('lint_file', { path: part, topLevelStylesheet: part })), /^The top-level stylesheet is the module itself/);
+		assert.match(text(await call('lint_file', { path: part, topLevelStylesheet: path.join(path.dirname(top), 'none.xsl') })), /^The top-level stylesheet isn't found/);
+	});
+
+	test('find_declaration and describe_type: with the top-level stylesheet given - its declarations seen from a module it includes', async () => {
+		const { top, part, other } = withTopLevel('declarations');
+		// not in the index of the workspace's modules, so on its own: none
+		assert.match(text(await call('find_declaration', { path: part, name: 't:area', kind: 'function' })), /^No function named t:area is declared in .*part\.xsl or the modules and packages it uses$/);
+		const found = text(await call('find_declaration', { path: part, name: 't:area#1', kind: 'function', topLevelStylesheet: top }));
+		assert.match(found, /^xsl:function t:area#1\(\$s as t:size\) as xs:double - .*top\.xsl:5:\d+/, found);
+		assert.match(found, /\n\nAs seen from .*part\.xsl - checked with the top-level stylesheet .*top\.xsl$/);
+		assert.match(text(await call('find_declaration', { path: part, name: 't:none', topLevelStylesheet: top })), /^No declaration named t:none .* - checked with the top-level stylesheet .*top\.xsl$/);
+		assert.match(text(await call('describe_type', { path: part, name: 't:size' })), /^No item type named t:size is declared in .*part\.xsl/);
+		const type = text(await call('describe_type', { path: part, name: 't:size', topLevelStylesheet: top }));
+		assert.match(type, /a record type with 2 fields:\n {2}w as xs:double\n {2}h\? as xs:double\n\nAs seen from .*part\.xsl - checked with the top-level stylesheet .*top\.xsl$/, type);
+		// the same checks of the argument as for lint_file
+		for (const tool of ['find_declaration', 'describe_type']) {
+			const notIncluding = await call(tool, { path: part, name: 't:size', topLevelStylesheet: other });
+			assert.isTrue(notIncluding.message.result.isError, tool);
+			assert.match(text(notIncluding), /other\.xsl doesn't import or include .*part\.xsl/, tool);
+		}
+	});
+
+	test('lint_file: waits for the index of the workspace\'s modules, which the module\'s top-level stylesheet is found from', async () => {
+		const { top, part } = withTopLevel('index');
+		// an index that knows of the two files only once it's been waited for - as one built in the background
+		const index = ImportIndex.instance;
+		const whenBuilt = index.whenBuilt;
+		let waited = false;
+		index.whenBuilt = async () => {
+			if (!waited) {
+				waited = true;
+				await index.buildFrom([top, part]);
+			}
+		};
+		try {
+			const result = text(await call('lint_file', { path: part }));
+			assert.isTrue(waited);
+			assert.match(result, /^No problems: .*part\.xsl$/, result);
+		} finally {
+			index.whenBuilt = whenBuilt;
+			index.setReferences(top, []);
+		}
 	});
 
 	test('lint_files: the files with problems, after a summary - warnings or worse by default', async () => {
