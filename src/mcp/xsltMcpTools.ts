@@ -117,13 +117,31 @@ export class XsltMcpTools {
 			`${lines.length} problem${lines.length === 1 ? '' : 's'} in ${document.fileName}:\n${lines.join('\n')}`);
 	}
 
-	// the problems of the XSLT and XSpec files in a folder - not XSpec's generated test runners
+	// the folders and files lint_files leaves out, within the folder: node_modules, XSpec's generated test runners, hidden
+	// folders such as .git or .vscode-test - unless the pattern names one - and the files.exclude setting's patterns
+	// (findFiles doesn't apply files.exclude when given an exclude pattern)
+	private static lintExcludes(base: string, pattern: string) {
+		const excludes = ['**/node_modules/**', '**/xspec/*-compiled.xsl'];
+		if (!/(^|\/)\./.test(pattern)) {
+			excludes.push('**/.*/**');
+		}
+		const filesExclude = vscode.workspace.getConfiguration('files', vscode.Uri.file(base)).get<Record<string, unknown>>('exclude') ?? {};
+		for (const [glob, on] of Object.entries(filesExclude)) {
+			// true only - not a 'when' clause; nested braces aren't allowed in a glob pattern
+			if (on === true && !glob.includes('{')) {
+				excludes.push(glob, glob.replace(/\/$/, '') + '/**');
+			}
+		}
+		return new vscode.RelativePattern(base, `{${excludes.join(',')}}`);
+	}
+
+	// the problems of the XSLT and XSpec files in a folder - not XSpec's generated test runners or hidden folders
 	public async lintFiles(folder: string | undefined, pattern = '**/*.{xsl,xslt,xspec}', minSeverity: Severity = 'warning'): Promise<ToolResult> {
 		const base = folder ? XsltMcpTools.resolve(folder) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!base || !fs.existsSync(base) || !fs.statSync(base).isDirectory()) {
 			return XsltMcpTools.text(base ? `Folder not found: ${base}` : 'No folder given, and no workspace folder is open', true);
 		}
-		const uris = await vscode.workspace.findFiles(new vscode.RelativePattern(base, pattern), '{**/node_modules/**,**/xspec/*-compiled.xsl}', XsltMcpTools.maxFiles + 1);
+		const uris = await vscode.workspace.findFiles(new vscode.RelativePattern(base, pattern), XsltMcpTools.lintExcludes(base, pattern), XsltMcpTools.maxFiles + 1);
 		const files = uris.map((uri) => uri.fsPath).filter((file) => /\.(xslt?|xspec)$/i.test(file)).sort();
 		const results: string[] = [];
 		let checked = 0;

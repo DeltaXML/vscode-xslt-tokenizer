@@ -14,6 +14,8 @@
   <xsl:variable name="seqType7" select="'5' castable as xs:integer?"/>
   <xsl:variable name="seqType8" select="(1 instance of xs:integer*, 2)"/>
   <xsl:variable name="seqType9" select="if (5 instance of xs:integer+) then 1 else 0"/>
+  <xsl:variable name="seqType10" select="'a' instance of xs:NOTATION"/>
+  <xsl:variable name="seqType11" select="() instance of xs:NOTATION?"/>
   <!-- expect errors: -->
   <xsl:variable name="seqTypeError1" select="'5' cast as xs:integer*"/>
   <xsl:variable name="seqTypeError2" select="'5' castable as xs:integer+"/>

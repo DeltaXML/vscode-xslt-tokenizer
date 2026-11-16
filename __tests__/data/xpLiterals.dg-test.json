@@ -107,6 +107,36 @@
       "label": "string20",
       "xpath": "\n  \"one &amp;\n  two\"",
       "problems": []
+    },
+    {
+      "label": "string21",
+      "xpath": "'&#xa;''' || 'x'",
+      "problems": []
+    },
+    {
+      "label": "string22",
+      "xpath": "'a&amp;''b'''",
+      "problems": []
+    },
+    {
+      "label": "string23",
+      "xpath": "\"a&amp;\"\"b\"",
+      "problems": []
+    },
+    {
+      "label": "string24",
+      "xpath": "'a\n''b'",
+      "problems": []
+    },
+    {
+      "label": "string25",
+      "xpath": "'a&amp;' 'b'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'b' ",
+          "'b'"
+        ]
+      ]
     }
   ]
 }

@@ -95,6 +95,9 @@ suite('MCP server', function () {
 	const empty = path.join(dir, 'sub', 'empty.xsl');
 	fs.mkdirSync(path.dirname(empty));
 	fs.writeFileSync(empty, '');
+	// in a hidden folder, e.g. .vscode-test's saved edit history: left out by lint_files, unless its pattern names the folder
+	fs.mkdirSync(path.join(dir, '.hidden'));
+	fs.writeFileSync(path.join(dir, '.hidden', 'history.xsl'), '');
 	fs.writeFileSync(lib, `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="3.0">
   <xsl:include href="missing.xsl"/>
   <xsl:function name="f:twice" as="xs:integer"><xsl:param name="n" as="xs:integer"/><xsl:sequence select="$n * 2"/></xsl:function>
@@ -291,6 +294,7 @@ suite('MCP server', function () {
 		const lines = text(await call('lint_files', { folder: dir })).split('\n');
 		assert.match(lines[0], /^Checked 6 files in .*: 3 problems in 3 files \(warnings or worse\)$/, lines.join('\n'));
 		assert.match(text(await call('lint_files', { folder: dir, pattern: 'sub/*.xsl' })), /^Checked 1 file in .*: 1 problem in 1 file \(warnings or worse\)\n\n.*empty\.xsl - 1 problem:\n {2}1:1 error The file is empty/);
+		assert.match(text(await call('lint_files', { folder: dir, pattern: '.hidden/*.xsl' })), /^Checked 1 file in .*\n\n.*history\.xsl - 1 problem/);
 		assert.isTrue((await call('lint_files', { folder: path.join(dir, 'none') })).message.result.isError);
 	});
 

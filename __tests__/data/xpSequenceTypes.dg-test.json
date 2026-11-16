@@ -54,6 +54,16 @@
       "problems": []
     },
     {
+      "label": "seqType10",
+      "xpath": "'a' instance of xs:NOTATION",
+      "problems": []
+    },
+    {
+      "label": "seqType11",
+      "xpath": "() instance of xs:NOTATION?",
+      "problems": []
+    },
+    {
       "label": "seqTypeError1",
       "xpath": "'5' cast as xs:integer*",
       "problems": [

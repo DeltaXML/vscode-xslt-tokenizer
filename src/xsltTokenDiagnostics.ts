@@ -219,6 +219,23 @@ export class XsltTokenDiagnostics {
 	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '×', '÷', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>',
 		'and', 'or', 'div', 'idiv', 'mod', 'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'is', 'to', 'union', 'intersect', 'except', 'otherwise', 'cast', 'castable', 'treat', 'instance'].concat(Data.nodeComparisons40));
 	static operators40 = new Set(['×', '÷', '=?>'].concat(Data.nodeComparisons40));
+	// a string literal split into tokens - by a reference such as &#xa; or &amp;, or by a newline - continues with an
+	// escaped quote, e.g. the '''' after &#xa; in '&#xa;''' - not a new string literal
+	private static continuesWithEscapedQuote(prevToken: BaseToken, token: BaseToken) {
+		let quote: string | undefined;
+		if (prevToken.tokenType === TokenLevelState.entityRef) {
+			// a reference within a string literal: the literal's quote is from the reference's state
+			quote = prevToken.charType === CharLevelState.lLiteralSqEnt ? '\'' : prevToken.charType === CharLevelState.lLiteralDqEnt ? '"' : undefined;
+		} else {
+			// the first part of a string literal that's not closed: starts with a quote and has an odd number of them, e.g. 'a or 'a''
+			const first = prevToken.value.charAt(0);
+			if ((first === '\'' || first === '"') && [...prevToken.value].filter(c => c === first).length % 2 === 1) {
+				quote = first;
+			}
+		}
+		return !!quote && token.value.startsWith(quote + quote);
+	}
+
 	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
 		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber ||
 			token.charType === CharLevelState.mBt || token.charType === CharLevelState.rBt) {
@@ -250,7 +267,8 @@ export class XsltTokenDiagnostics {
 			const currentTokenFirstChar = token.value.charAt(0);
 			// a template split by newlines continues on a new line, so only a same-line back-tick starts a new template
 			const startsTemplate = currentTokenFirstChar === '`' && prevToken.line === token.line && (token.charType === CharLevelState.lBt || token.charType === CharLevelState.sBt);
-			isXPathError = startsTemplate || (token.value.length > 1 && (currentTokenFirstChar === '"' || currentTokenFirstChar === '\''));
+			isXPathError = startsTemplate || (token.value.length > 1 && (currentTokenFirstChar === '"' || currentTokenFirstChar === '\'') &&
+				!XsltTokenDiagnostics.continuesWithEscapedQuote(prevToken, token));
 		} else {
 			isXPathError = true;
 		}
@@ -3451,7 +3469,8 @@ export class XsltTokenDiagnostics {
 								if (!isValidType && (tagXPathDefaultNamespace ?? elementStack[elementStack.length - 1]?.xpathDefaultNamespace) === 'http://www.w3.org/2001/XMLSchema') {
 									// an unprefixed type name is in the default namespace for types, e.g. 'string' with
 									// xpath-default-namespace="http://www.w3.org/2001/XMLSchema"
-									isValidType = tValue === 'numeric' || tValue === 'anyAtomicType' || FunctionData.schema.indexOf(tValue + '#1') > -1;
+									// xs:NOTATION has no constructor function, but is valid in e.g. 'instance of' (Saxon reports a cast to it)
+									isValidType = tValue === 'numeric' || tValue === 'anyAtomicType' || tValue === 'NOTATION' || FunctionData.schema.indexOf(tValue + '#1') > -1;
 								}
 							}
 						} else if (tParts.length === 2) {
@@ -3460,7 +3479,7 @@ export class XsltTokenDiagnostics {
 							if (nsType !== undefined) {
 								if (nsType === XSLTnamespaces.XMLSchema) {
 									const part2 = tParts[1];
-									if (part2 === 'numeric' || part2 === 'anyAtomicType') {
+									if (part2 === 'numeric' || part2 === 'anyAtomicType' || part2 === 'NOTATION') {
 										isValidType = true;
 									} else if (kindTestPart === 'type' && (part2 === 'untyped' || part2 === 'anyType' || part2 === 'anySimpleType')) {
 										// the type annotation of an element or attribute, e.g. element(*, xs:untyped)
