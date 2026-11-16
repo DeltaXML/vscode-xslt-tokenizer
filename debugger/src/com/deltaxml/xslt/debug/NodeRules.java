@@ -21,7 +21,9 @@ import net.sf.saxon.type.Type;
  * start tag ends; an attribute, text node, comment or processing instruction is recorded at its parent element's
  * position, as its own isn't reliable, with its kind and name. A template rule is recorded each time it's entered
  * with the node as its context item - by xsl:apply-templates, xsl:next-match or xsl:apply-imports - and a built-in
- * rule each time xsl:apply-templates finds no template rule for a node. Sent, aggregated, when the run ends.
+ * rule each time xsl:apply-templates finds no template rule for a node. An xsl:for-each, xsl:for-each-group or
+ * xsl:iterate is recorded as a rule is, for each item it processes - for xsl:for-each-group, each member of each group.
+ * Sent, aggregated, when the run ends.
  */
 final class NodeRules {
     // the most element positions recorded: after that, no more are, and the result says so
@@ -49,12 +51,22 @@ final class NodeRules {
     }
 
     void template(NodeInfo node, String path, int line, int column, String label) {
+        located(node, path, line, column, label, false);
+    }
+
+    // an item of xsl:for-each or xsl:iterate, or a member of a group of xsl:for-each-group
+    void instruction(NodeInfo node, String path, int line, int column, String label) {
+        located(node, path, line, column, label, true);
+    }
+
+    private void located(NodeInfo node, String path, int line, int column, String label, boolean instruction) {
         String key = path + ':' + line + ':' + column;
         Integer id = ruleIds.get(key);
         if (id == null) {
             id = rules.size();
             ruleIds.put(key, id);
-            rules.add(Json.obj().with("path", path).with("line", line).with("column", column).with("label", label));
+            rules.add(Json.obj().with("path", path).with("line", line).with("column", column).with("label", label)
+                    .with("instruction", instruction ? Boolean.TRUE : null));
         }
         record(node, id);
     }

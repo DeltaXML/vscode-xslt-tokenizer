@@ -9,15 +9,21 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parseXml, descendants, XmlElement } from './xspecXml';
 
-// a rule from the debug adapter: a template rule (its xsl:template's start tag) or a built-in rule, in a mode
+// a rule from the debug adapter: a template rule (its xsl:template's start tag), an instruction that processes each
+// item it selects - xsl:for-each, xsl:for-each-group (each member of each group) or xsl:iterate - or a built-in rule,
+// in a mode
 export interface NodeRule {
 	path?: string;
 	line?: number;
 	column?: number;
 	label?: string;
+	instruction?: boolean;
 	builtIn?: string;
 	mode?: string;
 }
+
+const templateName = /(^|:)template$/;
+const iterationName = /(^|:)(for-each|for-each-group|iterate)$/;
 
 // the xsltNodeRules event's body: for each file, flat [line, column, n, (name, rule, count) x n, ...] - an element's
 // position (where its start tag ends) and, for the element and the attributes, text nodes etc. it has, the rules
@@ -45,7 +51,8 @@ interface InputFile {
 /**
  * After a debug session (or a run without debugging) of the XSLT debugger: for each node of the input files, the
  * template rules that processed it - xsl:apply-templates' rule, those xsl:next-match and xsl:apply-imports went on to,
- * or the built-in rules if none matched. In an input file: a hover on an element (its attributes and text too), and Go
+ * or the built-in rules if none matched - and the xsl:for-each, xsl:for-each-group (a group's members) and xsl:iterate
+ * instructions that did. Not nodes only an XPath expression reads (e.g. a path, or for $x in ...). In an input file: a hover on an element (its attributes and text too), and Go
  * to Definition to its templates. In a stylesheet: above each template rule, the nodes it processed. The last run's
  * only - an element is found again by its position among the file's elements, so not after elements are added or
  * removed before it (its name is checked)
@@ -56,7 +63,32 @@ export class XsltNodeRules {
 	private static stylesheet = '';
 	private static changed = new vscode.EventEmitter<void>();
 
+	// in the gutter and the overview ruler of an input file: its elements processed by a template rule or an
+	// xsl:for-each etc. (green), or only by built-in rules (amber) - the elements the hover has something for
+	private static processedDecoration: vscode.TextEditorDecorationType | undefined;
+	private static builtInDecoration: vscode.TextEditorDecorationType | undefined;
+	private static decorateTimer: NodeJS.Timeout | undefined;
+
 	public static register(context: vscode.ExtensionContext, debugType: string) {
+		const icon = (name: string) => vscode.Uri.joinPath(context.extensionUri, 'resources', 'icons', name);
+		XsltNodeRules.processedDecoration = vscode.window.createTextEditorDecorationType({
+			gutterIconPath: icon('input-processed.svg'), gutterIconSize: 'contain',
+			overviewRulerColor: new vscode.ThemeColor('testing.coveredGutterBackground'), overviewRulerLane: vscode.OverviewRulerLane.Left
+		});
+		XsltNodeRules.builtInDecoration = vscode.window.createTextEditorDecorationType({
+			gutterIconPath: icon('input-built-in.svg'), gutterIconSize: 'contain',
+			overviewRulerColor: new vscode.ThemeColor('editorOverviewRuler.warningForeground'), overviewRulerLane: vscode.OverviewRulerLane.Left
+		});
+		context.subscriptions.push(XsltNodeRules.processedDecoration, XsltNodeRules.builtInDecoration);
+		context.subscriptions.push(XsltNodeRules.changed.event(() => XsltNodeRules.decorate()));
+		context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(() => XsltNodeRules.decorate()));
+		context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((event) => {
+			if (XsltNodeRules.files.size > 0 && vscode.window.visibleTextEditors.some((e) => e.document === event.document)) {
+				clearTimeout(XsltNodeRules.decorateTimer);
+				XsltNodeRules.decorateTimer = setTimeout(() => XsltNodeRules.decorate(), 300);
+			}
+		}));
+		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.clearInputMapping', () => XsltNodeRules.clear()));
 		context.subscriptions.push(vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
 			if (event.session.type === debugType && event.event === 'xsltNodeRules') {
 				XsltNodeRules.update(event.body as NodeRulesEvent, event.session.name);
@@ -81,6 +113,14 @@ export class XsltNodeRules {
 	// the last run's, replacing the one before - the input files as they were when it ended
 	public static update(body: NodeRulesEvent, sessionName = '') {
 		XsltNodeRules.rules = body.rules ?? [];
+		// an instruction only where the stylesheet has one: Saxon 13 can rewrite e.g. an xsl:for-each over
+		// current-group() as one at an instruction within it
+		const notShown = new Set<number>();
+		XsltNodeRules.rules.forEach((rule, id) => {
+			if (rule.instruction && !XsltNodeRules.ruleElement(rule)) {
+				notShown.add(id);
+			}
+		});
 		XsltNodeRules.files.clear();
 		XsltNodeRules.stylesheet = sessionName;
 		for (const [file, flat] of Object.entries(body.files ?? {})) {
@@ -105,10 +145,12 @@ export class XsltNodeRules {
 				i += 3;
 				const processed: ProcessedNode[] = [];
 				for (let k = 0; k < n; k++, i += 3) {
-					processed.push({ node: body.names[flat[i]], rule: flat[i + 1], count: flat[i + 2] });
+					if (!notShown.has(flat[i + 1])) {
+						processed.push({ node: body.names[flat[i]], rule: flat[i + 1], count: flat[i + 2] });
+					}
 				}
 				const ordinal = line >= 1 && line <= lineStarts.length ? ordinals.get(lineStarts[line - 1] + column - 1) : undefined;
-				if (ordinal === undefined) {
+				if (ordinal === undefined || processed.length === 0) {
 					continue;
 				}
 				input.elements.set(ordinal, { name: all[ordinal].name, processed });
@@ -116,6 +158,61 @@ export class XsltNodeRules {
 			XsltNodeRules.files.set(XsltNodeRules.key(file), input);
 		}
 		XsltNodeRules.changed.fire();
+	}
+
+	// for each visible input file: its markers - and none in other files, e.g. once cleared
+	private static decorate() {
+		const has = XsltNodeRules.files.size > 0;
+		vscode.commands.executeCommand('setContext', 'xslt-xpath.hasInputMapping', has);
+		if (!XsltNodeRules.processedDecoration || !XsltNodeRules.builtInDecoration) {
+			return;
+		}
+		for (const editor of vscode.window.visibleTextEditors) {
+			const markers = has ? XsltNodeRules.markers(editor.document) : { processed: [], builtIn: [] };
+			editor.setDecorations(XsltNodeRules.processedDecoration, markers.processed);
+			editor.setDecorations(XsltNodeRules.builtInDecoration, markers.builtIn);
+		}
+	}
+
+	// the start tags of the elements in the input file that the hover has something for: those processed - or whose
+	// attributes, text etc. were - by a template rule or an instruction, and those only by built-in rules (not counting
+	// whitespace-only text). One marker a line, processed first: a line's gutter has room for one
+	public static markers(document: vscode.TextDocument): { processed: vscode.Range[], builtIn: vscode.Range[] } {
+		const result = { processed: [] as vscode.Range[], builtIn: [] as vscode.Range[] };
+		const input = document.uri.scheme === 'file' ? XsltNodeRules.files.get(XsltNodeRules.key(document.fileName)) : undefined;
+		const root = input ? parseXml(document.getText()) : undefined;
+		if (!input || !root) {
+			return result;
+		}
+		const all = [root, ...descendants(root)];
+		const processedLines = new Set<number>();
+		const builtIn: vscode.Range[] = [];
+		for (const [ordinal, recorded] of input.elements) {
+			const element = all[ordinal];
+			if (!element || element.name !== recorded.name) {
+				continue;
+			}
+			const shown = XsltNodeRules.shownNodes(recorded.processed);
+			if (shown.length === 0) {
+				continue;
+			}
+			const range = new vscode.Range(document.positionAt(element.start), document.positionAt(element.contentStart));
+			if (shown.some((p) => !XsltNodeRules.rules[p.rule]?.builtIn)) {
+				result.processed.push(range);
+				for (let line = range.start.line; line <= range.end.line; line++) {
+					processedLines.add(line);
+				}
+			} else {
+				builtIn.push(range);
+			}
+		}
+		result.builtIn = builtIn.filter((range) => ![...Array(range.end.line - range.start.line + 1).keys()].some((k) => processedLines.has(range.start.line + k)));
+		return result;
+	}
+
+	// as the hover lists them: not whitespace-only text the built-in rules processed - there's usually some between each element
+	private static shownNodes(processed: ProcessedNode[]) {
+		return processed.filter((p) => !(p.node === 'whitespace' && XsltNodeRules.rules[p.rule]?.builtIn));
 	}
 
 	// the offset where each line starts: lines end with \n, \r\n or \r, as for an XML parser
@@ -169,8 +266,9 @@ export class XsltNodeRules {
 		return recorded && recorded.name === all[ordinal].name ? { element: all[ordinal], recorded } : undefined;
 	}
 
-	// a template rule's xsl:template element, in its stylesheet as it is now: at the line (and column) the debugger gave
-	private static template(rule: NodeRule): XmlElement | undefined {
+	// a template rule's xsl:template element - or an instruction's xsl:for-each etc. - in its stylesheet as it is now:
+	// at the line the debugger gave
+	private static ruleElement(rule: NodeRule): XmlElement | undefined {
 		if (!rule.path || !rule.line) {
 			return undefined;
 		}
@@ -188,7 +286,8 @@ export class XsltNodeRules {
 		const lineStarts = XsltNodeRules.lineStarts(text);
 		const lineStart = lineStarts[rule.line - 1] ?? -1;
 		const lineEnd = lineStarts[rule.line] ?? text.length;
-		return [root, ...descendants(root)].find((e) => /(^|:)template$/.test(e.name) && e.start >= lineStart && e.start < lineEnd);
+		const name = rule.instruction ? iterationName : templateName;
+		return [root, ...descendants(root)].find((e) => name.test(e.name) && e.start >= lineStart && e.start < lineEnd);
 	}
 
 	// e.g. 'match="order" mode="summary" priority="2"' - from the stylesheet, as written, else as the debugger named it
@@ -196,9 +295,19 @@ export class XsltNodeRules {
 		if (rule.builtIn) {
 			return `built-in rule (${rule.builtIn}${rule.mode && rule.mode !== '#default' ? `, mode ${rule.mode}` : ''}) - no template matched`;
 		}
-		const template = XsltNodeRules.template(rule);
-		const match = template?.attributes.get('match');
 		const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim();
+		if (rule.instruction) {
+			// e.g. 'for-each-group select="line" group-by="@category"'
+			const instruction = XsltNodeRules.ruleElement(rule);
+			if (!instruction) {
+				return (rule.label ?? 'for-each').replace(/^xsl:/, '');
+			}
+			const attributes = ['select', 'group-by', 'group-adjacent', 'group-starting-with', 'group-ending-with', 'split-when']
+				.filter((name) => instruction.attributes.has(name)).map((name) => ` ${name}="${oneLine(instruction.attributes.get(name)!)}"`).join('');
+			return instruction.name.replace(/^.*:/, '') + attributes;
+		}
+		const template = XsltNodeRules.ruleElement(rule);
+		const match = template?.attributes.get('match');
 		// with its mode and priority, if it has them: e.g. two templates for the same pattern, one by xsl:next-match
 		const others = ['mode', 'priority'].filter((name) => template?.attributes.has(name)).map((name) => ` ${name}="${oneLine(template!.attributes.get(name)!)}"`).join('');
 		return template && match !== undefined ? `match="${oneLine(match)}"${others}` : (rule.label ?? 'template').replace(/^xsl:template /, '');
@@ -217,7 +326,8 @@ export class XsltNodeRules {
 
 	public static hover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
 		const found = XsltNodeRules.elementAt(document, position);
-		if (!found) {
+		const shown = found ? XsltNodeRules.shownNodes(found.recorded.processed) : [];
+		if (!found || shown.length === 0) {
 			return undefined;
 		}
 		const markdown = new vscode.MarkdownString();
@@ -225,9 +335,7 @@ export class XsltNodeRules {
 		markdown.appendMarkdown(`**Processed by** - in the last debug run${XsltNodeRules.stylesheet ? ` (${XsltNodeRules.stylesheet.replace(/[[\]*_`]/g, '')})` : ''}:\n\n`);
 		// by node: the element first, then its attributes, text etc.
 		const byNode = new Map<string, ProcessedNode[]>();
-		// not whitespace-only text the built-in rules processed: there's usually some between each element
-		found.recorded.processed.filter((p) => !(p.node === 'whitespace' && XsltNodeRules.rules[p.rule]?.builtIn))
-			.forEach((p) => byNode.set(p.node, [...(byNode.get(p.node) ?? []), p]));
+		shown.forEach((p) => byNode.set(p.node, [...(byNode.get(p.node) ?? []), p]));
 		const nodes = [...byNode.keys()].sort((a, b) => (a.startsWith('element:') ? 0 : a.startsWith('attribute:') ? 1 : 2) - (b.startsWith('element:') ? 0 : b.startsWith('attribute:') ? 1 : 2));
 		const limit = 30;
 		nodes.slice(0, limit).forEach((node) => {
@@ -305,7 +413,7 @@ export class XsltNodeRules {
 			const position = new vscode.Position(line - 1, 0);
 			const title = `processed ${nodes} ${nodes === 1 ? 'node' : 'nodes'}${times > nodes ? ` (${times} times)` : ''} in ${files.length === 1 ? path.basename(files[0]) : `${files.length} files`}`;
 			lenses.push(new vscode.CodeLens(new vscode.Range(position, position), {
-				title, tooltip: 'In the last XSLT debug run - the input elements it processed, or whose attributes or text it did',
+				title, tooltip: 'In the last XSLT debug run - the input elements it processed, or whose attributes or text it did (for xsl:for-each-group, its groups\' members)',
 				command: 'xslt-xpath.showProcessedNodes', arguments: [document.uri, position]
 			}));
 		}

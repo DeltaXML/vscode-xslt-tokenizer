@@ -36,7 +36,7 @@ suite('XSLT debugger: the template rules each input node was processed by', func
 
 	setup(() => {
 		folder = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'node-rules-')));
-		['node-rules.xsl', 'node-rules.xml', 'node-rules-products.xml'].forEach((name) => fs.copyFileSync(path.join(fixtures, name), file(name)));
+		['node-rules.xsl', 'node-rules-focus.xsl', 'node-rules.xml', 'node-rules-products.xml'].forEach((name) => fs.copyFileSync(path.join(fixtures, name), file(name)));
 		XsltNodeRules.clear();
 	});
 	teardown(async () => {
@@ -158,6 +158,61 @@ suite('XSLT debugger: the template rules each input node was processed by', func
 		const moved = formatted.positionAt(formatted.getText().indexOf('<line') + 1);
 		assert.notInclude(await hoverText(formatted.uri, moved), 'Processed by');
 		await vscode.commands.executeCommand('workbench.action.files.revert', formatted.uri);
+	});
+
+	test('xsl:for-each, xsl:for-each-group and xsl:iterate: in the hover, Go to Definition and above the instruction - not where the stylesheet has none', async () => {
+		const xml = file('node-rules.xml');
+		const xsl = file('node-rules-focus.xsl');
+		// as the debug adapter sends it: each line in two groups; the attribute by xsl:iterate; and an xsl:for-each Saxon 13
+		// reports at the xsl:value-of within the one it rewrote
+		XsltNodeRules.update({
+			rules: [
+				{ path: xsl, line: 7, column: 7, label: 'xsl:for-each-group select="//line"', instruction: true },
+				{ path: xsl, line: 12, column: 7, label: 'xsl:iterate select="//line/@product"', instruction: true },
+				{ path: xsl, line: 9, column: 11, label: 'xsl:for-each select="@product"', instruction: true },
+				{ path: xsl, line: 4, column: 7, label: 'xsl:for-each select="orders/order"', instruction: true }
+			],
+			names: ['element:line', 'attribute:product', 'element:order'],
+			files: { [xml]: [5, 38, 3, 0, 0, 2, 1, 1, 1, 0, 2, 2, 8, 39, 1, 0, 0, 2, 4, 28, 1, 2, 3, 1] }
+		});
+		const input = await vscode.workspace.openTextDocument(vscode.Uri.file(xml));
+		const at = (text: string) => input.positionAt(input.getText().indexOf(text) + 1);
+		const line = await hoverText(input.uri, at('<line'));
+		assert.match(line, /`line`: `for-each-group select="\/\/line" group-by="@product, 'all'"` \[node-rules-focus\.xsl:7\]\([^)]*#L7\) ×2/);
+		assert.match(line, /`@product`: `iterate select="\/\/line\/@product"` \[node-rules-focus\.xsl:12\]/);
+		assert.notInclude(line, 'node-rules-focus.xsl:9');
+		assert.match(await hoverText(input.uri, at('<order ')), /`order`: `for-each select="orders\/order"` \[node-rules-focus\.xsl:4\]/);
+
+		const definitions = await vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>('vscode.executeDefinitionProvider', input.uri, at('<line'));
+		const lines = definitions.map((d) => 'uri' in d ? d.range.start.line + 1 : d.targetRange.start.line + 1).sort((a, b) => a - b);
+		assert.deepStrictEqual(lines, [7, 12]);
+
+		const stylesheet = await vscode.workspace.openTextDocument(vscode.Uri.file(xsl));
+		const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>('vscode.executeCodeLensProvider', stylesheet.uri);
+		const titles = lenses.filter((l) => l.command?.command === 'xslt-xpath.showProcessedNodes').map((l) => `${l.range.start.line + 1}: ${l.command!.title}`).sort();
+		assert.deepStrictEqual(titles, ['12: processed 1 node in node-rules.xml', '4: processed 1 node in node-rules.xml', '7: processed 2 nodes (4 times) in node-rules.xml']);
+	});
+
+	test('markers in the input file: elements processed by a template or instruction, or only by built-in rules - one a line', async () => {
+		const xml = file('node-rules.xml');
+		const xsl = file('node-rules.xsl');
+		// order A1 (its start tag on lines 3-4) by a template; the line by built-in rules only; the note only its
+		// whitespace (not shown); order B2 by a template and its line on the same line by built-in rules
+		XsltNodeRules.update({
+			rules: [{ path: xsl, line: 3, column: 3, label: 'xsl:template match="order"' }, { builtIn: 'shallow-skip', mode: '#default' }],
+			names: ['element:order', 'element:line', 'whitespace', 'element:note'],
+			files: { [xml]: [4, 28, 1, 0, 0, 1, 5, 38, 1, 1, 1, 1, 6, 12, 1, 2, 1, 1, 8, 18, 1, 0, 0, 1, 8, 39, 1, 1, 1, 1] }
+		});
+		const input = await vscode.workspace.openTextDocument(vscode.Uri.file(xml));
+		const lines = (ranges: vscode.Range[]) => ranges.map((r) => `${r.start.line + 1}-${r.end.line + 1}`);
+		const markers = XsltNodeRules.markers(input);
+		assert.deepStrictEqual(lines(markers.processed).sort(), ['3-4', '8-8']);
+		assert.deepStrictEqual(lines(markers.builtIn), ['5-5']);
+		// the note: no hover either
+		assert.notInclude(await hoverText(input.uri, input.positionAt(input.getText().indexOf('<note') + 1)), 'Processed by');
+		// cleared: none
+		await vscode.commands.executeCommand('xslt-xpath.clearInputMapping');
+		assert.deepStrictEqual(XsltNodeRules.markers(input), { processed: [], builtIn: [] });
 	});
 
 	test('line starts: lines end with \\n, \\r\\n or \\r', () => {

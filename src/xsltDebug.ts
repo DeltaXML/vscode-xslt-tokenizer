@@ -1398,7 +1398,8 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			if (!rule.path || !rule.line || !XSpecSourceMap.samePath(rule.path, map.generatedPath)) {
 				return rule;
 			}
-			const source = map.sourceOf(rule.line);
+			// not the generated stylesheet's own xsl:for-each etc.: e.g. within a Schematron rule's template
+			const source = rule.instruction ? undefined : map.sourceOf(rule.line);
 			return source ? { path: source.path, line: source.line, column: 1, label: source.name } : undefined;
 		});
 		const files: { [path: string]: number[] } = {};

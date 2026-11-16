@@ -805,6 +805,10 @@ final class Debugger {
         }
         // entered again: a result of stepping through its expression that wasn't used is out of date
         SteppedResult.discard(traceable);
+        // not for a template or function entered: it's entered with its own context
+        if (mapInputs && !(traceable instanceof TraceableComponent)) {
+            recordIteration(context);
+        }
         if (mapInputs && isElementConstructor(traceable)) {
             Item item = context.getContextItem();
             // [context item, instruction location key, written]
@@ -871,6 +875,12 @@ final class Debugger {
             if (item instanceof net.sf.saxon.om.NodeInfo) {
                 nodeRules.template((net.sf.saxon.om.NodeInfo) item, path, top.line, top.column, top.name);
             }
+        }
+        if (mapInputs && top.owner == traceable && isIterationInstruction(traceable)) {
+            // where the instruction is, for the items it goes on to process (see recordIteration)
+            top.ownPath = path;
+            top.ownLine = top.line;
+            top.ownColumn = top.column;
         }
         boolean onStoppedLine = top.line == stoppedLine && path.equals(stoppedPath);
         if (!onStoppedLine) {
@@ -1909,6 +1919,55 @@ final class Debugger {
 
     // instructions that change the focus get their own stack frame, showing the context item - and, like calls, are
     // stepped over (all their iterations) with Step Over, and out of with Step Out
+    // xsl:for-each, xsl:for-each-group or xsl:iterate: an instruction whose items - its groups' members, for
+    // xsl:for-each-group - are recorded for the input mapping, as a template rule's are (see NodeRules)
+    private static boolean isIterationInstruction(Traceable traceable) {
+        String className = traceable.getClass().getSimpleName();
+        return className.equals("ForEach") || className.equals("ForEachGroup") || className.equals("IterateInstr");
+    }
+
+    // an instruction entered within an xsl:for-each, xsl:for-each-group or xsl:iterate (the frame on top): the first
+    // for an item - or group - records the item, or the group's members. Saxon reports a new item for xsl:iterate
+    // and xsl:for-each-group (and xsl:apply-templates) by startCurrentItem, but not for xsl:for-each, and without the
+    // context, which the group is had from - so by the focus the instruction is entered with: its iterator and position
+    private void recordIteration(XPathContext context) {
+        Frame top = frames.peek();
+        if (top == null || top.ownLine <= 0 || context == null) {
+            return;
+        }
+        net.sf.saxon.om.FocusIterator iterator = context.getCurrentIterator();
+        if (iterator == null) {
+            return;
+        }
+        int position = iterator.position();
+        if (iterator == top.lastIterator && position == top.lastPosition) {
+            return;
+        }
+        top.lastIterator = iterator;
+        top.lastPosition = position;
+        if (top.owner.getClass().getSimpleName().equals("ForEachGroup")) {
+            net.sf.saxon.expr.sort.GroupIterator groups = context.getCurrentGroupIterator();
+            if (groups == null) {
+                return;
+            }
+            try {
+                net.sf.saxon.om.SequenceIterator members = groups.currentGroup().iterate();
+                for (Item member = members.next(); member != null; member = members.next()) {
+                    if (member instanceof net.sf.saxon.om.NodeInfo) {
+                        nodeRules.instruction((net.sf.saxon.om.NodeInfo) member, top.ownPath, top.ownLine, top.ownColumn, top.name);
+                    }
+                }
+            } catch (Exception e) {
+                // not available
+            }
+        } else {
+            Item item = context.getContextItem();
+            if (item instanceof net.sf.saxon.om.NodeInfo) {
+                nodeRules.instruction((net.sf.saxon.om.NodeInfo) item, top.ownPath, top.ownLine, top.ownColumn, top.name);
+            }
+        }
+    }
+
     private static boolean isFocusInstruction(Traceable traceable) {
         String className = traceable.getClass().getSimpleName();
         return className.equals("ForEach") || className.equals("ForEachGroup") || className.equals("IterateInstr") || className.equals("AnalyzeString");
@@ -2116,6 +2175,13 @@ final class Debugger {
         // for an XPath expression's frame: its instruction's line, if the instruction was just stopped at there - a
         // breakpoint there isn't stopped at again when the expression first arrives at that line (-1: none)
         int skipBreakpointLine = -1;
+        // for xsl:for-each, xsl:for-each-group or xsl:iterate's frame: where the instruction is, and the focus its
+        // last item - or group - was recorded with, for the input mapping (see recordIteration)
+        String ownPath;
+        int ownLine;
+        int ownColumn;
+        net.sf.saxon.om.FocusIterator lastIterator;
+        int lastPosition;
         Traceable current;
         XPathContext context;
         String systemId;

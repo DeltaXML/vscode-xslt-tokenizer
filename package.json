@@ -492,6 +492,12 @@
 				"category": "XSLT"
 			},
 			{
+				"command": "xslt-xpath.clearInputMapping",
+				"title": "Clear Input Mapping",
+				"category": "XSLT",
+				"enablement": "xslt-xpath.hasInputMapping"
+			},
+			{
 				"command": "xslt-xpath.tabToIndentation",
 				"title": "Tab: Indent an Empty Line for Its Context",
 				"category": "XSLT"
@@ -789,6 +795,10 @@
 				{
 					"command": "xslt-xpath.quickRunModule",
 					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.clearInputMapping",
+					"when": "xslt-xpath.hasInputMapping"
 				},
 				{
 					"command": "xslt-xpath.runXPathQuery",

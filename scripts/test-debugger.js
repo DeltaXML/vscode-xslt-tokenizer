@@ -2770,18 +2770,18 @@ async function testStepBackReplaysSteps(saxonJar) {
 // the template rules each input node was processed by, sent when the run ends: an element at the end of its start tag,
 // other nodes at their element's, with their kind and name - by xsl:apply-templates, xsl:next-match and the built-in
 // rules - and nodes of a document doc() reads, in that file
-async function testNodeRules(saxonJar) {
+// the xsltNodeRules event of a run without debugging, as 'line:column name -> rule ×count' for each file - with the rules
+async function nodeRulesOf(saxonJar, xsl, xml, launch = {}) {
     const dap = new DapClient(saxonJar);
     const event = dap.event('xsltNodeRules');
     const terminated = dap.event('terminated');
     await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
-    await dap.request('launch', { noDebug: true, saxonArgs: [`-xsl:${path.join(fixtures, 'node-rules.xsl')}`, `-s:${path.join(fixtures, 'node-rules.xml')}`] });
+    await dap.request('launch', { noDebug: true, saxonArgs: [`-xsl:${path.join(fixtures, xsl)}`, `-s:${path.join(fixtures, xml)}`], ...launch });
     await dap.request('configurationDone', {});
     const body = await event;
     await terminated;
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
-    // 'line:column name -> rule ×count' for each file
     const decoded = {};
     for (const [file, flat] of Object.entries(body.files)) {
         const entries = [];
@@ -2798,6 +2798,11 @@ async function testNodeRules(saxonJar) {
         }
         decoded[path.basename(file)] = entries.sort();
     }
+    return { decoded, rules: body.rules };
+}
+
+async function testNodeRules(saxonJar) {
+    const { decoded } = await nodeRulesOf(saxonJar, 'node-rules.xsl', 'node-rules.xml');
     const orders = decoded['node-rules.xml'];
     // order A1's start tag ends on line 4: the template, and its attributes, at its position, by built-in rules
     assert.ok(orders.includes('4:28 element:order -> node-rules.xsl:3 ×1'), orders.join('\n'));
@@ -2813,6 +2818,33 @@ async function testNodeRules(saxonJar) {
     assert.deepStrictEqual(decoded['node-rules-products.xml'], ['2:22 element:product -> node-rules.xsl:16 ×2']);
     // not the nodes of a temporary tree, which have the location of the instructions that constructed them
     assert.deepStrictEqual(Object.keys(decoded).sort(), ['node-rules-products.xml', 'node-rules.xml']);
+}
+
+// the items xsl:for-each and xsl:iterate processed, and each member of each group of xsl:for-each-group, recorded as a
+// template rule's nodes are - at the instruction's line
+async function testNodeRulesIterations(saxonJar) {
+    const { decoded, rules } = await nodeRulesOf(saxonJar, 'node-rules-focus.xsl', 'node-rules.xml');
+    const orders = decoded['node-rules.xml'];
+    const all = orders.join('\n');
+    // xsl:for-each: each order once
+    assert.ok(orders.includes('4:28 element:order -> node-rules-focus.xsl:4 ×1'), all);
+    assert.ok(orders.includes('8:18 element:order -> node-rules-focus.xsl:4 ×1'), all);
+    // xsl:for-each-group: each member of each group - each line is in its product's group and the 'all' group
+    assert.ok(orders.includes('5:38 element:line -> node-rules-focus.xsl:7 ×2'), all);
+    assert.ok(orders.includes('8:39 element:line -> node-rules-focus.xsl:7 ×2'), all);
+    // xsl:iterate over attributes: at their element's position
+    assert.ok(orders.includes('5:38 attribute:product -> node-rules-focus.xsl:12 ×1'), all);
+    assert.ok(orders.includes('8:39 attribute:product -> node-rules-focus.xsl:12 ×1'), all);
+    // the same node twice: twice - and the template xsl:apply-templates within it called isn't counted as an item
+    assert.ok(orders.includes('4:28 element:order -> node-rules-focus.xsl:15 ×2'), all);
+    assert.ok(orders.includes('4:28 element:order -> node-rules-focus.xsl:20 ×2'), all);
+    // the xsl:for-each over current-group(), as its first instruction: its items - Saxon 13 rewrites it as an
+    // xsl:for-each at the xsl:value-of within it (the extension drops it, as no xsl:for-each is there)
+    assert.ok(orders.includes('5:38 element:line -> node-rules-focus.xsl:8 ×2') || orders.includes('5:38 element:line -> node-rules-focus.xsl:9 ×2'), all);
+    const instructions = rules.filter((r) => r.instruction).map((r) => r.line);
+    assert.ok([4, 7, 12, 15].every((line) => instructions.includes(line)), JSON.stringify(rules));
+    // templates aren't instructions
+    assert.ok(rules.filter((r) => r.line === 20 || r.line === 2).every((r) => !r.instruction), JSON.stringify(rules));
 }
 
 async function testNoTemplateMatched(saxonJar) {
@@ -2949,7 +2981,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNodeRules, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testCommentBreakpoints, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapInput, testOutputMapWithoutXslOutput, testXSpecStepping]) {
+        for (const test of [testDeepRecursion, testNodeRules, testNodeRulesIterations, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testCommentBreakpoints, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapInput, testOutputMapWithoutXslOutput, testXSpecStepping]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;
