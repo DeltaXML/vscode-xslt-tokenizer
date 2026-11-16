@@ -574,7 +574,7 @@ export class PackageConversion {
 						}
 					}
 					if (isRule) {
-						text = text.replace(new RegExp(`(</?${source.prefix}:)apply-imports\\b`, 'g'), '$1next-match');
+						text = text.replace(new RegExp(`(</?${source.prefix ? source.prefix + ':' : ''})apply-imports\\b`, 'g'), '$1next-match');
 					} else {
 						// the declaration's name, with the importing module's prefix for its namespace
 						text = text.replace(/^(\s*<[^\s/>]+[^>]*?\sname\s*=\s*)(["'])([^"']*)\2/, (_match, before, quote, name) =>
@@ -682,11 +682,12 @@ export class PackageConversion {
 			.filter(([, value]) => value !== undefined).map(([name, value]) => ` ${name}="${value}"`).join('');
 		const params = RecordTypes.childElements(text, markup, offset, 'xsl:param').filter((p) => !/^(yes|true|1)$/.test((attribute(p, 'tunnel') ?? '').trim()));
 		const declared = params.map((p) => PackageEdits.reindented(text, markup, p, indent + step)!);
-		const passed = params.map((p) => `${indent + step + step}<${scan.prefix}:with-param name="${attribute(p, 'name')}" select="$${attribute(p, 'name')}"/>`);
-		const call = `<${scan.prefix}:call-template name="${calledName(attribute(offset, 'name') ?? '')}"`;
-		const rule = [`${indent}<${scan.prefix}:template${ruleAttributes}>`, ...declared,
-			passed.length > 0 ? [`${indent + step}${call}>`, ...passed, `${indent + step}</${scan.prefix}:call-template>`].join('\n') : `${indent + step}${call}/>`,
-			`${indent}</${scan.prefix}:template>`].join('\n');
+		const x = (localName: string) => RecordTypes.xsltQName(scan.prefix, localName);
+		const passed = params.map((p) => `${indent + step + step}<${x('with-param')} name="${attribute(p, 'name')}" select="$${attribute(p, 'name')}"/>`);
+		const call = `<${x('call-template')} name="${calledName(attribute(offset, 'name') ?? '')}"`;
+		const rule = [`${indent}<${x('template')}${ruleAttributes}>`, ...declared,
+			passed.length > 0 ? [`${indent + step}${call}>`, ...passed, `${indent + step}</${x('call-template')}>`].join('\n') : `${indent + step}${call}/>`,
+			`${indent}</${x('template')}>`].join('\n');
 		return { edit: named, rule };
 	}
 
@@ -698,7 +699,7 @@ export class PackageConversion {
 		const changes: TextEdit[] = [];
 		let match: RegExpExecArray | null;
 		while ((match = tagRgx.exec(markup)) !== null) {
-			if (match[1] || match[2] !== `${prefix}:apply-templates`) {
+			if (match[1] || match[2] !== RecordTypes.xsltQName(prefix, 'apply-templates')) {
 				continue;
 			}
 			const value = RecordTypes.attributeOfElementAt(text, match.index + 1, 'mode');
@@ -985,7 +986,7 @@ export class PackageConversion {
 			return [];
 		}
 		const xsl = scan.prefix;
-		const rootTag = scan.text.substring(root, rootElement.startTagEnd).replace(/^<([\w.-]+:)?(stylesheet|transform|package)\b/, `<${xsl}:stylesheet`)
+		const rootTag = scan.text.substring(root, rootElement.startTagEnd).replace(/^<([\w.-]+:)?(stylesheet|transform|package)\b/, `<${RecordTypes.xsltQName(xsl, 'stylesheet')}`)
 			.replace(/\/?>$/, ' xmlns:zcx="urn:x-context-check">');
 		const lines: string[] = [rootTag];
 		const ranges: { variable: Declaration, start: number, end: number }[] = [];
@@ -995,15 +996,15 @@ export class PackageConversion {
 				return;
 			}
 			const select = RecordTypes.attributeOfElementAt(scan.text, variable.place.offset! + 1, 'select', true);
-			const body = select !== undefined ? `<${xsl}:sequence select="${select.replace(/"/g, '&quot;')}"/>` : extent.selfClosing ? undefined : scan.text.substring(extent.startTagEnd, extent.endTagStart);
+			const body = select !== undefined ? `<${RecordTypes.xsltQName(xsl, 'sequence')} select="${select.replace(/"/g, '&quot;')}"/>` : extent.selfClosing ? undefined : scan.text.substring(extent.startTagEnd, extent.endTagStart);
 			if (body === undefined) {
 				return;
 			}
 			const start = lines.join('\n').split('\n').length;
-			lines.push(`<${xsl}:function name="zcx:v${index}">`, body, `</${xsl}:function>`);
+			lines.push(`<${RecordTypes.xsltQName(xsl, 'function')} name="zcx:v${index}">`, body, `</${RecordTypes.xsltQName(xsl, 'function')}>`);
 			ranges.push({ variable, start, end: lines.join('\n').split('\n').length - 1 });
 		});
-		lines.push(`</${xsl}:stylesheet>`);
+		lines.push(`</${RecordTypes.xsltQName(xsl, 'stylesheet')}>`);
 		const document = await vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'xslt' });
 		const lexer = new XslLexer(XSLTConfiguration.configuration);
 		lexer.provideCharLevelState = true;

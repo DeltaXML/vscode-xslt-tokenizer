@@ -869,12 +869,26 @@ export class RecordTypes {
 	// the name of an element or attribute, as it's compared: an XSLT name with the prefix xsl, for a module whose
 	// prefix for XSLT is another, e.g. xsl:template for xslt:template
 	public static xsltName(name: string, prefix: string): string {
+		if (prefix === '') {
+			// XSLT as the default namespace: an element with no prefix, e.g. template, is xsl:template
+			return name.includes(':') ? name : 'xsl:' + name;
+		}
 		return prefix !== 'xsl' && name.startsWith(prefix + ':') ? 'xsl' + name.substring(prefix.length) : name;
 	}
 
+	// a name with the module's prefix for XSLT, e.g. xslt:param for param - or none, e.g. param, where XSLT is the
+	// default namespace
+	public static xsltQName(prefix: string, localName: string): string {
+		return prefix ? `${prefix}:${localName}` : localName;
+	}
+
 	// text to insert in a module whose prefix for XSLT is another, e.g. a snippet with xsl:when elements: with that prefix
-	// - in such a module, xsl isn't usually bound, so a QName with the prefix xsl is an XSLT name
+	// - in such a module, xsl isn't usually bound, so a QName with the prefix xsl is an XSLT name. Where XSLT is the
+	// default namespace, only element names lose the prefix, e.g. <xsl:when> - a QName elsewhere needs one
 	public static withXsltPrefix(inserted: string, prefix: string): string {
+		if (prefix === '') {
+			return inserted.replace(/(<\/?)xsl:/g, '$1');
+		}
 		return prefix === 'xsl' ? inserted : inserted.replace(/(?<![\w.:-])xsl:/g, prefix + ':');
 	}
 
@@ -886,13 +900,22 @@ export class RecordTypes {
 	// a pattern with XSLT names with the prefix xsl, e.g. /<xsl:iterate[\s>]/, for the module's text, or its markup: with
 	// the module's prefix for XSLT instead (see xsltPrefix)
 	public static xsltPattern(pattern: RegExp, text: string): RegExp {
-		const prefix = RecordTypes.xsltPrefix(text);
-		return prefix === 'xsl' ? pattern : new RegExp(pattern.source.replace(/(?<![\w.-])xsl:/g, prefix.replace(/[.-]/g, '\\$&') + ':'), pattern.flags);
+		return RecordTypes.xsltPatternFor(pattern, RecordTypes.xsltPrefix(text));
+	}
+
+	// a pattern with XSLT names with the prefix xsl, as xsltPattern, for a module with the prefix - with none, where XSLT
+	// is the default namespace, e.g. /<iterate[\s>]/
+	public static xsltPatternFor(pattern: RegExp, prefix: string): RegExp {
+		if (prefix === 'xsl') {
+			return pattern;
+		}
+		const replacement = prefix ? prefix.replace(/[.-]/g, '\\$&') + ':' : '';
+		return new RegExp(pattern.source.replace(/(?<![\w.-])xsl:/g, replacement), pattern.flags);
 	}
 
 	// the start of the start tag of an XSLT instruction, as it's written in the module's text, e.g. '<xsl:iterate'
 	public static xsltTag(text: string, localName: string): string {
-		return `<${RecordTypes.xsltPrefix(text)}:${localName}`;
+		return '<' + RecordTypes.xsltQName(RecordTypes.xsltPrefix(text), localName);
 	}
 
 	// the elements whose start tags are before the offset and are not yet closed there, outermost first - with XSLT

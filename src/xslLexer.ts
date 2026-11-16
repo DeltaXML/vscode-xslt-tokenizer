@@ -316,11 +316,12 @@ export class XslLexer {
     }
 
     // for XSLT, whose instructions have the prefix xsl: the prefix of the module's outermost element, when it's a
-    // stylesheet, transform or package - as the linter checks, the prefix must be bound to the XSLT namespace
+    // stylesheet, transform or package - as the linter checks, the prefix must be bound to the XSLT namespace. With no
+    // prefix, e.g. <stylesheet xmlns="http://www.w3.org/1999/XSL/Transform">, the XSLT elements are those with none
     protected useRootPrefix(rootName: string) {
         if (this.languageConfiguration.nativePrefix === 'xsl') {
-            const root = /^([^:]+):(stylesheet|transform|package)$/.exec(rootName);
-            this.setNativePrefix(root ? root[1] : 'xsl');
+            const root = /^(?:([^:]+):)?(stylesheet|transform|package)$/.exec(rootName);
+            this.setNativePrefix(root ? root[1] ?? '' : 'xsl');
         } else if (this.languageConfiguration.docType === DocumentTypes.XSPEC) {
             // XSpec: the prefix of x:description, e.g. t:description
             const root = /^([^:]+):description$/.exec(rootName);

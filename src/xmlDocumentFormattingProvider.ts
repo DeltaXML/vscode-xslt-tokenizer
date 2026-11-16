@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, LanguageConfiguration, DocumentTypes } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, XPathLexer, ExitCondition, LexPosition } from './xpLexer';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { RecordTypes } from './recordTypes';
 
 enum HasCharacteristic {
 	unknown,
@@ -146,7 +147,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 	private formatRange(document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions): vscode.TextEdit[] {
 		// the end tag of an xsl:note, with the document's prefix for XSLT, e.g. </xslt:note
-		const noteEndTag = `</${XsltTokenDiagnostics.xsltPrefixOf(document)}:note`;
+		const noteEndTag = `</${RecordTypes.xsltQName(XsltTokenDiagnostics.xsltPrefixOf(document), 'note')}`;
 		let result: vscode.TextEdit[] = [];
 		// on-type formatting stops once the new line is formatted - the line before it may be formatted first. After Enter,
 		// that's after the new line's first token, even when its indentation is right already, e.g. from VS Code's own

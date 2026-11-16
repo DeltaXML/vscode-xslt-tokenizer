@@ -1101,6 +1101,9 @@ export class XsltTokenDiagnostics {
 						tagIsForeignSch = !!schForeign?.has(document.offsetAt(new vscode.Position(token.line, token.startCharacter)));
 						if (onRootStartTag && elementStack.length === 0 && writtenElementName.includes(':')) {
 							rootXsltPrefix = writtenElementName.substring(0, writtenElementName.indexOf(':'));
+						} else if (onRootStartTag && elementStack.length === 0 && !isSchematron && docType !== DocumentTypes.XSPEC) {
+							// e.g. <stylesheet xmlns="http://www.w3.org/1999/XSL/Transform">: XSLT is the default namespace
+							rootXsltPrefix = '';
 						}
 						tagElementId++;
 						inheritedPrefixesCopy = inheritedPrefixes.slice();
@@ -5030,7 +5033,12 @@ export class XsltTokenDiagnostics {
 			const isXslt = colon > 0 && name.substring(0, colon) === XsltTokenDiagnostics.schXsltPrefixOf(document);
 			return (isXslt ? 'xsl:' : 'sch:') + name.substring(colon + 1);
 		}
-		return colon > 0 && document.languageId === 'xslt' && !name.startsWith('xsl:') ? 'xsl' + name.substring(colon) : name;
+		if (document.languageId !== 'xslt') {
+			return name;
+		}
+		// the name of an XSLT element, as the lexer finds them: with no prefix, e.g. <template>, only in a module whose
+		// outermost element has none, with XSLT as the default namespace
+		return colon < 0 ? 'xsl:' + name : name.startsWith('xsl:') ? name : 'xsl' + name.substring(colon);
 	}
 
 	// Schematron: where a variable reference that isn't resolved is allowed - from each start to its end, the names allowed,
@@ -5152,8 +5160,7 @@ export class XsltTokenDiagnostics {
 
 	// a pattern for part of the document's text, as RecordTypes.xsltPattern for its whole text
 	public static xsltPatternOf(pattern: RegExp, document: vscode.TextDocument) {
-		const prefix = XsltTokenDiagnostics.xsltPrefixOf(document);
-		return RecordTypes.xsltPattern(pattern, `<${prefix}:stylesheet>`);
+		return RecordTypes.xsltPatternFor(pattern, XsltTokenDiagnostics.xsltPrefixOf(document));
 	}
 
 	public static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
@@ -5694,7 +5701,8 @@ export class XsltTokenDiagnostics {
 					msg = `XML: Text found outside root element: '${tokenValue}`;
 					break;
 				case ErrorType.XSLTNamesapce:
-					msg = `Expected on the root element: xmlns:${tokenValue}='http://www.w3.org/1999/XSL/Transform' prefix/namespace-uri binding`;
+					msg = tokenValue ? `Expected on the root element: xmlns:${tokenValue}='http://www.w3.org/1999/XSL/Transform' prefix/namespace-uri binding` :
+						`Expected on the root element: xmlns='http://www.w3.org/1999/XSL/Transform' default namespace declaration`;
 					break;
 				case ErrorType.XSLTPrefix:
 					msg = `XSLT: Undeclared prefix in name: '${tokenValue}'`;
