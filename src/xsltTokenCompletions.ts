@@ -58,7 +58,16 @@ interface XSLTToken extends BaseToken {
 	tagType?: TagType;
 }
 
+// the tokens of the attribute that sets the context of an element's content: the match of an xsl:template (a pattern), or the
+// select of an xsl:for-each or xsl:iterate - as indexes of the start and end tokens of its value
+export interface ContextRange {
+	start: number;
+	end: number;
+	isPattern: boolean;
+}
+
 export interface ElementData {
+	contextRange?: ContextRange;
 	variables: VariableData[];
 	currentVariable?: VariableData;
 	xpathVariableCurrentlyBeingDefined?: boolean;
@@ -240,6 +249,12 @@ export class XsltTokenCompletions {
 		// select attribute's embedded XPath expression begins.
 		let awaitingSelectExprStart = false;
 		let pendingSelectExprIndex: number | undefined = undefined;
+		// see ContextRange: the attribute of the start-tag being scanned that sets the context for its content
+		let awaitingContextStart: boolean | 'pattern' = false;
+		let inContextValue = false;
+		let pendingContext: ContextRange | undefined;
+		// the elements above the cursor, for the context of a relative path - see XsltSymbolProvider.getCompletionNodeNames
+		XsltSymbolProvider.contextElementStack = isXSLT ? elementStack : undefined;
 		// don't include imported for path completions:
 		let allInstructionData = globalInstructionData;
 		const lastTokenIndex = allTokens.length - 1;
@@ -322,7 +337,16 @@ export class XsltTokenCompletions {
 				pendingSelectExprIndex = index;
 				awaitingSelectExprStart = false;
 			}
+			if (!isXMLToken && awaitingContextStart) {
+				pendingContext = { start: index, end: index, isPattern: awaitingContextStart === 'pattern' };
+				awaitingContextStart = false;
+				inContextValue = true;
+			} else if (!isXMLToken && inContextValue && pendingContext) {
+				pendingContext.end = index;
+			}
 			if (isXMLToken) {
+				// the end of the value's tokens: its closing quote, or the next attribute
+				inContextValue = false;
 				inScopeXPathVariablesList = [];
 				xpathVariableCurrentlyBeingDefined = false;
 				// preserve a reference to the pre-reset xpathStack: the closing quote of an XPath-bearing
@@ -416,12 +440,14 @@ export class XsltTokenCompletions {
 								tagType = TagType.Start;
 								awaitingSelectExprStart = false;
 								pendingSelectExprIndex = undefined;
+								pendingContext = undefined;
 								break;
 							case XMLCharState.rStNoAtt:
 							case XMLCharState.rSt:
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
+								awaitingContextStart = false;
 								if (variableData !== null && pendingSelectExprIndex !== undefined) {
 									variableData.selectExprStartIndex = pendingSelectExprIndex;
 								}
@@ -481,11 +507,11 @@ export class XsltTokenCompletions {
 											// if a top-level element, use global variables instad of inScopeVariablesList;
 											elementStack.push({
 												namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList,
-												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], contextRange: pendingContext
 											});
 										}
 									} else if (startTagToken) {
-										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [] });
+										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], contextRange: pendingContext });
 									}
 									// copy (not reuse) newVariablesList so that variables still in scope (e.g. from
 									// an enclosing xsl:template) remain visible for completions inside this element,
@@ -552,6 +578,14 @@ export class XsltTokenCompletions {
 						// track the select attribute of an xsl:variable/xsl:param so its bound
 						// expression's start token can be captured precisely (see VariableData.selectExprStartIndex)
 						awaitingSelectExprStart = tagType === TagType.XSLTvar && xmlTokenType === XSLTokenLevelState.attributeName && attNameText === 'select';
+						awaitingContextStart = false;
+						if (isXSLT && xmlTokenType === XSLTokenLevelState.attributeName) {
+							if (tagElementName === 'xsl:template' && attNameText === 'match') {
+								awaitingContextStart = 'pattern';
+							} else if ((tagElementName === 'xsl:for-each' || tagElementName === 'xsl:iterate') && attNameText === 'select') {
+								awaitingContextStart = true;
+							}
+						}
 						let problemReported = false;
 
 						if (!problemReported) {

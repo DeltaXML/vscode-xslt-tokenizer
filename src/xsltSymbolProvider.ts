@@ -11,7 +11,7 @@ import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
-import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
+import { ContextRange, ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
 import { anyDocumentSymbol, XSLTCodeActions } from './xsltCodeActions';
 import { ImportIndex } from './importIndex';
 import { SchIncludes } from './schIncludes';
@@ -31,6 +31,8 @@ interface ImportedGlobals {
 interface Cleaned {
 	cleanedTokens: TokenWithUnion[];
 	hasParentAxis: boolean;
+	// the path starts with a variable, followed to its declaration
+	viaVariable?: boolean;
 }
 
 interface GlobalsSummary {
@@ -693,9 +695,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		if (this.useSourceFile === UseSource.none) {
 			return [eNames, aNames];
 		}
-		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, globalInstructionData, xsltVariables, xpathVariables,index, xpathStack);
+		const {cleanedTokens, hasParentAxis, viaVariable} = XsltSymbolProvider.filterPathTokens(allTokens, globalInstructionData, xsltVariables, xpathVariables,index, xpathStack);
 		// console.log('pathTokens')
 		// console.log(cleanedTokens);
+		// a relative path: from the context set by the template, or by the xsl:for-each or xsl:iterate, it's in - if that gives names
+		if (XsltSymbolProvider.contextElementStack && XsltSymbolProvider.pathStart(cleanedTokens, allTokens[index]) === 'relative' && !viaVariable) {
+			const context = XsltSymbolProvider.contextPathTokens(allTokens, XsltSymbolProvider.contextElementStack, globalInstructionData, xsltVariables, xpathVariables);
+			if (context) {
+				const inContext = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens.concat(context.tokens), symbols, hasParentAxis || context.hasParentAxis);
+				if (inContext[0].length > 0 || inContext[1].length > 0) {
+					return inContext;
+				}
+			}
+		}
 		const result = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens, symbols, hasParentAxis);
 		const [elementNames, attrNames] = result;
 		// console.log('elementNames');
@@ -703,6 +715,83 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// console.log('attrtNames');
 		// console.log(attrNames);
 		return result;
+	}
+
+	// the elements above the cursor, set by the completions: for the context of a relative path
+	public static contextElementStack: ElementData[] | undefined;
+
+	// elements whose content, or whose xsl:sort, has a context other than that of the instruction above it - or none
+	private static readonly contextBreakers = ['xsl:for-each-group', 'xsl:analyze-string', 'xsl:matching-substring', 'xsl:non-matching-substring', 'xsl:merge',
+		'xsl:merge-source', 'xsl:merge-action', 'xsl:accumulator-rule', 'xsl:key', 'xsl:function', 'xsl:copy', 'xsl:source-document', 'xsl:on-completion',
+		'xsl:apply-templates', 'xsl:perform-sort', 'xsl:template'];
+
+	// where a path, as its tokens from filterPathTokens - the last is its first step, begins: 'absolute' for / or //, 'relative' to the
+	// context, or 'unknown' - a variable that isn't resolved. last: the token at the end of the path, for when it has no steps
+	private static pathStart(cleanedTokens: BaseToken[], last: BaseToken | undefined): 'absolute' | 'relative' | 'unknown' {
+		const first = cleanedTokens.length > 0 ? cleanedTokens[cleanedTokens.length - 1] : last;
+		if (!first) {
+			return 'relative';
+		}
+		if (first.tokenType === TokenLevelState.variable) {
+			return 'unknown';
+		}
+		return first.value === '/' || first.value === '//' ? 'absolute' : 'relative';
+	}
+
+	// a path of steps, with predicates, e.g. a/b[c = 1]/@d or $v/e - not a union, a function call or any other expression
+	private static isSimplePath(tokens: BaseToken[], range: ContextRange) {
+		let depth = 0;
+		for (let i = range.start; i <= range.end; i++) {
+			const token = tokens[i];
+			const type = <TokenLevelState>token.tokenType;
+			const char = <CharLevelState>token.charType;
+			if (type === TokenLevelState.operator && char === CharLevelState.lPr) {
+				depth++;
+			} else if (type === TokenLevelState.operator && char === CharLevelState.rPr) {
+				depth--;
+			} else if (depth === 0) {
+				const isStep = type === TokenLevelState.nodeNameTest || type === TokenLevelState.attributeNameTest || type === TokenLevelState.axisName ||
+					type === TokenLevelState.nodeType || type === TokenLevelState.variable;
+				const isSeparator = type === TokenLevelState.operator && ((char === CharLevelState.sep && token.value === '/') ||
+					(char === CharLevelState.dSep && ['//', '::', '()'].includes(token.value)));
+				if (!isStep && !isSeparator) {
+					return false;
+				}
+			}
+		}
+		return depth === 0;
+	}
+
+	// the path to the context node set by the elements above the cursor, in the order of filterPathTokens - the template's match, and
+	// the select of each xsl:for-each and xsl:iterate within it, unless one of them is a absolute path: undefined if that's not known
+	private static contextPathTokens(tokens: BaseToken[], stack: ElementData[], globalInstructionData: GlobalInstructionData[], xsltVariables: VariableData[], xpathVariables: VariableData[]) {
+		let result: TokenWithUnion[] = [];
+		let hasParentAxis = false;
+		for (let i = stack.length - 1; i >= 0; i--) {
+			const element = stack[i];
+			const range = element.contextRange;
+			if (!range) {
+				if (XsltSymbolProvider.contextBreakers.includes(element.symbolName)) {
+					return undefined;
+				}
+				continue;
+			}
+			if (!XsltSymbolProvider.isSimplePath(tokens, range)) {
+				return undefined;
+			}
+			const path = XsltSymbolProvider.filterPathTokens(tokens, globalInstructionData, xsltVariables, xpathVariables, range.end, []);
+			const start = XsltSymbolProvider.pathStart(path.cleanedTokens, tokens[range.end]);
+			if (start === 'unknown' || (start === 'relative' && path.viaVariable)) {
+				return undefined;
+			}
+			result = result.concat(path.cleanedTokens);
+			hasParentAxis = hasParentAxis || path.hasParentAxis;
+			// a pattern, or an absolute path, is where the context begins - else it's relative to that of the element above
+			if (range.isPattern || start === 'absolute') {
+				return { tokens: result, hasParentAxis };
+			}
+		}
+		return undefined;
 	}
 
 	public static filterPathTokens(tokens: BaseToken[], globalInstructionData: GlobalInstructionData[], xsltVariables: VariableData[], xpathVariables: VariableData[], position: number, xpathStack: XPathData[]) {
@@ -717,6 +806,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let lastTokenWasSlash2 = false;
 		let hasParentAxis = false;
 		let foundVariableToken = false;
+		let viaVariable = false;
 		let isNextBracketUnion = false;
 		let collectBracketTokens = false;
 
@@ -833,6 +923,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							}
 						}
 						if (xpv) {
+							viaVariable = true;
 							const lastTokenIndex = XsltSymbolProvider.fetchXPathVariableTokens(tokens, xpv);
 							// recursive call:
 							if (position === lastTokenIndex) {
@@ -904,7 +995,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			lastTokenWasSlash = false;
 			saveToken = false;
 		}
-		return {cleanedTokens, hasParentAxis};
+		return {cleanedTokens, hasParentAxis, viaVariable};
 	}
 
 	static fetchXPathVariableTokens(tokens: BaseToken[], xpv: VariableData) {
