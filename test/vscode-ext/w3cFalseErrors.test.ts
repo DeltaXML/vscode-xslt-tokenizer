@@ -132,6 +132,18 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.isAbove((await problems(simplified.replace(' xsl:version="3.0"', ''))).length, 0);
 	});
 
+	test('a file whose root isn\'t an XSLT module, e.g. a unit test suite for XSLT: one problem on the root, its xsl: elements aren\'t checked', async () => {
+		const suite = '<test:suite xmlns:test="http://www.jenitennison.com/xslt/unit-test" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">' +
+			'<test:test id="a"><xsl:variable name="doc"><elem1/></xsl:variable><test:param name="p" select="$doc"/></test:test>' +
+			'<test:xslt><xsl:function name="f:g"/></test:xslt><test:expect select="nosuch(1)"/></test:suite>';
+		assert.deepEqual(await problems(suite), ['XSLT: The root element \'test:suite\' isn\'t xsl:stylesheet, xsl:transform or xsl:package, or a simplified stylesheet (a literal result element with xsl:version) - the file isn\'t checked as XSLT']);
+		// a simplified stylesheet isn't replaced by this problem: it's reported as before - here without the xmlns:xsl binding
+		assert.deepEqual(await problems('<table xsl:version="3.0"><xsl:value-of select="1"/></table>'),
+			['Expected on the root element: xmlns:xsl=\'http://www.w3.org/1999/XSL/Transform\' prefix/namespace-uri binding']);
+		// an XSLT module, with a version, is still checked
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><xsl:value-of select="nosuch(1)"/></xsl:template>')), ['XPath: Function: \'nosuch\' with 1 arguments not found']);
+	});
+
 	test('a function with a shadow attribute for its name: its parameters aren\'t the previous function\'s (initial-function-101)', async () => {
 		const fn = (name: string) => `<xsl:function ${name} xmlns:f="urn:f"><xsl:param name="p"/><xsl:sequence select="$p"/></xsl:function>`;
 		assert.deepEqual(await problems(stylesheet(fn('name="f:a"') + fn('_name="f:b"') + fn('_name="{\'f:c\'}"'))), []);

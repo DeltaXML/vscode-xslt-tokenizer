@@ -592,6 +592,8 @@ export class XsltTokenDiagnostics {
 		let importedGlobalFnNames: string[] = [];
 		let incrementFunctionArity = false;
 		let onRootStartTag = true;
+		// the outermost element when it's not an XSLT module: a file that isn't XSLT, e.g. a test suite for another tool
+		let nonXsltRootToken: BaseToken | undefined;
 		// the prefix of the outermost element, e.g. xsl:stylesheet, which must be bound to the XSLT namespace
 		let rootXsltPrefix = 'xsl';
 		// XSpec: the prefixes bound to the XSpec namespace on the outermost element, e.g. x - for its variables, e.g. $x:result
@@ -1251,6 +1253,16 @@ export class XsltTokenDiagnostics {
 											xsltPrefixesToURIs.set(pfx, xsltType);
 										}
 									});
+									if (startTagToken !== null && tagVersion === undefined && !['xsl:stylesheet', 'xsl:transform', 'xsl:package'].includes(tagElementName) &&
+										!startTagAttributeNames.some((attName, index) => {
+											const written = writtenAttributeNames[index] ?? attName;
+											const colon = written.indexOf(':');
+											return colon > 0 && (written.startsWith('xsl:') || xsltPrefixesToURIs.get(written.substring(0, colon)) === XSLTnamespaces.XSLT);
+										})) {
+										// not an XSLT module, nor a simplified stylesheet (a literal result element with xsl:version) - and with no
+										// attribute in the XSLT namespace on the root, e.g. xsl:version or xsl:expand-text, to show it's meant to be one
+										nonXsltRootToken = startTagToken;
+									}
 									if (xsltPrefixesToURIs.get(rootXsltPrefix) !== XSLTnamespaces.XSLT) {
 										if (startTagToken !== null) {
 											startTagToken['error'] = ErrorType.XSLTNamesapce;
@@ -3847,6 +3859,14 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		XsltTokenDiagnostics.recordFixes.set(document.uri.toString(), recordFixes);
+		if (nonXsltRootToken && (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40)) {
+			// its content isn't XSLT, so its xsl: elements and XPath aren't checked as such: one problem, on the root
+			const root = nonXsltRootToken;
+			const rootName = XsltTokenDiagnostics.getTextForToken(root.line, root, document).trim();
+			return [new vscode.Diagnostic(new vscode.Range(root.line, root.startCharacter, root.line, root.startCharacter + root.length),
+				`XSLT: The root element '${rootName}' isn't xsl:stylesheet, xsl:transform or xsl:package, or a simplified stylesheet (a literal result element with xsl:version) - the file isn't checked as XSLT`,
+				vscode.DiagnosticSeverity.Warning)];
+		}
 		return allDiagnostics;
 	};
 
