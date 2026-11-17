@@ -92,6 +92,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static instanceForXSLT: XsltSymbolProvider|null = null;
 	private readonly xslLexer: XslLexer;
 	public readonly collection: vscode.DiagnosticCollection | null;
+	private static readonly historySchemes = ['git', 'gitlens', 'git-graph', 'svn', 'review', 'pr'];
 	private internalDiagnostics: vscode.Diagnostic[];
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
@@ -121,6 +122,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.internalDiagnostics = [];
 		if (xsltConfiguration.docType === DocumentTypes.XSLT) {
 			XsltSymbolProvider.instanceForXSLT = this;
+		}
+		// a read-only copy of a file, e.g. an older version in a source control diff, is closed when the diff is: its
+		// problems go too, not left to link to a document that's no longer shown
+		if (collection) {
+			vscode.workspace.onDidCloseTextDocument((closed) => {
+				if (closed.uri.scheme !== 'file' && closed.uri.scheme !== 'untitled') {
+					collection.delete(closed.uri);
+				}
+			});
 		}
 	}
 
@@ -306,7 +316,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					// nor a failed test's expected or actual result, in the Test Results view's diff: XML with perhaps no
 					// root element
 					const isTestData = document.uri.scheme === 'vscode-test-data';
-					if (allDiagnostics.length > 0 && this.showDiagnostics() && !isDebugOutput && !isTestData) {
+					// nor an earlier version of a file, in a source control diff: not the file to fix
+					const isHistory = XsltSymbolProvider.historySchemes.includes(document.uri.scheme);
+					if (allDiagnostics.length > 0 && this.showDiagnostics() && !isDebugOutput && !isTestData && !isHistory) {
 						this.collection.set(document.uri, allDiagnostics);
 					} else {
 						// only this document's problems - not those of other documents

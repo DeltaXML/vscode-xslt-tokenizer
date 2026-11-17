@@ -140,3 +140,22 @@ suite('Context file: completions of a relative path from its context', function 
 		assert.include(names, 'order');
 	});
 });
+
+suite('Problems of an older version of a file, in a source control diff', function () {
+	this.timeout(60000);
+	test('are not reported for a document of a source control scheme', async () => {
+		const provider = vscode.workspace.registerTextDocumentContentProvider('gitlens', {
+			provideTextDocumentContent: () => '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"><xsl:template match="/"><xsl:value-of select="nosuch(1)"/></xsl:template></xsl:stylesheet>'
+		});
+		try {
+			const uri = vscode.Uri.parse('gitlens:/old/invoicing.xsl');
+			const document = await vscode.workspace.openTextDocument(uri);
+			await vscode.languages.setTextDocumentLanguage(document, 'xslt');
+			await vscode.window.showTextDocument(document);
+			await new Promise((resolve) => setTimeout(resolve, 2500));
+			assert.equal(vscode.languages.getDiagnostics(uri).length, 0);
+		} finally {
+			provider.dispose();
+		}
+	});
+});
