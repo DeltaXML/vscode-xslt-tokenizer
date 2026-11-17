@@ -16,8 +16,6 @@
              xmlns:inv="http://example.com/invoicing"
              exclude-result-prefixes="#all" expand-text="yes">
 
-    <xsl:use-package name="com.exmample.vscode.xslt.test"/>
-
     <xsl:note use-when="false()" format="xdoc-md">
         Renders invoices as HTML tables, with their totals and tax.
 
@@ -104,7 +102,7 @@
     </xsl:template>
 
     <xsl:template match="line" mode="inv:render">
-        <tr><td>{@description}</td><td>{@quantity || f:new('hello')}</td><td>{inv:format-amount(inv:line-total(.))}</td></tr>
-    </xsl:template>
+        <tr><td>{@description}</td><td>{@quantity}</td><td>{inv:format-amount(inv:line-total(.))}</td></tr>
+    </xsl:template> 
 
 </xsl:package>
