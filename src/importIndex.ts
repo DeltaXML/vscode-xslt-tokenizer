@@ -55,6 +55,10 @@ export class ImportIndex {
 	private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
 	// fired when the index is built, and when it's updated for a changed file
 	public readonly onDidChange = this.onDidChangeEmitter.event;
+	private readonly onDidChangePackagesEmitter = new vscode.EventEmitter<void>();
+	// fired when a file is changed, created or deleted and the packages in the workspace change: its xsl:package name or version -
+	// the modules that use packages are then checked again, as they were checked with the packages known before
+	public readonly onDidChangePackages = this.onDidChangePackagesEmitter.event;
 
 	public static isEnabled() {
 		return vscode.workspace.getConfiguration('XSLT.resources').get<boolean>('inferParentFromWorkspace', true);
@@ -212,19 +216,32 @@ export class ImportIndex {
 			if (uri.scheme !== 'file') {
 				return;
 			}
+			let text: string | undefined;
 			try {
-				this.index(uri.fsPath, await fs.promises.readFile(uri.fsPath, 'utf8'));
+				text = await fs.promises.readFile(uri.fsPath, 'utf8');
 			} catch {
-				this.forget(uri.fsPath);
+				// unreadable, e.g. deleted: forgotten
 			}
-			this.onDidChangeEmitter.fire();
+			this.update(uri.fsPath, text);
 		};
 		this.watcher.onDidChange(update);
 		this.watcher.onDidCreate(update);
-		this.watcher.onDidDelete((uri) => {
-			this.forget(uri.fsPath);
-			this.onDidChangeEmitter.fire();
-		});
+		this.watcher.onDidDelete((uri) => this.update(uri.fsPath, undefined));
+	}
+
+	// a file is changed or created, with its text - or deleted, with none: the index is updated, and onDidChangePackages fired if the
+	// package it declares changed - public for testing, as the test host has no workspace folder for the watcher
+	public update(file: string, text: string | undefined) {
+		const packageBefore = JSON.stringify(this.packageDeclarations.get(file));
+		if (text === undefined) {
+			this.forget(file);
+		} else {
+			this.index(file, text);
+		}
+		this.onDidChangeEmitter.fire();
+		if (JSON.stringify(this.packageDeclarations.get(file)) !== packageBefore) {
+			this.onDidChangePackagesEmitter.fire();
+		}
 	}
 
 	public dispose() {

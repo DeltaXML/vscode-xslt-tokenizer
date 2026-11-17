@@ -690,6 +690,13 @@ export function activate(context: vscode.ExtensionContext) {
 			relintXsltModules();
 		}
 	});
+	// a package created, deleted or changed after the index is built: the open modules that use it were checked without it, or with its
+	// old name or version - so they're checked again
+	context.subscriptions.push(ImportIndex.instance.onDidChangePackages(() => {
+		if (ImportIndex.instance.built) {
+			relintXsltModules();
+		}
+	}));
 	// the top-level stylesheets chosen for modules, saved for the workspace
 	const topLevelChoicesKey = 'xslt-xpath.topLevelStylesheetChoices';
 	ImportIndex.instance.setChoices(context.workspaceState.get(topLevelChoicesKey));

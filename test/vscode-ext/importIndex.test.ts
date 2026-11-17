@@ -218,4 +218,30 @@ suite('Import index', () => {
 		collection.dispose();
 		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 	});
+	test('a package created, changed or deleted: the modules that use packages are checked again - not for another file', () => {
+		let fired = 0;
+		const listener = ImportIndex.instance.onDidChangePackages(() => fired++);
+		const packagePath = file('new-package.xsl');
+		const packageText = (version: string) => `<xsl:package ${namespaces} name="http://example.com/new" package-version="${version}"/>`;
+		// created
+		ImportIndex.instance.update(packagePath, packageText('1.0'));
+		assert.equal(fired, 1);
+		assert.deepEqual(ImportIndex.instance.packages().filter((p) => p.path === packagePath).map((p) => p.version), ['1.0']);
+		// saved without a change to the package, or another module changed
+		ImportIndex.instance.update(packagePath, packageText('1.0') + '\n');
+		ImportIndex.instance.update(file('util.xsl'), files['util.xsl'] + '\n');
+		assert.equal(fired, 1);
+		// its version changed
+		ImportIndex.instance.update(packagePath, packageText('2.0'));
+		assert.equal(fired, 2);
+		// deleted
+		ImportIndex.instance.update(packagePath, undefined);
+		assert.equal(fired, 3);
+		assert.deepEqual(ImportIndex.instance.packages().filter((p) => p.path === packagePath), []);
+		// a module that isn't a package, deleted
+		ImportIndex.instance.update(file('util.xsl'), undefined);
+		assert.equal(fired, 3);
+		ImportIndex.instance.update(file('util.xsl'), files['util.xsl']);
+		listener.dispose();
+	});
 });
