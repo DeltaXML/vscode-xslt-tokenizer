@@ -16,6 +16,7 @@ import * as jsc from 'jsonc-parser';
 import { SaxonTaskProvider, XSLTTask } from '../saxonTaskProvider';
 import { CatalogSetting } from '../catalogSetting';
 import { XsltPackages } from '../xsltPackages';
+import { ImportIndex } from '../importIndex';
 import { XSpecRunner } from '../xspecRunner';
 import { DocumentChangeHandler } from '../documentChangeHandler';
 import { unquotedPath } from '../settingPaths';
@@ -29,6 +30,11 @@ export class RunConfiguration {
 
 	// the workspace's settings - and, for a stylesheet given, what Quick Run would run
 	public static async describe(stylesheet: string | undefined): Promise<string> {
+		// the packages in the workspace are those the index finds: wait for it, as the other tools do - else none are known
+		// until something else has built it, and the command for a stylesheet that uses one has no -lib
+		if (ImportIndex.isEnabled()) {
+			await ImportIndex.instance.whenBuilt();
+		}
 		const lines: string[] = [];
 		const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		const shown = (file: string) => folder && file.startsWith(folder + path.sep) ? path.relative(folder, file) : file;
