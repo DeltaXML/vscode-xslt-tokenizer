@@ -10,7 +10,7 @@ import { XsltProfile, ProfileDeclaration } from './xsltProfile';
 
 // a profiled template, function or global, as the Profile view shows it
 export interface ProfileRow {
-    // 'template', 'function', 'variable' or 'param'
+    // 'template', 'function', 'variable' or 'param' - for a schema, 'rule' or 'let'
     kind: string;
     // Saxon's, e.g. 'xsl:template', and what identifies the declaration as its module is edited (see
     // XsltProfile.declarationKey) - undefined if the declaration wasn't found
@@ -34,8 +34,35 @@ export interface ProfileRow {
     avgGross: number;
 }
 
+// the words of the view for what's profiled: stylesheets' templates, functions and globals, or a schema's rules
+export interface ProfileLabels {
+    // the first column's title, and the table's description
+    component: string;
+    // what the times are of, e.g. 'templates, functions and globals' - in the summary, and the empty view's message
+    units: string;
+    // before a row's mode - or a rule's pattern
+    detail: string;
+    // the first sentence of the note below the table - what net time leaves out
+    note: string;
+}
+
+export const xsltLabels: ProfileLabels = {
+    component: 'Template / function', units: 'templates, functions and globals', detail: 'mode=',
+    note: 'Net time leaves out the templates and functions called; gross time includes them.'
+};
+
+export const schematronLabels: ProfileLabels = {
+    component: 'Rule / function', units: 'rules, global lets and functions', detail: 'pattern=',
+    note: 'A rule\'s time is that of its template: its lets, assertions and reports, and the functions they call - the time of the rules of an abstract pattern is added up for each rule that extends it.'
+};
+
 export interface ProfileRun {
+    // what's profiled: the stylesheet, or the Schematron schema - the Profile view's Run Again profiles it again
     stylesheet: vscode.Uri;
+    // the words for what's profiled - those of a stylesheet's if not given
+    labels?: ProfileLabels;
+    // the command Run Again runs, with the stylesheet - xslt-xpath.profileXslt if not given
+    rerunCommand?: string;
     // e.g. 'order-report.xsl'
     title: string;
     // e.g. 'SaxonJ'
@@ -147,7 +174,7 @@ export class XsltProfileView {
             return;
         }
         if (message.command === 'rerun') {
-            vscode.commands.executeCommand('xslt-xpath.profileXslt', run.stylesheet);
+            vscode.commands.executeCommand(run.rerunCommand ?? 'xslt-xpath.profileXslt', run.stylesheet);
             return;
         }
         if (message.command === 'reveal' && message.index !== undefined) {
@@ -179,6 +206,7 @@ export class XsltProfileView {
         const nonce = crypto.randomBytes(16).toString('base64');
         // the data for the script - '<' escaped so nothing in it can end the script element
         const data = JSON.stringify({
+            labels: run.labels ?? xsltLabels,
             title: run.title, processor: run.processor, settings: run.settings, sourceSummary: run.sourceSummary,
             requestedRuns: run.requestedRuns, runs: run.runs, runsText: XsltProfile.runsText(run.runs, run.requestedRuns), time: run.time.toLocaleString(),
             total: run.total, netTotal: run.netTotal, rows: run.rows.map(({ selection: _s, file: _f, ...shown }) => shown)
@@ -249,18 +277,18 @@ export class XsltProfileView {
 	<summary id="settings-summary"></summary>
 	<dl id="settings-list"></dl>
 </details>
-<table id="table" aria-label="Profiled templates, functions and globals">
+<table id="table">
 	<thead><tr id="head"></tr></thead>
 	<tbody id="body"></tbody>
 </table>
-<div class="empty" id="empty" hidden>No templates, functions or global variables were timed in this run.</div>
-<div class="note">Times are from a run with tracing on, which turns off some of Saxon's optimisations, so compare them with each other rather than as absolute timings. Net time leaves out the templates and functions called; gross time includes them. Net % is each row's share of the time spent in templates, functions and globals.</div>
+<div class="empty" id="empty" hidden></div>
+<div class="note" id="note"></div>
 <script nonce="${nonce}">
 (function () {
 	const vscode = acquireVsCodeApi();
 	const data = ${data};
 	const columns = [
-		{ key: 'label', title: 'Template / function', num: false },
+		{ key: 'label', title: data.labels.component, num: false },
 		{ key: 'module', title: 'Module', num: false },
 		{ key: 'count', title: 'Calls', num: true },
 		{ key: 'net', title: 'Net (ms)', num: true },
@@ -275,6 +303,10 @@ export class XsltProfileView {
 	const el = (tag, className, text) => { const e = document.createElement(tag); if (className) { e.className = className; } if (text !== undefined) { e.textContent = text; } return e; };
 
 	document.getElementById('title').textContent = data.title;
+	document.getElementById('table').setAttribute('aria-label', 'Profiled ' + data.labels.units);
+	document.getElementById('empty').textContent = 'No ' + data.labels.units + ' were timed in this run.';
+	document.getElementById('note').textContent = 'Times are from a run with tracing on, which turns off some of Saxon\u2019s optimisations, so compare them with each other rather than as absolute timings. ' +
+		data.labels.note + ' Net % is each row\u2019s share of the time spent in ' + data.labels.units + '.';
 	document.getElementById('meta').textContent = 'Profiled with ' + data.processor + ' \\u00b7 ' + data.time;
 
 	// what the times depend on: the source, parameters and runs
@@ -298,7 +330,7 @@ export class XsltProfileView {
 	if (state.settingsOpen === false) { settingsDetails.open = false; }
 	settingsDetails.addEventListener('toggle', () => { state.settingsOpen = settingsDetails.open; vscode.setState(state); });
 	const summary = document.getElementById('summary');
-	summary.append('Total ', el('b', '', ms(data.total) + ' ms'), ' \\u00b7 in templates, functions and globals ', el('b', '', ms(data.netTotal) + ' ms'),
+	summary.append('Total ', el('b', '', ms(data.total) + ' ms'), ' \\u00b7 in ' + data.labels.units + ' ', el('b', '', ms(data.netTotal) + ' ms'),
 		data.total > 0 ? ' (' + Math.round(100 * data.netTotal / data.total) + '%)' : '');
 	document.getElementById('rerun').addEventListener('click', () => vscode.postMessage({ command: 'rerun' }));
 
@@ -353,7 +385,7 @@ export class XsltProfileView {
 				calls + (row.count === 1 ? ' call' : ' calls') + ' \\u00b7 ' + ms(row.net) + ' ms net \\u00b7 ' + ms(row.gross) + ' ms gross \\u00b7 ' + ms(row.avgNet) + ' ms avg net';
 			const component = el('td', 'col-label');
 			component.append(el('span', 'kind', row.kind), el('span', 'label', row.label));
-			if (row.mode) { component.append(el('span', 'mode', 'mode=' + row.mode)); }
+			if (row.mode) { component.append(el('span', 'mode', data.labels.detail + row.mode)); }
 			const module = el('td', 'col-module');
 			module.title = row.moduleTitle;
 			module.append(row.module, el('span', 'line', ':' + row.line));
@@ -453,7 +485,7 @@ export class XsltProfileCodeLensProvider implements vscode.CodeLensProvider {
     public static title(row: ProfileRow, netTotal: number): string {
         const ms = (n: number) => n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2);
         const share = netTotal > 0 ? ` (${Math.round(100 * row.net / netTotal)}%)` : '';
-        if ((row.kind === 'variable' || row.kind === 'param') && row.count === 1) {
+        if ((row.kind === 'variable' || row.kind === 'param' || row.kind === 'let') && row.count === 1) {
             return `${ms(row.net)} ms${share}`;
         }
         const calls = `${Number.isInteger(row.count) ? row.count : row.count.toFixed(1)} ${row.count === 1 ? 'call' : 'calls'}`;

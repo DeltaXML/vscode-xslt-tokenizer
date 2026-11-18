@@ -152,4 +152,24 @@ describe('XsltProfile', () => {
         expect(XsltProfile.relocate(twice, 'xsl:function', 'function f:x', 9)!.line).to.equal(8);
         expect(XsltProfile.relocate(stylesheet.replace('name="f:x"', 'name="f:y"'), 'xsl:function', 'function f:x', 7)).to.equal(undefined);
     });
+
+    it('keys a Schematron rule by its context and id, and selects its context - a let by its name', () => {
+        const schema = [
+            '<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron">',
+            '  <sch:let name="limit" value="5"/>',
+            '  <sch:pattern id="p">',
+            '    <sch:rule id="r1"',
+            '        context="order  |  line">',
+            '    </sch:rule>',
+            '  </sch:pattern>',
+            '</sch:schema>'
+        ].join('\n');
+        const rule = XsltProfile.declarationsOf(schema, 'rule')[0];
+        expect(rule.line).to.equal(3);
+        expect(XsltProfile.declarationKey('rule', rule.attributes)).to.equal('rule order | line id r1');
+        expect(schema.split('\n')[rule.selection.line].substring(rule.selection.character, rule.selection.endCharacter)).to.equal('order  |  line');
+        const global = XsltProfile.declarationsOf(schema, 'let')[0];
+        expect(XsltProfile.declarationKey('let', global.attributes)).to.equal('let limit');
+        expect(XsltProfile.relocate(schema.replace('<sch:let', '\n<sch:let'), 'rule', 'rule order | line id r1', 3)!.line).to.equal(4);
+    });
 });

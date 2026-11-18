@@ -409,6 +409,12 @@
 				"icon": "$(debug-alt)"
 			},
 			{
+				"command": "xslt-xpath.profileSchematron",
+				"title": "Profile: the XML Context File",
+				"category": "Schematron",
+				"icon": "$(pulse)"
+			},
+			{
 				"command": "xslt-xpath.pickSchematronContextFile",
 				"title": "Choose XML Context File...",
 				"category": "Schematron"
@@ -724,6 +730,11 @@
 					"group": "1_xslt@2"
 				},
 				{
+					"command": "xslt-xpath.profileSchematron",
+					"when": "resourceLangId == sch",
+					"group": "1_xslt@2"
+				},
+				{
 					"command": "xslt-xpath.validateWithSchematronMenu",
 					"when": "resourceLangId == xml || resourceLangId == sch",
 					"group": "1_xslt@3"
@@ -850,6 +861,10 @@
 				},
 				{
 					"command": "xslt-xpath.debugSchematron",
+					"when": "editorLangId == sch"
+				},
+				{
+					"command": "xslt-xpath.profileSchematron",
 					"when": "editorLangId == sch"
 				},
 				{

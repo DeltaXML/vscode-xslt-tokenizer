@@ -78,6 +78,8 @@ import { SchematronContext } from './schematronContext';
 import { SchematronStatus } from './schematronStatus';
 import { SchematronTests } from './schematronTests';
 import { SchematronDebug } from './schematronDebug';
+import { SchematronProfile } from './schematronProfile';
+import { SchematronSourceMap } from './schematronSourceMap';
 import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
@@ -86,7 +88,7 @@ import { XsltNodeRules } from './xsltNodeRules';
 import { XsltEmptySteps } from './xsltEmptySteps';
 import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
 import { XsltProfile, ProfileDeclaration, ProfileEntry } from './xsltProfile';
-import { XsltProfileView, XsltProfileCodeLensProvider, ProfileRow, ProfileRun } from './xsltProfileView';
+import { XsltProfileView, XsltProfileCodeLensProvider, ProfileRow, ProfileRun, schematronLabels } from './xsltProfileView';
 import { XsltProfileTimeline } from './xsltProfileTimeline';
 import { TimelineCommands } from './timelineCommands';
 import { XsltMcpDefinitionProvider, XsltMcpServer } from './mcp/xsltMcpServer';
@@ -1464,35 +1466,16 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	};
 
-	const runProfile = async (taskType: QuickRunTaskType, xsltDocument: vscode.TextDocument, xmlSourceFsPath: string | undefined) => {
-		const xsltFsPath = xsltDocument.uri.fsPath;
-		const processorName = SaxonTaskProvider.quickRunProcessorNames[taskType];
-		// the Quick Run task's definition, so the run has its parameters, result file and other options
-		let definition: vscode.TaskDefinition | undefined;
-		let label = `${processorName} Quick Run`;
-		try {
-			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask(taskType, xsltDocument, xmlSourceFsPath, xsltDefintiionProvider);
-			if (quickRunTask === 'cancelled') {
-				return;
-			}
-			if (quickRunTask) {
-				label = quickRunTask.label;
-				definition = (await fetchPersistedTask(taskType, label, xsltFsPath, xmlSourceFsPath))?.definition;
-			}
-		} catch (e) {
-			console.warn(`${profileCommandName}: failed to find/create a persisted task, falling back to an ad hoc run.`, e);
-		}
-		definition = definition ? { ...definition } : SaxonTaskProvider.createQuickRunTaskDefinition(taskType, label, xsltFsPath, xmlSourceFsPath, '${command:xslt-xpath.pickResultFile}');
-		if (taskType === 'xslt' && !definition.saxonJar) {
-			definition.saxonJar = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
-		}
+	// runs the task as defined with Saxon's timing profile - its profile, and the runs asked for, or undefined when it's not
+	// run, or gives none: why is shown. The definition is the task's, for its stylesheet - settingsUri has the settings
+	const executeProfile = async (taskType: QuickRunTaskType, definition: vscode.TaskDefinition, label: string, settingsUri: vscode.Uri, commandName = profileCommandName) => {
 		// Saxon's -TP is a feature of Saxon PE and EE
 		const processorSetting = taskType === 'xslt' ? 'saxonJar' : 'saxonCPath';
 		const processorPath: string | undefined = definition[processorSetting] === `\${config:XSLT.tasks.${processorSetting}}` || !definition[processorSetting] ?
 			vscode.workspace.getConfiguration('XSLT.tasks').get(processorSetting) : definition[processorSetting];
 		if (SaxonTaskProvider.isSaxonHE(processorPath)) {
-			vscode.window.showErrorMessage(`${profileCommandName}: profiling uses Saxon's timing profile, a feature of Saxon PE and EE - the task '${label}' uses Saxon-HE (${processorPath}).`);
-			return;
+			vscode.window.showErrorMessage(`${commandName}: profiling uses Saxon's timing profile, a feature of Saxon PE and EE - the task '${label}' uses Saxon-HE (${processorPath}).`);
+			return undefined;
 		}
 		const profileFsPath = path.join(os.tmpdir(), `xslt-profile-${process.pid}-${Date.now()}.xml`);
 		definition.label = `${label} (profile)`;
@@ -1500,13 +1483,13 @@ export function activate(context: vscode.ExtensionContext) {
 		definition.TPxslFilename = vscode.Uri.joinPath(context.extensionUri, 'xslt-resources', 'profile', 'profile-xml.xsl').fsPath;
 		definition.profileRun = true;
 		// more than one run, so the last is warm - see the setting
-		const requestedRuns = Math.max(1, Math.min(100, Math.floor(vscode.workspace.getConfiguration('XSLT.tasks', xsltDocument.uri).get<number>('profileRuns', 1)) || 1));
+		const requestedRuns = Math.max(1, Math.min(100, Math.floor(vscode.workspace.getConfiguration('XSLT.tasks', settingsUri).get<number>('profileRuns', 1)) || 1));
 		if (requestedRuns > 1) {
 			definition.profileRepeat = requestedRuns;
 		}
 		const task = quickRunTaskProviders[taskType].getTask(definition);
 		if (!task) {
-			return;
+			return undefined;
 		}
 		const execution = await vscode.tasks.executeTask(task);
 		const exitCode = await new Promise<number | undefined>((resolve) => {
@@ -1534,13 +1517,43 @@ export function activate(context: vscode.ExtensionContext) {
 		const profile = xml !== undefined ? XsltProfile.parse(xml) : undefined;
 		if (!profile) {
 			vscode.window.showErrorMessage(exitCode !== undefined && exitCode !== 0 ?
-				`${profileCommandName}: the run failed (exit code ${exitCode}) - see the terminal for Saxon's messages.` :
-				`${profileCommandName}: Saxon didn't write a profile - see the terminal for its messages.`);
-			return;
+				`${commandName}: the run failed (exit code ${exitCode}) - see the terminal for Saxon's messages.` :
+				`${commandName}: Saxon didn't write a profile - see the terminal for its messages.`);
+			return undefined;
 		}
 		if (exitCode !== undefined && exitCode !== 0) {
-			vscode.window.showWarningMessage(`${profileCommandName}: the run failed (exit code ${exitCode}) - the profile shows the part that ran.`);
+			vscode.window.showWarningMessage(`${commandName}: the run failed (exit code ${exitCode}) - the profile shows the part that ran.`);
 		}
+		return { profile, requestedRuns };
+	};
+
+	const runProfile = async (taskType: QuickRunTaskType, xsltDocument: vscode.TextDocument, xmlSourceFsPath: string | undefined) => {
+		const xsltFsPath = xsltDocument.uri.fsPath;
+		const processorName = SaxonTaskProvider.quickRunProcessorNames[taskType];
+		// the Quick Run task's definition, so the run has its parameters, result file and other options
+		let definition: vscode.TaskDefinition | undefined;
+		let label = `${processorName} Quick Run`;
+		try {
+			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask(taskType, xsltDocument, xmlSourceFsPath, xsltDefintiionProvider);
+			if (quickRunTask === 'cancelled') {
+				return;
+			}
+			if (quickRunTask) {
+				label = quickRunTask.label;
+				definition = (await fetchPersistedTask(taskType, label, xsltFsPath, xmlSourceFsPath))?.definition;
+			}
+		} catch (e) {
+			console.warn(`${profileCommandName}: failed to find/create a persisted task, falling back to an ad hoc run.`, e);
+		}
+		definition = definition ? { ...definition } : SaxonTaskProvider.createQuickRunTaskDefinition(taskType, label, xsltFsPath, xmlSourceFsPath, '${command:xslt-xpath.pickResultFile}');
+		if (taskType === 'xslt' && !definition.saxonJar) {
+			definition.saxonJar = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
+		}
+		const executed = await executeProfile(taskType, definition, label, xsltDocument.uri);
+		if (!executed) {
+			return;
+		}
+		const { profile, requestedRuns } = executed;
 		const { settings, sourceSummary } = await profileSettings(definition, label, xmlSourceFsPath);
 		const run: ProfileRun = {
 			stylesheet: xsltDocument.uri, title: path.basename(xsltFsPath), processor: processorName, settings, sourceSummary,
@@ -1616,9 +1629,71 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		return rows;
 	};
+	// Schematron: Profile: the schema compiled as for debugging, run on its XML context file with Saxon's timing profile -
+	// the times of its rules, and its global lets, and of the functions it uses, in the Profile view and above the rules.
+	// With Saxon PE or EE, as for a stylesheet
+	const profileSchematronName = 'Schematron: Profile';
+	const profileSchematron = async (uri?: vscode.Uri) => {
+		const schema = SchematronContext.schemaOf(uri ?? vscode.window.activeTextEditor?.document.uri);
+		if (!schema) {
+			vscode.window.showInformationMessage(`${profileSchematronName} - open a Schematron file first.`);
+			return;
+		}
+		const xml = SchematronContext.contextFor(schema)?.file ?? await SchematronContext.pick(schema);
+		if (!xml) {
+			return;
+		}
+		// not an untitled document, which Saxon can't read: saving it would open the Save As dialog
+		for (const document of vscode.workspace.textDocuments.filter((d) => d.isDirty && d.uri.scheme === 'file' && (d.languageId === 'sch' || d.fileName === xml))) {
+			await document.save();
+		}
+		const configuration = await SchematronDebug.configuration(schema, xml);
+		if (typeof configuration === 'string') {
+			vscode.window.showErrorMessage(configuration.replace(/^Schematron: Debug/, profileSchematronName));
+			return;
+		}
+		const compiled: string = configuration.xsltFile;
+		const schemaUri = vscode.Uri.file(schema);
+		const label = `Schematron profile: ${path.basename(schema)}`;
+		const definition = SaxonTaskProvider.createQuickRunTaskDefinition('xslt', label, compiled, xml, configuration.resultPath);
+		definition.allowSyntaxExtensions40 = configuration.allowSyntaxExtensions40;
+		definition.saxonJar = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
+		const executed = await executeProfile('xslt', definition, label, schemaUri, profileSchematronName);
+		if (!executed) {
+			return;
+		}
+		const { profile, requestedRuns } = executed;
+		const map = SchematronSourceMap.load(schema, compiled, configuration.schematronPhase);
+		if (!map) {
+			vscode.window.showErrorMessage(`${profileSchematronName}: the schema's compiled stylesheet couldn't be read.`);
+			return;
+		}
+		// the schema's rules and lets, from the compiled stylesheet's entries - and the stylesheets it uses as theirs
+		const compiledEntries = profile.entries.filter((entry) => SchematronProfile.isCompiled(entry, compiled));
+		const shown = (fsPath: string) => {
+			const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(fsPath));
+			return { module: folder ? path.relative(folder.uri.fsPath, fsPath).split(path.sep).join('/') : path.basename(fsPath), moduleTitle: fsPath };
+		};
+		const rows = [...SchematronProfile.rows(compiledEntries, map, (file) => SchIncludes.textOf(file), shown),
+			...await profileRows(profile.entries.filter((entry) => !compiledEntries.includes(entry)))];
+		const { settings, sourceSummary } = await profileSettings(definition, label, xml);
+		const phaseName = SchematronValidation.phaseName(configuration.schematronPhase, fs.readFileSync(schema, 'utf8'));
+		if (phaseName) {
+			settings.splice(1, 0, { label: 'Phase', value: phaseName });
+		}
+		const run: ProfileRun = {
+			stylesheet: schemaUri, title: path.basename(schema), processor: SaxonTaskProvider.quickRunProcessorNames.xslt, settings, sourceSummary,
+			requestedRuns, runs: profile.runs, labels: schematronLabels, rerunCommand: 'xslt-xpath.profileSchematron',
+			time: new Date(), total: profile.total, netTotal: rows.reduce((sum, row) => sum + (Number.isFinite(row.net) ? row.net : 0), 0), rows
+		};
+		XsltProfileView.show(run);
+		await XsltProfileTimeline.record(run);
+	};
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.profileSchematron', profileSchematron));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.profileXslt', profileXslt));
 	// each profiled declaration's times, while the Profile view is open - a lens shows its row in the view
 	context.subscriptions.push(vscode.languages.registerCodeLensProvider({ language: 'xslt' }, new XsltProfileCodeLensProvider()));
+	context.subscriptions.push(vscode.languages.registerCodeLensProvider({ language: 'sch' }, new XsltProfileCodeLensProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showProfileRow', (index: number) => XsltProfileView.showRow(index)));
 	// the profiles kept for each stylesheet, in its Timeline view
 	XsltProfileTimeline.register(context);

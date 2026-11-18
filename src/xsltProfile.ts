@@ -191,15 +191,20 @@ export class XsltProfile {
         return found ? XsltProfile.declaration(found, lineStarts) : undefined;
     }
 
-    // what identifies a profiled declaration in its module as it's edited: a match template by its pattern and mode,
-    // anything else by its name - undefined if it has neither
+    // what identifies a profiled declaration in its module as it's edited: a match template by its pattern and mode, a
+    // Schematron rule by its context and id, anything else by its name - undefined if it has none of them
     public static declarationKey(construct: string, attributes: Map<string, string>): string | undefined {
         const name = attributes.get('name');
         if (name !== undefined) {
             return construct.replace(/^[^:]*:/, '') + ' ' + name;
         }
         const match = attributes.get('match');
-        return match !== undefined ? 'match ' + match.replace(/\s+/g, ' ').trim() + ' mode ' + (attributes.get('mode') ?? '') : undefined;
+        if (match !== undefined) {
+            return 'match ' + match.replace(/\s+/g, ' ').trim() + ' mode ' + (attributes.get('mode') ?? '');
+        }
+        // a Schematron rule, by its context and id
+        const context = attributes.get('context');
+        return context !== undefined ? 'rule ' + context.replace(/\s+/g, ' ').trim() + ' id ' + (attributes.get('id') ?? '') : undefined;
     }
 
     // the declaration with the key in the module's text as it is now - of several (e.g. a function's overloads by arity,
@@ -256,7 +261,7 @@ export class XsltProfile {
         const attributes = XsltProfile.attributes(attributesText);
         let selectionStart = found.index + 1;
         let selectionEnd = selectionStart + found[1].length;
-        for (const attributeName of ['name', 'match']) {
+        for (const attributeName of ['name', 'match', 'context']) {
             const valueRgx = new RegExp(`(?:^|\\s)${attributeName}\\s*=\\s*(["'])`);
             const valueMatch = valueRgx.exec(attributesText);
             if (valueMatch) {

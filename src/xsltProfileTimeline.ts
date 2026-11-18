@@ -9,7 +9,7 @@
  */
 import * as vscode from 'vscode';
 import { XsltProfile } from './xsltProfile';
-import { ProfileRun, XsltProfileView } from './xsltProfileView';
+import { ProfileRun, XsltProfileView, xsltLabels } from './xsltProfileView';
 
 // the profiles of a stylesheet, in its Timeline view - clicking one shows it in the Profile view again. Each profile is
 // kept as a JSON file in the workspace's storage folder, with a small index of them in the workspace state: the last
@@ -49,6 +49,8 @@ interface ProfileRecord {
 	requestedRuns: number;
 	total: number;
 	netTotal: number;
+	// what the times are of, e.g. 'templates, functions and globals'
+	units?: string;
 	// the rows with the most net time: label and net, for the tooltip
 	top: { label: string; net: number }[];
 }
@@ -81,7 +83,7 @@ export class XsltProfileTimeline {
 				provideTimeline: (uri, options) => {
 					// an empty timeline, not undefined: in VS Code 1.145, when the last provider to answer returns
 					// undefined, the Timeline view can keep showing 'Loading...'
-					if (!/\.xslt?$/i.test(uri.fsPath)) {
+					if (!/\.(xslt?|sch)$/i.test(uri.fsPath)) {
 						return { items: [] };
 					}
 					const items = timeline.records().filter((r) => r.stylesheet === uri.fsPath).map((r) => timeline.item(r));
@@ -99,7 +101,7 @@ export class XsltProfileTimeline {
 		const id = run.time.getTime();
 		const record: ProfileRecord = {
 			id, stylesheet: run.stylesheet.fsPath, processor: run.processor, sourceSummary: run.sourceSummary,
-			runs: run.runs, requestedRuns: run.requestedRuns, total: run.total, netTotal: run.netTotal,
+			runs: run.runs, requestedRuns: run.requestedRuns, total: run.total, netTotal: run.netTotal, units: (run.labels ?? xsltLabels).units,
 			top: run.rows.slice().sort((a, b) => b.net - a.net).slice(0, 3).map((r) => ({ label: `${r.kind} ${r.label}`, net: r.net }))
 		};
 		try {
@@ -194,7 +196,7 @@ export class XsltProfileTimeline {
 		item.description = [record.sourceSummary, runs, record.processor].join(' · ');
 		const tooltip = new vscode.MarkdownString();
 		tooltip.appendMarkdown(`**Profile** - ${new Date(record.id).toLocaleString()} - `).appendText(`${record.processor}, ${record.sourceSummary}, ${runs}`).appendMarkdown('\n\n');
-		tooltip.appendText(`${ms(record.netTotal)} ms in templates, functions and globals of ${ms(record.total)} ms in all`).appendMarkdown('\n\n');
+		tooltip.appendText(`${ms(record.netTotal)} ms in ${record.units ?? xsltLabels.units} of ${ms(record.total)} ms in all`).appendMarkdown('\n\n');
 		for (const top of record.top) {
 			tooltip.appendMarkdown('- ').appendText(`${top.label}: ${ms(top.net)} ms net`).appendMarkdown('\n');
 		}
