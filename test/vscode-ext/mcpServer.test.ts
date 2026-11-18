@@ -302,6 +302,24 @@ suite('MCP server', function () {
 		}
 	});
 
+	test('lint_file and lint_files: a file changed outside VS Code - e.g. by an AI agent - is checked as it is on disk, not as VS Code last had it', async () => {
+		const edited = path.join(dir, 'edited.xsl');
+		const withCall = (call: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0">\n  <xsl:template match="/"><xsl:sequence select="${call}"/></xsl:template>\n</xsl:stylesheet>`;
+		fs.writeFileSync(edited, withCall('f:missing(1)'));
+		assert.match(text(await call('lint_file', { path: edited })), /f:missing/);
+		// opened, so VS Code has the text - then edited on disk, as an agent's file tool does
+		await vscode.workspace.openTextDocument(vscode.Uri.file(edited));
+		fs.writeFileSync(edited, withCall('1 + 1'));
+		assert.match(text(await call('lint_file', { path: edited })), /no problems|^0 problems/i);
+		assert.notMatch(text(await call('lint_files', { folder: dir, pattern: 'edited.xsl' })), /f:missing/);
+		assert.match(text(await call('lint_files', { folder: dir, pattern: 'edited.xsl' })), /no problems/);
+		// and the other way
+		fs.writeFileSync(edited, withCall('f:missing(1)'));
+		assert.match(text(await call('lint_files', { folder: dir, pattern: 'edited.xsl' })), /f:missing/);
+		// not left for the other tests, which count the folder's files
+		fs.rmSync(edited);
+	});
+
 	test('lint_file: an import problem', async () => {
 		assert.match(text(await call('lint_file', { path: lib })), /2:\d+ error .*missing\.xsl/);
 	});

@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { McpRoot } from './mcpRoot';
+import { DiskTextDocument } from './diskTextDocument';
 import { ImportNode, ImportTreeProvider } from '../importTreeProvider';
 import { ImportIndex } from '../importIndex';
 import { GlobalInstructionData, GlobalInstructionType, XslLexer } from '../xslLexer';
@@ -87,7 +88,7 @@ export class XsltMcpTools {
 		if (!fs.existsSync(resolved)) {
 			return `File not found: ${resolved}`;
 		}
-		return vscode.workspace.openTextDocument(vscode.Uri.file(resolved));
+		return DiskTextDocument.current(vscode.Uri.file(resolved));
 	}
 
 	// the index of the workspace's modules, built: a module's top-level stylesheet is found from it. The editor builds it in
@@ -235,7 +236,7 @@ export class XsltMcpTools {
 		let problems = 0;
 		// one at a time: each is checked with the declarations of its own imports
 		for (const file of files.slice(0, XsltMcpTools.maxFiles)) {
-			const lines = await this.problemLines(await vscode.workspace.openTextDocument(vscode.Uri.file(file)), minSeverity);
+			const lines = await this.problemLines(await DiskTextDocument.current(vscode.Uri.file(file)), minSeverity);
 			if (!lines) {
 				continue;
 			}
