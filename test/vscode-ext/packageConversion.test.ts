@@ -581,5 +581,11 @@ suite('XSLT packages: a module that is a part of a larger library', () => {
 	test('converting the module that imports them all - or a top-level stylesheet\'s only library: nothing to say', async () => {
 		assert.isEmpty((await PackageConversion.analyse(file('master.xsl')) as ConversionAnalysis).items.filter((i) => i.section === 'library'));
 	});
+
+	test('the proposed package name: the namespace of its functions - with the module\'s name when it is a part of a larger library', async () => {
+		// all of them declare functions in the namespace urn:f: the whole library has it, a part of it adds its own name
+		assert.strictEqual((await PackageConversion.analyse(file('lib.xsl')) as ConversionAnalysis).packageName, 'urn:f:lib');
+		assert.strictEqual((await PackageConversion.analyse(file('master.xsl')) as ConversionAnalysis).packageName, 'urn:f');
+	});
 });
 

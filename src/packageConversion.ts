@@ -460,7 +460,7 @@ export class PackageConversion {
 		}));
 
 		plan.preventing.push(...items.filter((i) => i.severity === 'blocker'));
-		const packageName = PackageConversion.proposedName(library, libraryDeclarations);
+		const packageName = PackageConversion.proposedName(library, libraryDeclarations, items.some((i) => i.section === 'library'), ImportIndex.instance.packages().map((p) => p.name));
 		// with the library's prefix for the package's namespace, if it has one
 		const prefix = [...(scan(library).bindings ?? new Map<string, string>())].find(([, uri]) => uri === packageName)?.[0];
 		return {
@@ -867,13 +867,19 @@ export class PackageConversion {
 		return match[1] && !analysis.plan.scans.get(analysis.library)?.bindings?.has(match[1]) ? `The library doesn't declare the prefix '${match[1]}'` : undefined;
 	}
 
-	// a name for the package: the namespace of most of the library's function names - or a URN from its file name
-	private static proposedName(library: string, declarations: Declaration[]) {
+	// a name for the package: the namespace of most of the library's function names - or a URN from its file name. With the
+	// module's name added, when the module is a part of a larger library, which has the same namespace, or when a package
+	// in the workspace has the name already: another package of the library would be proposed the same name
+	private static proposedName(library: string, declarations: Declaration[], isPart: boolean, existing: string[]) {
+		const part = path.basename(library).replace(/\.[^.]*$/, '');
 		const namespaces = declarations.filter((d) => d.kind === 'function').map((d) => /^Q\{([^}]+)\}/.exec(d.expandedName)?.[1]).filter((n): n is string => !!n);
 		const counts = new Map<string, number>();
 		namespaces.forEach((n) => counts.set(n, (counts.get(n) ?? 0) + 1));
 		const most = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
-		return most ?? `urn:${path.basename(library).replace(/\.[^.]*$/, '')}`;
+		if (!most) {
+			return `urn:${part}`;
+		}
+		return isPart || existing.includes(most) ? `${most.replace(/[/:]$/, '')}${most.startsWith('urn:') ? ':' : '/'}${part}` : most;
 	}
 
 	// the module, and those it imports or includes, directly or indirectly
