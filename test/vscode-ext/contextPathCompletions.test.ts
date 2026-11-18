@@ -171,6 +171,10 @@ suite('Problems of the files of a folder removed from the workspace', () => {
 			const openFile = path.join(gone, 'open.xsl');
 			fs.writeFileSync(openFile, '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>');
 			const editor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(openFile));
+			// the tab is registered a moment after the editor is shown
+			for (let waited = 0; waited < 3000 && !vscode.window.tabGroups.all.some((g) => g.tabs.some((t) => t.input instanceof vscode.TabInputText && t.input.uri.fsPath === openFile)); waited += 50) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
 			const collection = vscode.languages.createDiagnosticCollection('removed-folder-test');
 			const problem = [new vscode.Diagnostic(new vscode.Range(0, 0, 0, 1), 'a problem')];
 			const closedFile = vscode.Uri.file(path.join(gone, 'closed.xsl'));

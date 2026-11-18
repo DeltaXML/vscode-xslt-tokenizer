@@ -342,4 +342,13 @@ suite('False errors found with the W3C XSLT test suites', () => {
 			assert.isNotEmpty(await problems(excluded(useWhen)), useWhen);
 		}
 	});
+
+	test('XPath 4.0: array:get with its $default optional - two arguments as in 3.1, or three', async () => {
+		const arrays = (select: string) => stylesheet(`<xsl:variable name="a" select="${select}"/>`, 'xsl:stylesheet', ' xmlns:array="http://www.w3.org/2005/xpath-functions/array"').replace('version="3.0"', 'version="4.0"');
+		for (const select of ['array:get([1, 2], 2)', 'array:get([1, 2], 3, \'none\')']) {
+			assert.deepEqual((await problems(arrays(select))).filter((m) => !/unused/.test(m)), [], select);
+		}
+		// four is too many
+		assert.lengthOf((await problems(arrays('array:get([1], 1, 2, 3)'))).filter((m) => /array:get/.test(m)), 1);
+	});
 });
