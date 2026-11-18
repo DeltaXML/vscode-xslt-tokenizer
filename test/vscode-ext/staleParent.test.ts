@@ -66,4 +66,26 @@ suite('A module\'s remembered parent that no longer imports it', function () {
 			fs.rmSync(outside, { recursive: true, force: true });
 		}
 	});
+
+	test('with the workspace not scanned for modules, the remembered parent is still how a module finds its siblings - checked against the files', async () => {
+		const settings = vscode.workspace.getConfiguration('XSLT.resources');
+		const saved = settings.inspect<boolean>('inferParentFromWorkspace')?.globalValue;
+		await settings.update('inferParentFromWorkspace', false, vscode.ConfigurationTarget.Global);
+		try {
+			assert.isFalse(ImportIndex.isEnabled());
+			fs.writeFileSync(file('master.xsl'), `<xsl:stylesheet ${ns} version="3.0">\n<xsl:import href="a.xsl"/>\n<xsl:import href="b.xsl"/>\n</xsl:stylesheet>`);
+			fs.writeFileSync(file('demo.xsl'), `<xsl:stylesheet ${ns} version="3.0">\n<xsl:import href="master.xsl"/>\n<xsl:template match="/"><xsl:sequence select="f:y(1)"/></xsl:template>\n</xsl:stylesheet>`);
+			XsltSymbolProvider.importSymbolHrefs.clear();
+			const provider = new XsltSymbolProvider(XSLTConfiguration.configuration, null);
+			const lint = async (name: string) => (await provider.diagnosticsFor(await vscode.workspace.openTextDocument(vscode.Uri.file(file(name))))).map((d) => d.message);
+			for (const name of ['demo.xsl', 'master.xsl', 'a.xsl']) {
+				await lint(name);
+			}
+			// b needs a's function: found through the parent remembered when demo, master and a were checked
+			assert.deepEqual(await lint('b.xsl'), []);
+			assert.isTrue(ImportIndex.reaches(file('demo.xsl'), file('b.xsl')));
+		} finally {
+			await settings.update('inferParentFromWorkspace', saved, vscode.ConfigurationTarget.Global);
+		}
+	});
 });
