@@ -20,6 +20,8 @@ import { XdocNotes } from './xdocNote';
 import { HrefPaths } from './hrefPaths';
 import { PackageEdits, TextEdit } from './packageEdits';
 import { PackageScope } from './packageScope';
+import { FunctionData } from './functionData';
+import { FixedNamespaces } from './fixedNamespaces';
 import { CodeActionDocument } from './codeActionDocument';
 
 // a line of a module (0-based) - and the offset of the element there, where it's known
@@ -462,7 +464,10 @@ export class PackageConversion {
 		plan.preventing.push(...items.filter((i) => i.severity === 'blocker'));
 		const packageName = PackageConversion.proposedName(library, libraryDeclarations, items.some((i) => i.section === 'library'), ImportIndex.instance.packages().map((p) => p.name));
 		// with the library's prefix for the package's namespace, if it has one
-		const prefix = [...(scan(library).bindings ?? new Map<string, string>())].find(([, uri]) => uri === packageName)?.[0];
+		// else with the first prefix it declares for a namespace of its own
+		const bindings = [...(scan(library).bindings ?? new Map<string, string>())];
+		const prefix = bindings.find(([, uri]) => uri === packageName)?.[0] ??
+			bindings.find(([name, uri]) => name !== '' && !PackageConversion.isStandardNamespace(uri))?.[0];
 		return {
 			library, libraryModules, absorbed, topLevels, userModules, packageName, packageVersion: '1.0',
 			unnamedModeName: prefix ? `${prefix}:default` : 'default',
@@ -867,20 +872,32 @@ export class PackageConversion {
 		return match[1] && !analysis.plan.scans.get(analysis.library)?.bindings?.has(match[1]) ? `The library doesn't declare the prefix '${match[1]}'` : undefined;
 	}
 
-	// a name for the package: the namespace of most of the library's function names - or a URN from its file name. With the
-	// module's name added, when the module is a part of a larger library, which has the same namespace, or when a package
-	// in the workspace has the name already: another package of the library would be proposed the same name
+	// a name for the package: the namespace of most of the library's function names - the library's own, not a W3C or Saxon one.
+	// With the module's name added, when the module is a part of a larger library, which has the same namespace, or when a
+	// package in the workspace has the name already: another package of the library would be proposed the same name. With no
+	// namespace to take it from, a placeholder - to be replaced by one's own - for the module's name
 	private static proposedName(library: string, declarations: Declaration[], isPart: boolean, existing: string[]) {
-		const part = path.basename(library).replace(/\.[^.]*$/, '');
-		const namespaces = declarations.filter((d) => d.kind === 'function').map((d) => /^Q\{([^}]+)\}/.exec(d.expandedName)?.[1]).filter((n): n is string => !!n);
+		const part = path.basename(library).replace(/\.[^.]*$/, '').replace(/[^\w.-]+/g, '-');
+		const namespaces = declarations.filter((d) => d.kind === 'function').map((d) => /^Q\{([^}]+)\}/.exec(d.expandedName)?.[1])
+			.filter((n): n is string => !!n && !PackageConversion.isStandardNamespace(n));
 		const counts = new Map<string, number>();
 		namespaces.forEach((n) => counts.set(n, (counts.get(n) ?? 0) + 1));
 		const most = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
 		if (!most) {
-			return `urn:${part}`;
+			return `${PackageConversion.placeholderName}/${part}`;
 		}
 		return isPart || existing.includes(most) ? `${most.replace(/[/:]$/, '')}${most.startsWith('urn:') ? ':' : '/'}${part}` : most;
 	}
+
+	// a namespace the language, or a processor, defines, rather than one of the library's own: those of the functions and
+	// extensions the completions and checks know (xs, fn, map, array, math, xsl, Saxon, EXSLT, EXPath, 'java:' ...) and the
+	// reserved ones (xml, xsi, err)
+	public static isStandardNamespace(uri: string): boolean {
+		return FunctionData.namespaceType(uri) !== undefined || FixedNamespaces.standard.some(([, standard]) => standard === uri);
+	}
+
+	// the start of a package's name where there's no namespace in the library to take it from
+	public static readonly placeholderName = 'http://example.com/packages';
 
 	// the module, and those it imports or includes, directly or indirectly
 	private static tree(file: string): string[] {

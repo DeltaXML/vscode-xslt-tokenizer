@@ -582,6 +582,31 @@ suite('XSLT packages: a module that is a part of a larger library', () => {
 		assert.isEmpty((await PackageConversion.analyse(file('master.xsl')) as ConversionAnalysis).items.filter((i) => i.section === 'library'));
 	});
 
+	test('the proposed package name: a placeholder, for the module\'s name, when no namespace of the library\'s own is declared', async () => {
+		const bare = file('bare.xsl');
+		const user = file('bare-user.xsl');
+		fs.writeFileSync(bare, `<xsl:stylesheet ${ns}>\n  <xsl:template name="t"><xsl:sequence select="1"/></xsl:template>\n  <xsl:function name="xs:mine" xmlns:xs="http://www.w3.org/2001/XMLSchema"><xsl:sequence select="1"/></xsl:function>\n</xsl:stylesheet>`);
+		fs.writeFileSync(user, `<xsl:stylesheet ${ns}>\n  <xsl:import href="bare.xsl"/>\n  <xsl:template match="/"><xsl:call-template name="t"/></xsl:template>\n</xsl:stylesheet>`);
+		try {
+			await ImportIndex.instance.buildFrom([bare, user]);
+			assert.strictEqual((await PackageConversion.analyse(bare) as ConversionAnalysis).packageName, 'http://example.com/packages/bare');
+		} finally {
+			ImportIndex.instance.setReferences(bare, []);
+			ImportIndex.instance.setReferences(user, []);
+			fs.rmSync(bare);
+			fs.rmSync(user);
+			await ImportIndex.instance.buildFrom(Object.keys(sources).map(file));
+		}
+	});
+
+	test('the namespaces the language and the processors define are not the library\'s own', () => {
+		['http://www.w3.org/2001/XMLSchema', 'http://www.w3.org/2005/xpath-functions', 'http://www.w3.org/2005/xpath-functions/map', 'http://www.w3.org/2005/xpath-functions/array',
+			'http://www.w3.org/2005/xpath-functions/math', 'http://www.w3.org/1999/XSL/Transform', 'http://saxon.sf.net/', 'http://saxon.sf.net/sql', 'http://exslt.org/common',
+			'http://expath.org/ns/file', 'java:java.lang.Math', 'http://www.w3.org/2001/XMLSchema-instance', 'http://www.w3.org/2005/xqt-errors', 'http://www.w3.org/XML/1998/namespace']
+			.forEach((uri) => assert.isTrue(PackageConversion.isStandardNamespace(uri), uri));
+		['urn:f', 'http://example.com/ns/mine', 'http://www.w3.org/2005/xpath-functions/other'].forEach((uri) => assert.isFalse(PackageConversion.isStandardNamespace(uri), uri));
+	});
+
 	test('the proposed package name: the namespace of its functions - with the module\'s name when it is a part of a larger library', async () => {
 		// all of them declare functions in the namespace urn:f: the whole library has it, a part of it adds its own name
 		assert.strictEqual((await PackageConversion.analyse(file('lib.xsl')) as ConversionAnalysis).packageName, 'urn:f:lib');
