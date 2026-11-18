@@ -33,6 +33,20 @@ export class McpRoot {
 		return root ? McpRoot.storage.run(root, action) : action();
 	}
 
+	// the workspace folders, in a window with more than one - else none: the root first, as it's where relative paths start
+	public static folders(): string[] {
+		const all = McpRoot.allowed();
+		const root = McpRoot.current();
+		return all.length > 1 ? [...all.filter((folder) => folder === root), ...all.filter((folder) => folder !== root)] : [];
+	}
+
+	// what an assistant is told when it connects, in a window with more than one workspace folder - the paths it can't know
+	public static instructions(): string | undefined {
+		const [root, ...others] = McpRoot.folders();
+		return root ? `This VS Code window has ${others.length + 1} workspace folders: ${root} (where relative paths start) and ${others.join(', ')}. ` +
+			'The tools can check files in all of them: give an absolute path for a file that\'s not in the first.' : undefined;
+	}
+
 	// the server's URL for a project's folder
 	public static urlFor(url: string, folder: string) {
 		return `${url}?root=${encodeURIComponent(folder)}`;

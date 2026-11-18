@@ -207,21 +207,21 @@ export class XsltMcpServer {
 			response.writeHead(400).end();
 			return;
 		}
-		const mcp = this.createServer();
+		// for a project's folder in a multi-root workspace, if the URL has it as its root
+		const root = McpRoot.fromUrl(request.url);
+		const mcp = McpRoot.run(root, () => this.createServer());
 		const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 		response.on('close', () => {
 			transport.close();
 			mcp.close();
 		});
 		await mcp.connect(transport);
-		// for a project's folder in a multi-root workspace, if the URL has it as its root
-		const root = McpRoot.fromUrl(request.url);
 		await McpRoot.run(root, () => transport.handleRequest(request, response, message));
 	}
 
 	private createServer() {
 		const version: string = vscode.extensions.getExtension('deltaxml.xslt-xpath')?.packageJSON.version ?? '0';
-		const mcp = new McpServer({ name: 'xslt-xpath', version });
+		const mcp = new McpServer({ name: 'xslt-xpath', version }, { instructions: McpRoot.instructions() });
 		const tools = this.tools;
 		const filePath = z.string().describe('The file\'s path: absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)');
 		const minSeverity = z.enum(['error', 'warning', 'info', 'hint']);

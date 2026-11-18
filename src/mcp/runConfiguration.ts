@@ -40,6 +40,10 @@ export class RunConfiguration {
 		const folder = McpRoot.current();
 		const shown = (file: string) => folder && file.startsWith(folder + path.sep) ? path.relative(folder, file) : file;
 		lines.push(`Workspace: ${folder ?? '(no folder open)'}`);
+		const otherFolders = McpRoot.folders().slice(1);
+		if (otherFolders.length > 0) {
+			lines.push(`Other workspace folders (relative paths start in the first): ${otherFolders.join(', ')}`);
+		}
 		// Saxon
 		const saxonJar = XSpecRunner.saxonJar();
 		if (!saxonJar) {

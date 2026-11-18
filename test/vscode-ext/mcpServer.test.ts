@@ -282,6 +282,26 @@ suite('MCP server', function () {
 		}
 	});
 
+	test('several workspace folders: the assistant is told them, with the root first - none for one folder', async () => {
+		const allowed = McpRoot.allowed;
+		const sub = path.join(dir, 'sub');
+		const initialize = async (root?: string) => (await post({ jsonrpc: '2.0', id: ++id, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } } },
+			{ Authorization: `Bearer ${token}` }, root ? `/mcp?root=${encodeURIComponent(root)}` : '/mcp')).message?.result?.instructions as string | undefined;
+		try {
+			McpRoot.allowed = () => [dir, sub];
+			const instructions = await initialize(sub);
+			assert.match(instructions ?? '', new RegExp(`^This VS Code window has 2 workspace folders: ${sub.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')} \\(where relative paths start\\) and ${dir.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}\\.`));
+			// run_configuration lists the others too
+			const configuration = text(await post({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name: 'run_configuration', arguments: {} } },
+				{ Authorization: `Bearer ${token}` }, `/mcp?root=${encodeURIComponent(sub)}`));
+			assert.include(configuration, `Other workspace folders (relative paths start in the first): ${dir}`);
+			McpRoot.allowed = () => [dir];
+			assert.isUndefined(await initialize(dir));
+		} finally {
+			McpRoot.allowed = allowed;
+		}
+	});
+
 	test('lint_file: an import problem', async () => {
 		assert.match(text(await call('lint_file', { path: lib })), /2:\d+ error .*missing\.xsl/);
 	});
