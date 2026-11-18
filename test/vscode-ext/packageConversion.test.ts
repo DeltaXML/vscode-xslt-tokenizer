@@ -7,10 +7,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
 import { ImportIndex } from '../../src/importIndex';
-import { ConversionAnalysis, PackageConversion } from '../../src/packageConversion';
+import { ConversionAnalysis, ConversionItem, PackageConversion } from '../../src/packageConversion';
 import { PackageAnalysisView } from '../../src/packageAnalysisView';
+import { PackageEdits } from '../../src/packageEdits';
 import * as vscode from 'vscode';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
+import { XSLTConfiguration } from '../../src/languageConfigurations';
 
 const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:c="urn:common" xmlns:u="urn:util" version="3.0"';
 
@@ -334,3 +336,250 @@ suite('XSLT packages: converting - a template rule that\'s also a named template
 		assert.include(custom, '<xsl:template name="listed">[custom <xsl:value-of select="name()"/>]</xsl:template>');
 	});
 });
+
+suite('XSLT packages: what the library uses that a shared module declares - the package includes the module', () => {
+	// lib.xsl, with its root's start tag over several lines, calls h:hook, which only shared.xsl declares: shared.xsl is
+	// imported by both stylesheets that use the library - it's included in the package, not copied into both of them
+	const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:h="urn:lib"';
+	const sources: { [file: string]: string } = {
+		'lib.xsl': `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"\n                xmlns:h="urn:lib"\n                version="3.0">\n  <xsl:function name="h:wrap"><xsl:param name="s"/><xsl:sequence select="h:hook($s)"/></xsl:function>\n</xsl:stylesheet>`,
+		'shared.xsl': `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:import href="deeper.xsl"/>\n  <xsl:function name="h:hook"><xsl:param name="s"/><xsl:sequence select="h:deep(upper-case($s))"/></xsl:function>\n</xsl:stylesheet>`,
+		'deeper.xsl': `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:function name="h:deep"><xsl:param name="s"/><xsl:sequence select="$s || '!'"/></xsl:function>\n</xsl:stylesheet>`,
+		'one.xsl': `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:import href="lib.xsl"/>\n  <xsl:import href="shared.xsl"/>\n  <xsl:template match="/"><xsl:sequence select="h:wrap('a'), h:hook('z')"/></xsl:template>\n</xsl:stylesheet>`,
+		'two.xsl': `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:import href="lib.xsl"/>\n  <xsl:import href="shared.xsl"/>\n  <xsl:template match="/"><xsl:sequence select="h:wrap('b')"/></xsl:template>\n</xsl:stylesheet>`
+	};
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'package-shared-')));
+	const file = (name: string) => path.join(dir, name);
+	const apply = (edits: Map<string, { start: number, end: number, text: string }[]>) => {
+		const texts = new Map<string, string>();
+		for (const name of Object.keys(sources)) {
+			let text = fs.readFileSync(file(name), 'utf8');
+			[...(edits.get(file(name)) ?? [])].sort((a, b) => b.start - a.start).forEach((e) => text = text.substring(0, e.start) + e.text + text.substring(e.end));
+			texts.set(name, text);
+		}
+		return texts;
+	};
+	suiteSetup(async () => {
+		Object.entries(sources).forEach(([name, text]) => fs.writeFileSync(file(name), text));
+		await ImportIndex.instance.buildFrom(Object.keys(sources).map(file));
+	});
+	suiteTeardown(() => {
+		Object.keys(sources).forEach((name) => ImportIndex.instance.setReferences(file(name), []));
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	test('the module is included in the package - with what it imports - and there is no abstract component, override or copy', async () => {
+		const analysis = await PackageConversion.analyse(file('lib.xsl')) as ConversionAnalysis;
+		assert.sameMembers(analysis.absorbed, [file('shared.xsl')]);
+		assert.sameMembers(analysis.libraryModules, [file('lib.xsl'), file('shared.xsl'), file('deeper.xsl')]);
+		assert.sameMembers(analysis.topLevels, [file('one.xsl'), file('two.xsl')]);
+		assert.deepEqual(analysis.items.filter((i) => i.section === 'included').map((i) => i.subject), ['shared.xsl']);
+		assert.isEmpty(analysis.items.filter((i) => i.section === 'abstract' || i.section === 'override' || i.severity === 'blocker'));
+		assert.isEmpty(analysis.plan.callbacks);
+		assert.isEmpty(analysis.plan.overrides);
+		// what the stylesheets use of the module is public: what it declares that the stylesheet one.xsl calls
+		assert.deepEqual(analysis.items.filter((i) => i.section === 'visibility').map((i) => i.subject).sort(), ['function h:hook#1', 'function h:wrap#1']);
+	});
+
+	test('the conversion: the library includes the module, which stays as it is - the stylesheets use the package, and import neither', async () => {
+		const analysis = await PackageConversion.analyse(file('lib.xsl')) as ConversionAnalysis;
+		const texts = apply(PackageConversion.convert(analysis, 'urn:lib', '1.0') as Map<string, { start: number, end: number, text: string }[]>);
+		const lib = texts.get('lib.xsl')!;
+		// indented as its content is - not as its root element's last attribute is
+		assert.include(lib, '\n  <xsl:include href="shared.xsl"/>\n</xsl:package>');
+		assert.include(lib, '<xsl:function name="h:wrap" visibility="public">');
+		assert.include(texts.get('shared.xsl')!, '<xsl:function name="h:hook" visibility="public">');
+		for (const name of ['one.xsl', 'two.xsl']) {
+			const text = texts.get(name)!;
+			assert.include(text, '<xsl:use-package name="urn:lib" package-version="1.0"/>', name);
+			assert.notInclude(text, 'xsl:import href="shared.xsl"', name);
+			assert.notInclude(text, 'xsl:import href="lib.xsl"', name);
+			// no copy of the module's code
+			assert.notInclude(text, 'h:hook"', name.concat(' has a copy'));
+			assert.notInclude(text, 'xsl:override', name);
+		}
+	});
+
+	test('a module that others use too can\'t be taken out of them', async () => {
+		fs.writeFileSync(file('other.xsl'), `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:import href="shared.xsl"/>\n  <xsl:template match="/"><xsl:sequence select="h:hook('x')"/></xsl:template>\n</xsl:stylesheet>`);
+		try {
+			await ImportIndex.instance.buildFrom([...Object.keys(sources).map(file), file('other.xsl')]);
+			const analysis = await PackageConversion.analyse(file('lib.xsl')) as ConversionAnalysis;
+			assert.isEmpty(analysis.absorbed);
+			const blockers = analysis.items.filter((i) => i.severity === 'blocker');
+			assert.deepEqual(blockers.map((i) => i.subject), ['function h:hook#1']);
+			assert.include(blockers[0].text, 'stylesheets that don\'t use the library use too');
+		} finally {
+			ImportIndex.instance.setReferences(file('other.xsl'), []);
+			fs.rmSync(file('other.xsl'));
+			await ImportIndex.instance.buildFrom(Object.keys(sources).map(file));
+		}
+	});
+});
+
+suite('XSLT packages: what the library calls, that a stylesheet declares - an abstract component', () => {
+	const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:h="urn:lib"';
+	const sources: { [file: string]: string } = {
+		'lib.xsl': `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"\n                xmlns:h="urn:lib"\n                version="3.0">\n  <xsl:function name="h:wrap"><xsl:param name="s"/><xsl:sequence select="h:hook($s)"/></xsl:function>\n</xsl:stylesheet>`,
+		'one.xsl': `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:import href="lib.xsl"/>\n  <xsl:function name="h:hook"><xsl:param name="s"/><xsl:sequence select="upper-case($s)"/></xsl:function>\n  <xsl:template match="/"><xsl:sequence select="h:wrap('a')"/></xsl:template>\n</xsl:stylesheet>`
+	};
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'package-callback-')));
+	const file = (name: string) => path.join(dir, name);
+	suiteSetup(async () => {
+		Object.entries(sources).forEach(([name, text]) => fs.writeFileSync(file(name), text));
+		await ImportIndex.instance.buildFrom(Object.keys(sources).map(file));
+	});
+	suiteTeardown(() => {
+		Object.keys(sources).forEach((name) => ImportIndex.instance.setReferences(file(name), []));
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	test('the stylesheet declares what the library calls: abstract in the package, indented as its content is - not as its root\'s last attribute is', async () => {
+		const analysis = await PackageConversion.analyse(file('lib.xsl')) as ConversionAnalysis;
+		assert.isEmpty(analysis.absorbed);
+		assert.deepEqual(analysis.items.filter((i) => i.section === 'abstract').map((i) => `${i.severity}: ${i.subject}`), ['change: function h:hook#1']);
+		const edits = PackageConversion.convert(analysis, 'urn:lib', '1.0') as Map<string, { start: number, end: number, text: string }[]>;
+		let text = fs.readFileSync(file('lib.xsl'), 'utf8');
+		[...edits.get(file('lib.xsl'))!].sort((a, b) => b.start - a.start).forEach((e) => text = text.substring(0, e.start) + e.text + text.substring(e.end));
+		assert.include(text, '\n  <xsl:function name="h:hook" visibility="abstract">\n    <xsl:param name="s"/>\n  </xsl:function>\n</xsl:package>');
+		assert.notMatch(text, /\n {8,}<xsl:function name="h:hook"/);
+	});
+
+	test('the indentation of an element\'s content: its first child\'s - or the first indentation after the start tag', () => {
+		const indent = (text: string) => PackageEdits.contentIndent(text, text.indexOf('>') + 1);
+		assert.strictEqual(indent('<a\n        b="1">\n  <c/>\n</a>'), '  ');
+		assert.strictEqual(indent('<a b="1">\n\t<!-- c -->\n\t<c/>\n</a>'), '\t');
+		// children not indented: the first indentation after the start tag
+		assert.strictEqual(indent('<a\n        b="1">\n<c>\n    <d/>\n</c>\n</a>'), '    ');
+		assert.strictEqual(indent('<a/>'), '\t');
+	});
+});
+
+suite('XSLT packages: what the library calls that a module declares which imports the library', () => {
+	// mid.xsl imports lib.xsl, and declares h:hook, which lib.xsl calls: it's imported by both stylesheets - each gets a copy
+	// of it in its xsl:override, which the analysis says, and what to do
+	const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:h="urn:lib"';
+	const sources: { [file: string]: string } = {
+		'lib.xsl': `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:function name="h:wrap"><xsl:param name="s"/><xsl:sequence select="h:hook($s)"/></xsl:function>\n</xsl:stylesheet>`,
+		'mid.xsl': `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:import href="lib.xsl"/>\n  <xsl:function name="h:hook"><xsl:param name="s"/><xsl:sequence select="upper-case($s)"/></xsl:function>\n</xsl:stylesheet>`,
+		'one.xsl': `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:import href="mid.xsl"/>\n  <xsl:template match="/"><xsl:sequence select="h:wrap('a')"/></xsl:template>\n</xsl:stylesheet>`,
+		'two.xsl': `<xsl:stylesheet ${ns} version="3.0">\n  <xsl:import href="mid.xsl"/>\n  <xsl:template match="/"><xsl:sequence select="h:wrap('b')"/></xsl:template>\n</xsl:stylesheet>`
+	};
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'package-imports-lib-')));
+	const file = (name: string) => path.join(dir, name);
+	suiteSetup(async () => {
+		Object.entries(sources).forEach(([name, text]) => fs.writeFileSync(file(name), text));
+		await ImportIndex.instance.buildFrom(Object.keys(sources).map(file));
+	});
+	suiteTeardown(() => {
+		Object.keys(sources).forEach((name) => ImportIndex.instance.setReferences(file(name), []));
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	test('a decision: the declaration is copied into each stylesheet - convert the module that imports the library instead', async () => {
+		const analysis = await PackageConversion.analyse(file('lib.xsl')) as ConversionAnalysis;
+		assert.isEmpty(analysis.absorbed);
+		const item = analysis.items.find((i) => i.section === 'abstract')!;
+		assert.strictEqual(item.severity, 'decision');
+		assert.include(item.text, 'moved out of mid.xsl, which imports the library');
+		assert.include(item.text, 'each of the 2 stylesheets');
+		assert.include(item.text, 'convert mid.xsl to a package instead');
+	});
+});
+
+suite('XSLT packages: the errors in the modules a conversion reads are checked first', () => {
+	const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0"';
+	const sources: { [file: string]: string } = {
+		'lib.xsl': `<xsl:stylesheet ${ns}>\n  <xsl:function name="f:one"><xsl:sequence select="1"/></xsl:function>\n</xsl:stylesheet>`,
+		'top.xsl': `<xsl:stylesheet ${ns}>\n  <xsl:import href="lib.xsl"/>\n  <xsl:template match="/"><xsl:sequence select="f:one(), f:missing(2)"/></xsl:template>\n</xsl:stylesheet>`,
+		'unrelated.xsl': `<xsl:stylesheet ${ns}>\n  <xsl:template match="/"><xsl:sequence select="f:nothing(1)"/></xsl:template>\n</xsl:stylesheet>`
+	};
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'package-baseline-')));
+	const file = (name: string) => path.join(dir, name);
+	let analysis: ConversionAnalysis;
+	suiteSetup(async () => {
+		Object.entries(sources).forEach(([name, text]) => fs.writeFileSync(file(name), text));
+		await ImportIndex.instance.buildFrom(Object.keys(sources).map(file));
+		analysis = await PackageConversion.analyse(file('lib.xsl')) as ConversionAnalysis;
+	});
+	suiteTeardown(() => {
+		Object.keys(sources).forEach((name) => ImportIndex.instance.setReferences(file(name), []));
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	test('the library\'s modules and those of the stylesheets using it are checked - each with errors is a blocker, with a link to the lines', async () => {
+		const checked: string[] = [];
+		const items = await PackageConversion.baseline(analysis, async (module) => {
+			checked.push(path.basename(module));
+			return module === file('top.xsl') ? [{ line: 2, message: 'XPath: Function: \'f:missing\' with 1 arguments not found' }, { line: 5, message: 'another' }] : [];
+		}) as ConversionItem[];
+		assert.sameMembers(checked, ['lib.xsl', 'top.xsl']);
+		assert.deepEqual(items.map((i) => `${i.severity}: ${i.subject}`), ['blocker: 2 errors in top.xsl']);
+		assert.include(items[0].text, 'f:missing');
+		assert.include(items[0].text, '(and 1 more)');
+		assert.deepEqual(items[0].places, [{ path: file('top.xsl'), line: 2 }, { path: file('top.xsl'), line: 5 }]);
+		// none: nothing to rework
+		assert.isEmpty(await PackageConversion.baseline(analysis, async () => []) as ConversionItem[]);
+	});
+
+	test('with the linter: an error in a stylesheet that uses the library blocks the conversion - one in an unrelated stylesheet doesn\'t', async () => {
+		const provider = new XsltSymbolProvider(XSLTConfiguration.configuration, null);
+		const errorsOf = async (module: string) => (await provider.diagnosticsFor(await vscode.workspace.openTextDocument(vscode.Uri.file(module)))).filter((d) => d.severity === vscode.DiagnosticSeverity.Error)
+			.map((d) => ({ line: d.range.start.line, message: d.message }));
+		const items = await PackageConversion.baseline(analysis, errorsOf) as ConversionItem[];
+		assert.deepEqual(items.map((i) => i.subject), ['1 error in top.xsl']);
+		assert.include(items[0].text, 'f:missing');
+		assert.strictEqual(items[0].places[0].line, 2);
+	});
+
+	test('cancelled: no result - and progress is reported', async () => {
+		const progress: string[] = [];
+		assert.isUndefined(await PackageConversion.baseline(analysis, async () => [], (done, total) => progress.push(`${done}/${total}`), () => progress.length > 0));
+		assert.deepEqual(progress, ['0/2']);
+	});
+
+	test('many modules with errors: the first are listed, then the number of others', async () => {
+		const many = { libraryModules: Array.from({ length: 25 }, (_, i) => `/m/${i}.xsl`), topLevels: [], userModules: [] } as unknown as ConversionAnalysis;
+		const items = await PackageConversion.baseline(many, async () => [{ line: 0, message: 'e' }]) as ConversionItem[];
+		assert.lengthOf(items, 21);
+		assert.strictEqual(items[20].subject, 'errors in 5 more modules');
+	});
+});
+
+suite('XSLT packages: a module that is a part of a larger library', () => {
+	// master.xsl imports lib.xsl and two more modules, and the stylesheets import master.xsl: converting lib.xsl alone leaves the
+	// others as imports - the analysis says so, and that master.xsl converts them all
+	const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0"';
+	const sources: { [file: string]: string } = {
+		'lib.xsl': `<xsl:stylesheet ${ns}>\n  <xsl:function name="f:one"><xsl:sequence select="1"/></xsl:function>\n</xsl:stylesheet>`,
+		'second.xsl': `<xsl:stylesheet ${ns}>\n  <xsl:function name="f:two"><xsl:sequence select="2"/></xsl:function>\n</xsl:stylesheet>`,
+		'third.xsl': `<xsl:stylesheet ${ns}>\n  <xsl:function name="f:three"><xsl:sequence select="3"/></xsl:function>\n</xsl:stylesheet>`,
+		'master.xsl': `<xsl:stylesheet ${ns}>\n  <xsl:import href="lib.xsl"/>\n  <xsl:import href="second.xsl"/>\n  <xsl:import href="third.xsl"/>\n</xsl:stylesheet>`,
+		'top.xsl': `<xsl:stylesheet ${ns}>\n  <xsl:import href="master.xsl"/>\n  <xsl:template match="/"><xsl:sequence select="f:one(), f:two()"/></xsl:template>\n</xsl:stylesheet>`
+	};
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'package-part-')));
+	const file = (name: string) => path.join(dir, name);
+	suiteSetup(async () => {
+		Object.entries(sources).forEach(([name, text]) => fs.writeFileSync(file(name), text));
+		await ImportIndex.instance.buildFrom(Object.keys(sources).map(file));
+	});
+	suiteTeardown(() => {
+		Object.keys(sources).forEach((name) => ImportIndex.instance.setReferences(file(name), []));
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	test('converting one module of the library: a decision, naming the module that imports it - and what to convert instead', async () => {
+		const analysis = await PackageConversion.analyse(file('lib.xsl')) as ConversionAnalysis;
+		const item = analysis.items.find((i) => i.section === 'library')!;
+		assert.strictEqual(item.severity, 'decision');
+		assert.strictEqual(item.subject, 'lib.xsl is a part of master.xsl');
+		assert.include(item.text, '2 other modules (second.xsl, third.xsl)');
+		assert.include(item.text, 'convert master.xsl');
+		assert.deepEqual(item.places, [{ path: file('master.xsl'), line: 0 }]);
+	});
+
+	test('converting the module that imports them all - or a top-level stylesheet\'s only library: nothing to say', async () => {
+		assert.isEmpty((await PackageConversion.analyse(file('master.xsl')) as ConversionAnalysis).items.filter((i) => i.section === 'library'));
+	});
+});
+

@@ -33,7 +33,7 @@ export interface Place {
 // package - or can't be made until the item is reworked
 export type ConversionSeverity = 'change' | 'decision' | 'blocker';
 
-export type ConversionSection = 'visibility' | 'override' | 'abstract' | 'modes' | 'not-shared' | 'blockers';
+export type ConversionSection = 'library' | 'visibility' | 'override' | 'abstract' | 'included' | 'modes' | 'not-shared' | 'blockers';
 
 export interface ConversionItem {
 	section: ConversionSection;
@@ -46,8 +46,12 @@ export interface ConversionItem {
 
 export interface ConversionAnalysis {
 	library: string;
-	// the library: the module, and those it imports or includes, directly or indirectly
+	// the library: the module, and those it imports or includes, directly or indirectly - with the modules it uses that
+	// are shared by the stylesheets, which the package includes (see absorbed)
 	libraryModules: string[];
+	// the shared modules the package includes, with those they import or include: the library uses what they declare, which
+	// a package can't take from the stylesheets except as an abstract component, copied into each of them
+	absorbed: string[];
 	// the top-level stylesheets that import or include the library, directly or indirectly - and their other modules
 	topLevels: string[];
 	userModules: string[];
@@ -69,6 +73,9 @@ export interface ConversionPlan {
 	publicDeclarations: Declaration[];
 	overrides: { declaration: Declaration, top: string }[];
 	callbacks: Declaration[];
+	// the shared modules, not in `absorbed` yet, that declare what the library uses: another round of the analysis has them
+	// in the library (see PackageConversion.analyse)
+	absorb: string[];
 	// the library's named modes made public - with their xsl:mode, if they have one - and the stylesheets' template rules
 	// in them, moved into xsl:override
 	publicModes: { mode: string, declaration?: Declaration }[];
@@ -165,10 +172,24 @@ export interface ModuleScan {
  */
 export class PackageConversion {
 
-	// undefined, with the reason, if the module can't be analysed as a library
+	// undefined, with the reason, if the module can't be analysed as a library. What the library uses that only a module
+	// shared by the stylesheets declares is part of the package: the module is included in it - and what that uses, in turn -
+	// so the analysis is made again with them in the library, until there's no more
 	public static async analyse(libraryPath: string): Promise<ConversionAnalysis | string> {
+		let absorbed: string[] = [];
+		for (let round = 0; round < 20; round++) {
+			const result = await PackageConversion.analyseWith(libraryPath, absorbed);
+			if (typeof result === 'string' || result.plan.absorb.length === 0) {
+				return result;
+			}
+			absorbed = absorbed.concat(result.plan.absorb.filter((module) => !absorbed.includes(module)));
+		}
+		return PackageConversion.analyseWith(libraryPath, absorbed);
+	}
+
+	private static async analyseWith(libraryPath: string, absorbed: string[]): Promise<ConversionAnalysis | string> {
 		const library = path.normalize(libraryPath);
-		const libraryModules = PackageConversion.tree(library);
+		const libraryModules = [...new Set([library, ...absorbed].flatMap((root) => PackageConversion.tree(root)))];
 		const scans = new Map<string, ModuleScan>();
 		const scan = (file: string) => {
 			let result = scans.get(file);
@@ -195,7 +216,7 @@ export class PackageConversion {
 		const userUses = userScans.flatMap((s) => s.uses);
 		const libraryUses = libraryScans.flatMap((s) => s.uses);
 		const components: Kind[] = ['function', 'template', 'variable', 'attribute-set'];
-		const plan: ConversionPlan = { scans, trees, publicDeclarations: [], overrides: [], callbacks: [], publicModes: [], movedRules: [], copies: [], preventing: [], renameUnnamed: false };
+		const plan: ConversionPlan = { scans, trees, publicDeclarations: [], overrides: [], callbacks: [], absorb: [], publicModes: [], movedRules: [], copies: [], preventing: [], renameUnnamed: false };
 		// a module whose code moves into xsl:override is changed: it must be in the workspace, and used only by the top-level
 		// stylesheets that use the library - each gets the code moved, in its own xsl:override
 		const topsOf = (file: string) => topLevels.filter((top) => trees.get(top)!.has(file));
@@ -205,6 +226,21 @@ export class PackageConversion {
 			text: `it would move into xsl:override from ${path.basename(place.path)} - which ${ImportIndex.instance.has(place.path) ? 'stylesheets that don\'t use the library use too' : 'isn\'t in the workspace'}, so they'd lose it`,
 			places: [place]
 		});
+
+		// a module that imports or includes the library, and others, and isn't a top-level stylesheet, is likely to be the
+		// library: converting only a part of it leaves the rest as imports, which the stylesheets still have - a decision, so
+		// that the one converted is known
+		for (const importer of ImportIndex.instance.importersOf(library).filter((file) => !topLevels.includes(file) && !libraryModules.includes(file))) {
+			const siblings = (ImportIndex.instance.has(importer) ? ImportIndex.instance.referencesOf(importer) : []).map((r) => r.path)
+				.filter((file, index, all) => file !== library && !libraryModules.includes(file) && all.indexOf(file) === index);
+			if (siblings.length > 0) {
+				items.push({
+					section: 'library', severity: 'decision', subject: `${path.basename(library)} is a part of ${path.basename(importer)}`,
+					text: `${path.basename(importer)} imports or includes it, and ${siblings.length} other ${siblings.length === 1 ? 'module' : 'modules'} (${siblings.slice(0, 4).map((f) => path.basename(f)).join(', ')}${siblings.length > 4 ? ', ...' : ''}): only ${path.basename(library)}${libraryModules.length > 1 ? ' and what it imports' : ''} becomes a package, and the others stay imports of the stylesheets. To convert all of them, convert ${path.basename(importer)}`,
+					places: [{ path: importer, line: 0 }]
+				});
+			}
+		}
 
 		// the library's components that the stylesheets use - a global parameter is public anyway
 		for (const declaration of libraryDeclarations.filter((d) => components.includes(d.kind) && !d.isParam)) {
@@ -288,7 +324,19 @@ export class PackageConversion {
 			text: `the library uses it, but it isn't declared in the library or the stylesheets found to use it - a package must declare all it uses, as abstract if a stylesheet provides it${notFound}`,
 			places: uses.map((u) => u.place)
 		}));
+		// a module that several of the stylesheets share, that declares what the library uses, and doesn't import the library:
+		// it belongs with the library - the package includes it, and so what it uses - not an abstract component for each
+		// stylesheet to override, which would give each a copy of its code. Not one stylesheet's own module, which provides
+		// what the library calls: that's a callback, as it was, moved into the stylesheet's xsl:override. Nor a module that
+		// stylesheets that don't use the library import too: it can't be taken out of them
+		const absorbable = (file: string) => !topLevels.includes(file) && !PackageConversion.tree(file).includes(library) && movable(file) && topsOf(file).length > 1;
 		callbacks.forEach(({ declaration }) => {
+			if (absorbable(declaration.place.path)) {
+				if (!plan.absorb.includes(declaration.place.path)) {
+					plan.absorb.push(declaration.place.path);
+				}
+				return;
+			}
 			plan.callbacks.push(declaration);
 			if (movable(declaration.place.path)) {
 				topsOf(declaration.place.path).forEach((top) => plan.overrides.push({ declaration, top }));
@@ -296,11 +344,36 @@ export class PackageConversion {
 				notMovable(PackageConversion.label(declaration), declaration.place);
 			}
 		});
-		callbacks.forEach(({ declaration, uses }) => items.push({
-			section: 'abstract', severity: 'change', subject: PackageConversion.label(declaration),
-			text: 'declared in the package as abstract, as the library uses it - the stylesheet\'s declaration is moved into xsl:override',
-			places: [declaration.place, ...uses.map((u) => u.place)]
-		}));
+		callbacks.forEach(({ declaration, uses }) => {
+			if (absorbable(declaration.place.path)) {
+				return;
+			}
+			// moved into the xsl:override of each stylesheet that uses the library: with more than one, each has a copy of it
+			const copies = movable(declaration.place.path) ? topsOf(declaration.place.path).length : 0;
+			const module = path.basename(declaration.place.path);
+			items.push({
+				section: 'abstract', severity: copies > 1 ? 'decision' : 'change', subject: PackageConversion.label(declaration),
+				text: copies > 1 ?
+					`declared in the package as abstract, as the library uses it - its declaration is moved out of ${module}, which imports the library, into the xsl:override of each of the ${copies} stylesheets that use it, so each has a copy. If ${module} belongs with the library, convert ${module} to a package instead` :
+					'declared in the package as abstract, as the library uses it - the stylesheet\'s declaration is moved into xsl:override',
+				places: [declaration.place, ...uses.map((u) => u.place)]
+			});
+		});
+		// the modules the package includes - and that they don't bring a module in twice, as the library and they both import it
+		absorbed.forEach((root) => {
+			const uses = libraryUses.filter((u) => scan(root).declarations.some((d) => PackageConversion.refersTo(u, d)));
+			items.push({
+				section: 'included', severity: 'change', subject: path.basename(root),
+				text: `included in the package - the library uses ${uses.length === 1 ? 'a declaration' : 'declarations'} in it, which the stylesheets that import it get from the package instead. It's removed from their imports`,
+				places: [{ path: root, line: 0 }, ...uses.map((u) => u.place)]
+			});
+			const others = [...new Set([library, ...absorbed.filter((a) => a !== root)].flatMap((other) => PackageConversion.tree(other)))];
+			PackageConversion.tree(root).filter((module) => module !== root && others.includes(module)).forEach((module) => items.push({
+				section: 'blockers', severity: 'blocker', subject: `${path.basename(module)} would be in the package twice`,
+				text: `both ${path.basename(library)} and ${path.basename(root)}, which the package includes, import or include it - its declarations would be duplicated: have only one of them use it`,
+				places: [{ path: module, line: 0 }]
+			}));
+		});
 
 		// modes: the library's named modes the stylesheets use are made public, and the stylesheets' template rules in
 		// them moved into xsl:override - the unnamed mode can't be shared
@@ -391,10 +464,40 @@ export class PackageConversion {
 		// with the library's prefix for the package's namespace, if it has one
 		const prefix = [...(scan(library).bindings ?? new Map<string, string>())].find(([, uri]) => uri === packageName)?.[0];
 		return {
-			library, libraryModules, topLevels, userModules, packageName, packageVersion: '1.0',
+			library, libraryModules, absorbed, topLevels, userModules, packageName, packageVersion: '1.0',
 			unnamedModeName: prefix ? `${prefix}:default` : 'default',
 			items, plan
 		};
+	}
+
+	// the errors in the modules the conversion reads - the library's and the stylesheets' that use it, in every workspace
+	// folder - before it's made, as blockers: it starts from modules without errors, so a problem after it is one it made,
+	// and its analysis, which finds the declarations and uses in the modules as the linter does, isn't misled by one.
+	// errorsOf gives a module's errors, with their 0-based lines. Undefined if cancelled
+	public static async baseline(analysis: ConversionAnalysis, errorsOf: (file: string) => Promise<{ line: number, message: string }[]>,
+		progress: (checked: number, total: number) => void = () => undefined, cancelled: () => boolean = () => false): Promise<ConversionItem[] | undefined> {
+		const modules = [...new Set([...analysis.libraryModules, ...analysis.topLevels, ...analysis.userModules])];
+		const items: ConversionItem[] = [];
+		for (const [index, file] of modules.entries()) {
+			if (cancelled()) {
+				return undefined;
+			}
+			progress(index, modules.length);
+			const errors = await errorsOf(file);
+			if (errors.length > 0) {
+				items.push({
+					section: 'blockers', severity: 'blocker', subject: `${errors.length} ${errors.length === 1 ? 'error' : 'errors'} in ${path.basename(file)}`,
+					text: `${errors[0].message}${errors.length > 1 ? ` (and ${errors.length - 1} more)` : ''} - fix the errors first: the conversion starts from modules without them, so that a problem after it is one it made`,
+					places: errors.slice(0, 5).map((error) => ({ path: file, line: error.line }))
+				});
+			}
+		}
+		// the report and the message list them: not the whole workspace's, if it has many
+		const maxItems = 20;
+		return items.length <= maxItems ? items : items.slice(0, maxItems).concat({
+			section: 'blockers', severity: 'blocker', subject: `errors in ${items.length - maxItems} more modules`,
+			text: 'see the Problems view', places: []
+		});
 	}
 
 	// the edits that convert the library to a package, by module - or why it can't be converted. The library's root
@@ -485,7 +588,7 @@ export class PackageConversion {
 			};
 			plan.publicDeclarations.filter((d) => !d.isParam).forEach((d) => makePublic(d.place));
 			// new declarations, at the end of the library's root element
-			const step = PackageConversion.indentStep(library.text, rootElement.startTagEnd);
+			const step = PackageEdits.contentIndent(library.text, rootElement.startTagEnd);
 			const added: string[] = [];
 			plan.publicModes.forEach(({ mode, declaration }) => declaration?.place.offset !== undefined ? makePublic(declaration.place) :
 				added.push(`<xsl:mode name="${escape(mode)}" visibility="public"/>`));
@@ -506,6 +609,8 @@ export class PackageConversion {
 					added.push(`<xsl:mode name="${escape(modeIn(library))}" visibility="public"/>`);
 				}
 			}
+			// the shared modules it includes: those the library uses declarations of
+			analysis.absorbed.forEach((module) => added.push(`<xsl:include href="${escape(path.relative(path.dirname(analysis.library), module).split(path.sep).map(encodeURI).join('/'))}"/>`));
 			plan.callbacks.forEach((callback) => added.push(PackageConversion.abstractDeclaration(scanOf(callback.place.path), markupOf(callback.place.path), callback, library.bindings, step)));
 			if (added.length > 0) {
 				const lineStart = library.text.lastIndexOf('\n', rootElement.endTagStart - 1) + 1;
@@ -539,7 +644,7 @@ export class PackageConversion {
 				const imports = importer.references.filter((r) => r.isImport);
 				const lastImport = imports.length > 0 ? imports[imports.length - 1] : undefined;
 				const insertAt = lastImport ? PackageEdits.elementExtent(importerMarkup, lastImport.offset)!.end : topRootElement.startTagEnd;
-				const topStep = PackageConversion.indentStep(importer.text, topRootElement.startTagEnd);
+				const topStep = PackageEdits.contentIndent(importer.text, topRootElement.startTagEnd);
 				const indent = lastImport ? PackageEdits.lineIndent(importer.text, lastImport.offset) : topStep;
 				// the declarations and template rules moved into the xsl:override
 				const moved: string[] = [];
@@ -750,10 +855,6 @@ export class PackageConversion {
 		}
 		const declarations = missing.map((prefix) => ` xmlns:${prefix}="${from.get(prefix)!.replace(/"/g, '&quot;')}"`).join('');
 		return element.replace(/^(\s*<[^\s/>]+)/, `$1${declarations}`);
-	}
-
-	private static indentStep(text: string, offset: number) {
-		return PackageScope.lineIndent(text, offset) || /\n([ \t]+)\S/.exec(text)?.[1] || '\t';
 	}
 
 	// a problem with a name for the mode the unnamed mode becomes - a QName with a prefix the library declares, or an

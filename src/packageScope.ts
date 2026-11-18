@@ -775,7 +775,7 @@ export class PackageScope {
 		}
 		const lineStart = text.lastIndexOf('\n', rootElement.endTagStart - 1) + 1;
 		const ownLine = text.substring(lineStart, rootElement.endTagStart).trim() === '';
-		const step = PackageScope.indentStep(text, rootElement.startTagEnd);
+		const step = PackageEdits.contentIndent(text, rootElement.startTagEnd);
 		return ownLine ? { start: lineStart, end: lineStart, text: `${step}${declaration}\n` } : { start: rootElement.endTagStart, end: rootElement.endTagStart, text: `\n${step}${declaration}\n` };
 	}
 

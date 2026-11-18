@@ -9,6 +9,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ImportIndex } from './importIndex';
+import { XsltSymbolProvider } from './xsltSymbolProvider';
+import { DiskTextDocument } from './mcp/diskTextDocument';
 import { ConversionAnalysis, ConversionItem, ConversionSection, PackageConversion, Place } from './packageConversion';
 
 /**
@@ -97,7 +99,30 @@ export class PackageAnalysisView {
 			vscode.window.showInformationMessage(`${path.basename(file)}: ${analysis}`);
 			return undefined;
 		}
+		// the modules it reads - in every workspace folder - are checked first: errors in them are blockers
+		const errors = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Checking the modules of ${path.basename(file)} for errors`, cancellable: true }, async (progress, token) => {
+			let last = 0;
+			return PackageConversion.baseline(analysis, PackageAnalysisView.errorsOf, (checked, total) => {
+				progress.report({ increment: total > 0 ? 100 * (checked - last) / total : 0, message: `${checked} of ${total}` });
+				last = checked;
+			}, () => token.isCancellationRequested);
+		});
+		if (!errors) {
+			return undefined;
+		}
+		analysis.items.push(...errors);
+		analysis.plan.preventing.push(...errors);
 		return analysis;
+	}
+
+	// a module's errors, as the linter has them now - the file as it is on disk, unless there are unsaved edits
+	private static async errorsOf(file: string): Promise<{ line: number, message: string }[]> {
+		const provider = XsltSymbolProvider.instanceForXSLT;
+		if (!provider || !fs.existsSync(file)) {
+			return [];
+		}
+		const document = await DiskTextDocument.current(vscode.Uri.file(file));
+		return (await provider.diagnosticsFor(document)).filter((d) => d.severity === vscode.DiagnosticSeverity.Error).map((d) => ({ line: d.range.start.line, message: d.message }));
 	}
 
 	private static async showReport(analysis: ConversionAnalysis) {
@@ -119,9 +144,11 @@ export class PackageAnalysisView {
 
 	private static readonly sections: [ConversionSection, string, string][] = [
 		['blockers', 'To rework first', 'These would fail in a package, so they must be changed before converting.'],
+		['library', 'What is converted', 'The module is a part of a larger library.'],
 		['visibility', 'Made public', 'A package\'s components are private unless made public, e.g. with xsl:expose.'],
 		['override', 'Overrides', 'A stylesheet\'s declaration with the name of the library\'s must be in xsl:override.'],
 		['abstract', 'Abstract components', 'The library uses these, but only the stylesheets declare them.'],
+		['included', 'Modules included in the package', 'The library uses what these shared modules declare, so the package includes them, rather than each stylesheet having a copy.'],
 		['modes', 'Modes and template rules', ''],
 		['not-shared', 'Not exposed by a package', 'These apply only to a package\'s own code, so the stylesheets need their own.']
 	];
