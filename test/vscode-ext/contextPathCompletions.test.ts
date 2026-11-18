@@ -159,3 +159,34 @@ suite('Problems of an older version of a file, in a source control diff', functi
 		}
 	});
 });
+
+suite('Problems of the files of a folder removed from the workspace', () => {
+	test('are cleared, except for a file that is open in an editor - and not those of other folders', async () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'removed-folder-'));
+		try {
+			const gone = path.join(dir, 'gone');
+			const kept = path.join(dir, 'kept');
+			fs.mkdirSync(gone);
+			fs.mkdirSync(kept);
+			const openFile = path.join(gone, 'open.xsl');
+			fs.writeFileSync(openFile, '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>');
+			const editor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(openFile));
+			const collection = vscode.languages.createDiagnosticCollection('removed-folder-test');
+			const problem = [new vscode.Diagnostic(new vscode.Range(0, 0, 0, 1), 'a problem')];
+			const closedFile = vscode.Uri.file(path.join(gone, 'closed.xsl'));
+			const otherFolder = vscode.Uri.file(path.join(kept, 'other.xsl'));
+			const sibling = vscode.Uri.file(gone + '-more.xsl');
+			[closedFile, vscode.Uri.file(openFile), otherFolder, sibling].forEach((uri) => collection.set(uri, problem));
+			XsltSymbolProvider.clearRemovedFolders(collection, [vscode.Uri.file(gone)]);
+			assert.isFalse(collection.has(closedFile), 'a file that is not open');
+			assert.isTrue(collection.has(vscode.Uri.file(openFile)), 'a file open in an editor');
+			assert.isTrue(collection.has(otherFolder), 'a file in another folder');
+			assert.isTrue(collection.has(sibling), 'a file in a folder whose name starts the same');
+			collection.dispose();
+			assert.isOk(editor);
+		} finally {
+			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});

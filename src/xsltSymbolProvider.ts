@@ -131,6 +131,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					collection.delete(closed.uri);
 				}
 			});
+			// a folder removed from the workspace: the problems of its files that aren't open in an editor go too
+			vscode.workspace.onDidChangeWorkspaceFolders((e) => XsltSymbolProvider.clearRemovedFolders(collection, e.removed.map((folder) => folder.uri)));
 		}
 	}
 
@@ -160,6 +162,20 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const uriString = uri.toString();
 		[...XsltSymbolProvider.documentSymbols.keys()].filter((cachedUri) => cachedUri.toString() === uriString)
 			.forEach((cachedUri) => XsltSymbolProvider.documentSymbols.delete(cachedUri));
+	}
+
+	// the problems of the files in the folders, e.g. removed from the workspace - except those of a file that's open in an
+	// editor, which is still checked
+	public static clearRemovedFolders(collection: vscode.DiagnosticCollection, folders: vscode.Uri[]) {
+		const prefixes = folders.map((folder) => folder.toString().replace(/\/$/, '') + '/');
+		const open = new Set(vscode.workspace.textDocuments.filter((doc) => XsltSymbolProvider.isOpenInEditor(doc)).map((doc) => doc.uri.toString()));
+		const cleared: vscode.Uri[] = [];
+		collection.forEach((uri) => {
+			if (prefixes.some((prefix) => uri.toString().startsWith(prefix)) && !open.has(uri.toString())) {
+				cleared.push(uri);
+			}
+		});
+		cleared.forEach((uri) => collection.delete(uri));
 	}
 
 	// whether the document is open in an editor tab, shown or not - not one only loaded, e.g. an XML context file read
