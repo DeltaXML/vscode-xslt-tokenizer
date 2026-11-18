@@ -267,6 +267,43 @@ export class ImportIndex {
 		return this.references.has(file);
 	}
 
+	// whether the stylesheet imports or includes the module now - directly or indirectly. From the index, for a file in it, else
+	// from the file's text: as open in an editor, else as saved. For a stylesheet remembered as a module's parent, which may
+	// have been changed since, e.g. to use a package instead
+	public static reaches(stylesheet: string, module: string): boolean {
+		const index = ImportIndex.isEnabled() && ImportIndex.instance.built ? ImportIndex.instance : undefined;
+		const seen = new Set<string>([stylesheet]);
+		const pending = [stylesheet];
+		while (pending.length > 0) {
+			const file = pending.pop()!;
+			let references: ModuleReference[];
+			if (index?.has(file)) {
+				references = index.referencesOf(file);
+			} else {
+				const open = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'file' && d.fileName === file);
+				let text: string | undefined = open?.getText();
+				if (text === undefined) {
+					try {
+						text = fs.readFileSync(file, 'utf8');
+					} catch {
+						continue;
+					}
+				}
+				references = ImportIndex.moduleReferences(text, file);
+			}
+			for (const reference of references) {
+				if (reference.path === module) {
+					return true;
+				}
+				if (!seen.has(reference.path)) {
+					seen.add(reference.path);
+					pending.push(reference.path);
+				}
+			}
+		}
+		return false;
+	}
+
 	public referencesOf(file: string): ModuleReference[] {
 		return this.references.get(file) ?? [];
 	}

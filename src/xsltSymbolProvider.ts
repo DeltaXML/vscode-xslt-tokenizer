@@ -201,10 +201,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private static findMatchingParent(map: Map<string, string[]>, path: string) {
 		let matchingKey: string | undefined;
-		// use last entry - not one for a file that's been deleted since, which would be reported as not found
-		for (const entry of map.entries()) {
+		// use last entry - not one for a file that's been deleted since, which would be reported as not found - nor one for a
+		// stylesheet that no longer imports or includes the module, e.g. changed to use a package: it's removed, as it
+		// would be until the stylesheet is checked again
+		for (const entry of [...map.entries()]) {
 			if (entry[1].find((x) => x === path) && !XsltSymbolProvider.isDeletedFile(entry[0])) {
-				matchingKey = entry[0];
+				// the stylesheet itself, remembered with what it imports - not a parent
+				if (entry[0] === path || ImportIndex.reaches(entry[0], path)) {
+					matchingKey = entry[0];
+				} else {
+					map.delete(entry[0]);
+				}
 			}
 		}
 		return matchingKey;
