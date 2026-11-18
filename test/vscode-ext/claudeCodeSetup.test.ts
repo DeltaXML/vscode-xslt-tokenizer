@@ -7,6 +7,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
 import { ClaudeCodeSetup } from '../../src/mcp/claudeCodeSetup';
+import { McpRoot } from '../../src/mcp/mcpRoot';
 
 suite('Claude Code MCP setup', function () {
 	this.timeout(20000);
@@ -89,5 +90,12 @@ echo "Added HTTP MCP server $name with URL: $url - headers: $header"
 		assert.deepEqual(states(), [`local:${fs.realpathSync(project)}`]);
 		assert.strictEqual(callLines().pop(),`mcp add --transport http --scope local xslt-xpath ${url} --header Authorization: Bearer tok2`);
 		assert.deepEqual((await ClaudeCodeSetup.update(url, 'tok3', [])).updated, []);
+	});
+
+	test('a multi-root workspace: set up again with each folder as the root of the URL', async () => {
+		await ClaudeCodeSetup.setUp(McpRoot.urlFor(url, project), 'tok1', 'local', project);
+		const { updated } = await ClaudeCodeSetup.update(url, 'tok2', [other, project], false, true);
+		assert.deepEqual(updated, [project]);
+		assert.strictEqual(callLines().pop(), `mcp add --transport http --scope local xslt-xpath ${url}?root=${encodeURIComponent(project)} --header Authorization: Bearer tok2`);
 	});
 });

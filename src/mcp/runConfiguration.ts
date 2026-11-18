@@ -17,6 +17,7 @@ import { SaxonTaskProvider, XSLTTask } from '../saxonTaskProvider';
 import { CatalogSetting } from '../catalogSetting';
 import { XsltPackages } from '../xsltPackages';
 import { ImportIndex } from '../importIndex';
+import { McpRoot } from './mcpRoot';
 import { XSpecRunner } from '../xspecRunner';
 import { DocumentChangeHandler } from '../documentChangeHandler';
 import { unquotedPath } from '../settingPaths';
@@ -36,7 +37,7 @@ export class RunConfiguration {
 			await ImportIndex.instance.whenBuilt();
 		}
 		const lines: string[] = [];
-		const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const folder = McpRoot.current();
 		const shown = (file: string) => folder && file.startsWith(folder + path.sep) ? path.relative(folder, file) : file;
 		lines.push(`Workspace: ${folder ?? '(no folder open)'}`);
 		// Saxon

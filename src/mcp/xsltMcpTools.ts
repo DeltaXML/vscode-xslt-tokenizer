@@ -10,6 +10,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { McpRoot } from './mcpRoot';
 import { ImportNode, ImportTreeProvider } from '../importTreeProvider';
 import { ImportIndex } from '../importIndex';
 import { GlobalInstructionData, GlobalInstructionType, XslLexer } from '../xslLexer';
@@ -68,13 +69,13 @@ export class XsltMcpTools {
 	}
 
 	private static resolve(filePath: string): string {
-		const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const folder = McpRoot.current();
 		return path.isAbsolute(filePath) || !folder ? path.resolve(filePath) : path.resolve(folder, filePath);
 	}
 
-	// a path as shown: relative to the first workspace folder, if it's in it
+	// a path as shown: relative to the project's folder, if it's in it
 	private static shown(file: string) {
-		const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const folder = McpRoot.current();
 		return folder && file.startsWith(folder + path.sep) ? path.relative(folder, file) : file;
 	}
 
@@ -223,7 +224,7 @@ export class XsltMcpTools {
 
 	// the problems of the XSLT and XSpec files in a folder - not XSpec's generated test runners or hidden folders
 	public async lintFiles(folder: string | undefined, pattern = '**/*.{xsl,xslt,xspec}', minSeverity: Severity = 'warning'): Promise<ToolResult> {
-		const base = folder ? XsltMcpTools.resolve(folder) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const base = folder ? XsltMcpTools.resolve(folder) : McpRoot.current();
 		if (!base || !fs.existsSync(base) || !fs.statSync(base).isDirectory()) {
 			return XsltMcpTools.text(base ? `Folder not found: ${base}` : 'No folder given, and no workspace folder is open', true);
 		}

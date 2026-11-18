@@ -91,6 +91,7 @@ import { XsltProfileTimeline } from './xsltProfileTimeline';
 import { TimelineCommands } from './timelineCommands';
 import { XsltMcpDefinitionProvider, XsltMcpServer } from './mcp/xsltMcpServer';
 import { ClaudeCodeSetup, ClaudeScope } from './mcp/claudeCodeSetup';
+import { McpRoot } from './mcp/mcpRoot';
 
 
 
@@ -812,7 +813,7 @@ export function activate(context: vscode.ExtensionContext) {
 		mcpDefinitions.refresh();
 		const folders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === 'file').map((folder) => folder.uri.fsPath);
 		if (folders.length > 0 && mcpServer.url && mcpServer.previousPort !== mcpServer.port) {
-			const { updated, result } = await ClaudeCodeSetup.update(mcpServer.url, await mcpServer.getToken(), folders, false);
+			const { updated, result } = await ClaudeCodeSetup.update(mcpServer.url, await mcpServer.getToken(), folders, false, folders.length > 1);
 			if (updated.length > 0) {
 				XsltMcpServer.log.info(`Claude Code set up again for ${updated.join(', ')}, at ${mcpServer.url}`);
 			} else if (result && !result.notFound) {
@@ -860,22 +861,27 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		// this project first: each window has a server of its own, for its workspace - all projects use this window's
 		const folders = vscode.workspace.workspaceFolders ?? [];
-		const thisProject = { label: 'This project', description: folders.length === 1 ? folders[0].uri.fsPath : 'a workspace folder', detail: 'Claude Code started in the project\'s folder uses this window\'s server - recommended, with a window for each project', scope: 'local' as ClaudeScope };
-		const allProjects = { label: 'All projects', description: '--scope user', detail: `Every Claude Code session uses this window's server, for its workspace - ${url}`, scope: 'user' as ClaudeScope };
+		const multiRoot = folders.length > 1;
+		const thisProject = { label: 'This project', description: folders.length === 1 ? folders[0].uri.fsPath : 'a workspace folder', detail: multiRoot ?
+			'Claude Code started in the folder uses this window\'s server - it sees all the workspace\'s folders, and relative paths are from this folder' :
+			'Claude Code started in the project\'s folder uses this window\'s server - recommended, with a window for each project', scope: 'local' as ClaudeScope };
+		const allProjects = { label: 'All projects', description: '--scope user', detail: `Every Claude Code session uses this window's server, for its workspace - relative paths are from ${multiRoot ? 'the first workspace folder' : 'its folder'} - ${url}`, scope: 'user' as ClaudeScope };
 		const choice = await vscode.window.showQuickPick(folders.length > 0 ? [thisProject, allProjects] : [allProjects], { title: 'Set Up MCP Server for Claude Code', placeHolder: 'Use the XSLT/XPath MCP server in...' });
 		if (!choice) {
 			return;
 		}
-		const folder = choice.scope === 'user' ? undefined : folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick({ placeHolder: 'The project folder' });
+		const folder = choice.scope === 'user' ? undefined : folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick({ placeHolder: 'The folder Claude Code is started in' });
 		if (choice.scope === 'local' && !folder) {
 			return;
 		}
-		const result = await ClaudeCodeSetup.setUp(url, await mcpServer.getToken(), choice.scope, folder?.uri.fsPath);
+		// in a multi-root workspace the folder is the root of the server's URL: the tools' relative paths are from it
+		const setUpUrl = folder && multiRoot ? McpRoot.urlFor(url, folder.uri.fsPath) : url;
+		const result = await ClaudeCodeSetup.setUp(setUpUrl, await mcpServer.getToken(), choice.scope, folder?.uri.fsPath);
 		if (result.ok) {
-			vscode.window.showInformationMessage(`Claude Code is set up to use the XSLT/XPath MCP server${folder ? ` in ${folder.name}` : ' in all projects'}. Start a new Claude Code session to use it: a session already running keeps its old settings.`);
+			vscode.window.showInformationMessage(`Claude Code is set up to use the XSLT/XPath MCP server${folder ? ` in ${folder.name}` : ' in all projects'}. Start a new Claude Code session to use it: a session already running keeps its old settings.${multiRoot && folder ? ' For another of the workspace\'s folders, run this command again and choose it.' : ''}`);
 		} else {
 			XsltMcpServer.log.error(`claude mcp add failed: ${result.output}`);
-			await copyClaudeCommand(url, choice.scope, result.notFound ? 'Claude Code\'s \'claude\' command wasn\'t found.' : `Claude Code couldn't set up the server: ${result.output}`);
+			await copyClaudeCommand(setUpUrl, choice.scope, result.notFound ? 'Claude Code\'s \'claude\' command wasn\'t found.' : `Claude Code couldn't set up the server: ${result.output}`);
 		}
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.resetMcpToken', async () => {
@@ -887,7 +893,7 @@ export function activate(context: vscode.ExtensionContext) {
 		mcpDefinitions.refresh();
 		// Claude Code set up with the old token: for all projects, or for a workspace folder - with this window's server
 		const url = await mcpUrl() ?? XsltMcpServer.url(XsltMcpServer.basePort());
-		const { updated, result } = await ClaudeCodeSetup.update(url, token, (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath));
+		const { updated, result } = await ClaudeCodeSetup.update(url, token, (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath), true, (vscode.workspace.workspaceFolders?.length ?? 0) > 1);
 		const setUp = 'Set Up MCP Server for Claude Code';
 		const claude = updated.length > 0 ? `Claude Code is set up again with it, for ${updated.join(' and ')} - start a new Claude Code session: one already running keeps the old token.`
 			: result?.notFound ? `Claude Code's 'claude' command wasn't found: set it up again with '${setUp}' after 'claude mcp remove xslt-xpath'.`

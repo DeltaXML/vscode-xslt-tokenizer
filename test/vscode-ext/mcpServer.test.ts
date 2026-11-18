@@ -15,6 +15,7 @@ import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { ImportIndex } from '../../src/importIndex';
+import { McpRoot } from '../../src/mcp/mcpRoot';
 
 const port = 6799;
 
@@ -31,9 +32,9 @@ function memorySecrets(): vscode.SecretStorage {
 }
 
 // an MCP request, as JSON-RPC over HTTP: the status, and the result or error of the message in the event stream
-function post(body: object, headers: Record<string, string>): Promise<{ status: number, message?: any }> {
+function post(body: object, headers: Record<string, string>, urlPath = '/mcp'): Promise<{ status: number, message?: any }> {
 	return new Promise((resolve, reject) => {
-		const request = http.request({ host: '127.0.0.1', port, path: '/mcp', method: 'POST',
+		const request = http.request({ host: '127.0.0.1', port, path: urlPath, method: 'POST',
 			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', ...headers } }, (response) => {
 			let text = '';
 			response.on('data', (chunk) => text += chunk);
@@ -258,6 +259,27 @@ suite('MCP server', function () {
 		// includes one that isn't found, which might declare it
 		assert.match(result, /^1 problem in .*main\.xsl:\n3:61 warning XPath: The variable\/parameter: \$undeclared cannot be resolved here, but it may be defined in an external module/, result);
 		assert.notMatch(result, /twice/);
+	});
+
+	test('a root in the URL: relative paths are from it - when it\'s one of the workspace\'s folders', async () => {
+		const allowed = McpRoot.allowed;
+		McpRoot.allowed = () => [dir];
+		try {
+			const lintRelative = (root: string) => post({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name: 'lint_file', arguments: { path: 'main.xsl' } } },
+				{ Authorization: `Bearer ${token}` }, `/mcp?root=${encodeURIComponent(root)}`);
+			assert.include(text(await lintRelative(dir)), `1 problem in ${main}`);
+			// the paths shown are relative to the root too
+			const imports = text(await post({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name: 'module_imports', arguments: { path: 'lib.xsl' } } },
+				{ Authorization: `Bearer ${token}` }, `/mcp?root=${encodeURIComponent(dir)}`));
+			assert.include(imports, 'lib.xsl');
+			assert.notInclude(imports, dir);
+			// not a folder of the workspace: ignored, so the path isn't found from the first folder - there is none here
+			assert.match(text(await lintRelative(path.join(dir, 'sub'))), /^File not found/);
+			// no root: as before
+			assert.match(text(await call('lint_file', { path: 'main.xsl' })), /^File not found/);
+		} finally {
+			McpRoot.allowed = allowed;
+		}
 	});
 
 	test('lint_file: an import problem', async () => {

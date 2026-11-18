@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as http from 'http';
 import { McpServer, StreamableHTTPServerTransport, z } from './sdk';
+import { McpRoot } from './mcpRoot';
 import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools';
 import { RunConfiguration } from './runConfiguration';
 
@@ -213,21 +214,23 @@ export class XsltMcpServer {
 			mcp.close();
 		});
 		await mcp.connect(transport);
-		await transport.handleRequest(request, response, message);
+		// for a project's folder in a multi-root workspace, if the URL has it as its root
+		const root = McpRoot.fromUrl(request.url);
+		await McpRoot.run(root, () => transport.handleRequest(request, response, message));
 	}
 
 	private createServer() {
 		const version: string = vscode.extensions.getExtension('deltaxml.xslt-xpath')?.packageJSON.version ?? '0';
 		const mcp = new McpServer({ name: 'xslt-xpath', version });
 		const tools = this.tools;
-		const filePath = z.string().describe('The file\'s path: absolute, or relative to the first workspace folder');
+		const filePath = z.string().describe('The file\'s path: absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)');
 		const minSeverity = z.enum(['error', 'warning', 'info', 'hint']);
 		const name = z.string().describe('The name as written in the module, e.g. f:area, or $config for a variable, or f:area#2 for a function of arity 2');
 		const kind = z.enum(declarationKindNames).optional().describe('The kind of declaration - any kind, if not given');
 		const readOnly = { readOnlyHint: true, openWorldHint: false };
 		const topLevelStylesheet = (use: string) => z.string().optional().describe(`For an XSLT module: the top-level stylesheet to ${use} - one ` +
 			'that imports or includes it, directly or indirectly - instead of the one found for it, e.g. one outside the workspace, or ' +
-			'another of the stylesheets that include it. Absolute, or relative to the first workspace folder');
+			'another of the stylesheets that include it. Absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)');
 		mcp.registerTool('lint_file', {
 			title: 'Lint an XSLT or XSpec file',
 			description: 'The problems in an XSLT module (.xsl, .xslt) or XSpec file (.xspec), as the XSLT/XPath extension reports them in the ' +
@@ -247,7 +250,7 @@ export class XsltMcpServer {
 				'with problems are listed, after a summary. XSpec\'s generated test runners (xspec/*-compiled.xsl), node_modules, hidden ' +
 				'folders such as .git (unless the pattern names one) and the files.exclude setting\'s files aren\'t checked.',
 			inputSchema: {
-				folder: z.string().optional().describe('The folder: absolute, or relative to the first workspace folder - the first workspace folder, if not given'),
+				folder: z.string().optional().describe('The folder: absolute, or relative to the project\'s folder - the project\'s folder, if not given'),
 				pattern: z.string().optional().describe('A glob pattern for the files, relative to the folder - default **/*.{xsl,xslt,xspec}'),
 				minSeverity: minSeverity.optional().describe('Only problems of this severity or worse - default warning, so hints such as unused variables are left out')
 			},
@@ -314,7 +317,7 @@ export class XsltMcpServer {
 				'(its XML context file), its parameters, the classpath and the exact java command line - with the options the extension adds, ' +
 				'e.g. --allowSyntaxExtensions:on, -catalog and -lib. Call it before running Saxon yourself, and use that command, so that the ' +
 				'result is the same as the user\'s.',
-			inputSchema: { path: filePath.optional().describe('A stylesheet (.xsl, .xslt) to describe the Quick Run of: absolute, or relative to the first workspace folder') },
+			inputSchema: { path: filePath.optional().describe('A stylesheet (.xsl, .xslt) to describe the Quick Run of: absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)') },
 			annotations: readOnly
 		}, async (args) => ({ content: [{ type: 'text' as const, text: await RunConfiguration.describe(args.path) }] }));
 		return mcp;
