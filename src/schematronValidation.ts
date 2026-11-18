@@ -121,6 +121,8 @@ export class SchematronValidation {
 						return action;
 					})
 			}),
+			vscode.workspace.onDidCloseTextDocument((document) => SchematronValidation.closed(document)),
+			vscode.workspace.onDidChangeWorkspaceFolders((e) => SchematronValidation.foldersRemoved(e.removed.map((folder) => folder.uri))),
 			// validated again when the file, or its schema, is saved
 			vscode.workspace.onDidSaveTextDocument((document) => {
 				if (document.uri.scheme !== 'file') {
@@ -189,6 +191,27 @@ export class SchematronValidation {
 		if (coverageCleared) {
 			SchematronValidation.coverageChanged.fire();
 		}
+	}
+
+	// an XML file closed that's in no workspace folder - e.g. one open when its folder was removed, or one dragged in from
+	// outside - has its results cleared: the problems, status and counts. Those of a file in the workspace stay, as it's
+	// still one to fix - until it's validated again
+	public static closed(document: vscode.TextDocument) {
+		if (document.uri.scheme === 'file' && !vscode.workspace.getWorkspaceFolder(document.uri)) {
+			SchematronValidation.clearResults(document.fileName);
+		}
+	}
+
+	// folders removed from the workspace: the results of the XML files in them that aren't open in an editor are cleared -
+	// not those of one that's open, which are cleared when it's closed (see closed)
+	public static foldersRemoved(folders: vscode.Uri[]) {
+		const prefixes = folders.map((folder) => folder.fsPath.replace(/[\\/]$/, '') + path.sep);
+		const isOpen = (file: string) => vscode.window.tabGroups.all.some((group) => group.tabs.some((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === file));
+		SchematronValidation.resultFiles().forEach((_schema, xml) => {
+			if (prefixes.some((prefix) => xml.startsWith(prefix)) && !isOpen(xml)) {
+				SchematronValidation.clearResults(xml);
+			}
+		});
 	}
 
 	// a file - or a folder, with the files in it - deleted: the results of an XML file in it, or validated with a schema

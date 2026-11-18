@@ -196,6 +196,30 @@ suite('Schematron context file', () => {
 		SchematronValidation.clearResults(file('catalog.xml'));
 	});
 
+	test('results cleared when an XML file in no workspace folder is closed - and when its folder is removed from the workspace, unless it is open', async () => {
+		const svrl = `<svrl:schematron-output xmlns:svrl="http://purl.oclc.org/dsdl/svrl"><svrl:failed-assert test="@isbn" id="isbn" location="/Q{}catalog[1]/Q{}book[1]"><svrl:text>The book has no ISBN</svrl:text></svrl:failed-assert></svrl:schematron-output>`;
+		const catalog = vscode.Uri.file(file('catalog.xml'));
+		const problems = () => vscode.languages.getDiagnostics(catalog).filter((d) => d.source?.startsWith('Schematron'));
+		// closed: the file is in no workspace folder here
+		const document = await vscode.workspace.openTextDocument(catalog);
+		await SchematronValidation.show(catalog, file('main.sch'), svrl, '#DEFAULT');
+		assert.lengthOf(problems(), 1);
+		SchematronValidation.closed(document);
+		assert.lengthOf(problems(), 0);
+		assert.isUndefined(SchematronStatus.status());
+		// its folder removed: cleared when it isn't open, kept when it is
+		await SchematronValidation.show(catalog, file('main.sch'), svrl, '#DEFAULT');
+		SchematronValidation.foldersRemoved([vscode.Uri.file(path.join(folder, 'other'))]);
+		SchematronValidation.foldersRemoved([vscode.Uri.file(folder + '-more')]);
+		assert.lengthOf(problems(), 1, 'another folder');
+		await vscode.window.showTextDocument(document);
+		SchematronValidation.foldersRemoved([vscode.Uri.file(folder)]);
+		assert.lengthOf(problems(), 1, 'open in an editor');
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		SchematronValidation.foldersRemoved([vscode.Uri.file(folder)]);
+		assert.lengthOf(problems(), 0);
+	});
+
 	test('the phase: in the status bar - the default, else the one chosen - and a click chooses another, for Quick Run, Validate and Debug', async () => {
 		const withPhases = file('phases.sch');
 		fs.writeFileSync(withPhases, `<schema ${iso} queryBinding="xslt3" defaultPhase="books">
