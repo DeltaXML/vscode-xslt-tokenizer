@@ -67,6 +67,15 @@ export class XsltNodeRules {
 	// xsl:for-each etc. (green), or only by built-in rules (amber) - the elements the hover has something for
 	private static processedDecoration: vscode.TextEditorDecorationType | undefined;
 	private static builtInDecoration: vscode.TextEditorDecorationType | undefined;
+	// for a Schematron schema's session: a neutral blue instead of the green - a rule checked the element, which isn't
+	// that it's valid, as green is taken to say (an assertion may have failed): the problems say that
+	private static checkedDecoration: vscode.TextEditorDecorationType | undefined;
+	private static forSchematron = false;
+
+	// whether the markers are those of a Schematron schema's session - blue, not green
+	public static get markersAreChecked() {
+		return XsltNodeRules.forSchematron;
+	}
 	private static decorateTimer: NodeJS.Timeout | undefined;
 
 	public static register(context: vscode.ExtensionContext, debugType: string) {
@@ -80,7 +89,8 @@ export class XsltNodeRules {
 		});
 		XsltNodeRules.processedDecoration = stripe('input-processed.svg', 'testing.coveredGutterBackground');
 		XsltNodeRules.builtInDecoration = stripe('input-built-in.svg', 'editorOverviewRuler.warningForeground');
-		context.subscriptions.push(XsltNodeRules.processedDecoration, XsltNodeRules.builtInDecoration);
+		XsltNodeRules.checkedDecoration = stripe('input-checked.svg', 'charts.blue');
+		context.subscriptions.push(XsltNodeRules.processedDecoration, XsltNodeRules.builtInDecoration, XsltNodeRules.checkedDecoration);
 		context.subscriptions.push(XsltNodeRules.changed.event(() => XsltNodeRules.decorate()));
 		context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(() => XsltNodeRules.decorate()));
 		context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((event) => {
@@ -101,7 +111,7 @@ export class XsltNodeRules {
 		context.subscriptions.push({ dispose: () => XsltNodeRules.unwatch() });
 		context.subscriptions.push(vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
 			if (event.session.type === debugType && event.event === 'xsltNodeRules') {
-				XsltNodeRules.update(event.body as NodeRulesEvent, event.session.name);
+				XsltNodeRules.update(event.body as NodeRulesEvent, event.session.name, typeof event.session.configuration.schematronFile === 'string');
 			}
 		}));
 		const inputs: vscode.DocumentSelector = { scheme: 'file' };
@@ -155,7 +165,8 @@ export class XsltNodeRules {
 	}
 
 	// the last run's, replacing the one before - the input files as they were when it ended
-	public static update(body: NodeRulesEvent, sessionName = '') {
+	public static update(body: NodeRulesEvent, sessionName = '', schematron = false) {
+		XsltNodeRules.forSchematron = schematron;
 		XsltNodeRules.rules = body.rules ?? [];
 		// an instruction only where the stylesheet has one: Saxon 13 can rewrite e.g. an xsl:for-each over
 		// current-group() as one at an instruction within it
@@ -210,12 +221,13 @@ export class XsltNodeRules {
 	private static decorate() {
 		const has = XsltNodeRules.files.size > 0;
 		vscode.commands.executeCommand('setContext', 'xslt-xpath.hasInputMapping', has);
-		if (!XsltNodeRules.processedDecoration || !XsltNodeRules.builtInDecoration) {
+		if (!XsltNodeRules.processedDecoration || !XsltNodeRules.builtInDecoration || !XsltNodeRules.checkedDecoration) {
 			return;
 		}
 		for (const editor of vscode.window.visibleTextEditors) {
 			const markers = has ? XsltNodeRules.markers(editor.document) : { processed: [], builtIn: [] };
-			editor.setDecorations(XsltNodeRules.processedDecoration, markers.processed);
+			editor.setDecorations(XsltNodeRules.processedDecoration, XsltNodeRules.forSchematron ? [] : markers.processed);
+			editor.setDecorations(XsltNodeRules.checkedDecoration, XsltNodeRules.forSchematron ? markers.processed : []);
 			editor.setDecorations(XsltNodeRules.builtInDecoration, markers.builtIn);
 		}
 	}

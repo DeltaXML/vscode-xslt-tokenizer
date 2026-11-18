@@ -216,6 +216,12 @@ suite('XSLT debugger: the template rules each input node was processed by', func
 		assert.deepStrictEqual(lines(markers.builtIn), ['5-5']);
 		// the note: no hover either
 		assert.notInclude(await hoverText(input.uri, input.positionAt(input.getText().indexOf('<note') + 1)), 'Processed by');
+		// a stylesheet's session: green, for processed. A schema's: blue, for checked - which isn't that it's valid
+		assert.isFalse(XsltNodeRules.markersAreChecked);
+		XsltNodeRules.update({ rules: [{ path: xsl, line: 3, column: 3, label: 'rule order' }], names: ['element:order'], files: {} }, 'schema', true);
+		assert.isTrue(XsltNodeRules.markersAreChecked);
+		XsltNodeRules.update({ rules: [], names: [], files: {} }, 'stylesheet');
+		assert.isFalse(XsltNodeRules.markersAreChecked);
 		// cleared: none
 		await vscode.commands.executeCommand('xslt-xpath.clearInputMapping');
 		assert.deepStrictEqual(XsltNodeRules.markers(input), { processed: [], builtIn: [] });
