@@ -126,11 +126,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// a read-only copy of a file, e.g. an older version in a source control diff, is closed when the diff is: its
 		// problems go too, not left to link to a document that's no longer shown
 		if (collection) {
-			vscode.workspace.onDidCloseTextDocument((closed) => {
-				if (closed.uri.scheme !== 'file' && closed.uri.scheme !== 'untitled') {
-					collection.delete(closed.uri);
-				}
-			});
+			vscode.workspace.onDidCloseTextDocument((closed) => XsltSymbolProvider.clearClosed(collection, closed.uri));
 			// a folder removed from the workspace: the problems of its files that aren't open in an editor go too
 			vscode.workspace.onDidChangeWorkspaceFolders((e) => XsltSymbolProvider.clearRemovedFolders(collection, e.removed.map((folder) => folder.uri)));
 		}
@@ -162,6 +158,18 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const uriString = uri.toString();
 		[...XsltSymbolProvider.documentSymbols.keys()].filter((cachedUri) => cachedUri.toString() === uriString)
 			.forEach((cachedUri) => XsltSymbolProvider.documentSymbols.delete(cachedUri));
+	}
+
+	// a closed document's problems go when it's a read-only copy, e.g. in a source control diff, or a file that's in no
+	// workspace folder - e.g. one open when its folder was removed. Those of a file in the workspace stay, as it's still
+	// one to fix
+	public static clearClosed(collection: vscode.DiagnosticCollection, uri: vscode.Uri) {
+		if (uri.scheme === 'untitled') {
+			return;
+		}
+		if (uri.scheme !== 'file' || !vscode.workspace.getWorkspaceFolder(uri)) {
+			collection.delete(uri);
+		}
 	}
 
 	// the problems of the files in the folders, e.g. removed from the workspace - except those of a file that's open in an

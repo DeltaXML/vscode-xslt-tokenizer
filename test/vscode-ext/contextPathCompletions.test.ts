@@ -189,4 +189,14 @@ suite('Problems of the files of a folder removed from the workspace', () => {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
 	});
+
+	test('a file in no workspace folder - open when its folder was removed - loses its problems when it is closed', () => {
+		const collection = vscode.languages.createDiagnosticCollection('closed-test');
+		const file = vscode.Uri.file(path.join(os.tmpdir(), 'not-in-a-workspace', 'a.xsl'));
+		collection.set(file, [new vscode.Diagnostic(new vscode.Range(0, 0, 0, 1), 'a problem')]);
+		assert.isUndefined(vscode.workspace.getWorkspaceFolder(file));
+		XsltSymbolProvider.clearClosed(collection, file);
+		assert.isFalse(collection.has(file));
+		collection.dispose();
+	});
 });
