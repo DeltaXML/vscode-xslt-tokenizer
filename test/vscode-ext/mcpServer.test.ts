@@ -291,6 +291,7 @@ suite('MCP server', function () {
 			McpRoot.allowed = () => [dir, sub];
 			const instructions = await initialize(sub);
 			assert.match(instructions ?? '', new RegExp(`^This VS Code window has 2 workspace folders: ${sub.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')} \\(where relative paths start\\) and ${dir.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}\\.`));
+			assert.include(instructions ?? '', 'lint_files with no folder checks only the first');
 			// run_configuration lists the others too
 			const configuration = text(await post({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name: 'run_configuration', arguments: {} } },
 				{ Authorization: `Bearer ${token}` }, `/mcp?root=${encodeURIComponent(sub)}`));

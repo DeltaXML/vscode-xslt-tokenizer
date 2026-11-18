@@ -44,7 +44,8 @@ export class McpRoot {
 	public static instructions(): string | undefined {
 		const [root, ...others] = McpRoot.folders();
 		return root ? `This VS Code window has ${others.length + 1} workspace folders: ${root} (where relative paths start) and ${others.join(', ')}. ` +
-			'The tools can check files in all of them: give an absolute path for a file that\'s not in the first.' : undefined;
+			'The tools can check files in all of them: give an absolute path for a file that\'s not in the first. lint_files with no folder checks only ' +
+			'the first - to check every folder, call it for each.' : undefined;
 	}
 
 	// the server's URL for a project's folder

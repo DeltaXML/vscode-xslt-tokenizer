@@ -248,7 +248,8 @@ export class XsltMcpServer {
 			title: 'Lint the XSLT and XSpec files in a folder',
 			description: 'The problems in each XSLT module and XSpec file in a folder and its subfolders, as lint_file finds them - only the files ' +
 				'with problems are listed, after a summary. XSpec\'s generated test runners (xspec/*-compiled.xsl), node_modules, hidden ' +
-				'folders such as .git (unless the pattern names one) and the files.exclude setting\'s files aren\'t checked.',
+				'folders such as .git (unless the pattern names one) and the files.exclude setting\'s files aren\'t checked. In a window with several ' +
+				'workspace folders, the folder not given is the project\'s folder alone: to check the others too, call it for each folder.',
 			inputSchema: {
 				folder: z.string().optional().describe('The folder: absolute, or relative to the project\'s folder - the project\'s folder, if not given'),
 				pattern: z.string().optional().describe('A glob pattern for the files, relative to the folder - default **/*.{xsl,xslt,xspec}'),
