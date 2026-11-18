@@ -113,8 +113,11 @@ suite('XSLT packages: analysing a library as a package', () => {
 </xsl:stylesheet>`);
 		const user = file('context/user.xsl', `<xsl:stylesheet ${ns}><xsl:import href="lib.xsl"/></xsl:stylesheet>`);
 		await ImportIndex.instance.buildFrom([lib, user]);
+		const untitledBefore = vscode.workspace.textDocuments.filter((d) => d.isUntitled).length;
 		const result = await PackageConversion.analyse(lib) as ConversionAnalysis;
 		assert.sameMembers(result.items.filter((i) => i.section === 'blockers').map((i) => i.subject), ['variable $c:a', 'variable $c:b', 'variable $c:c', 'variable $c:d', 'variable $c:e']);
+		// the check doesn't leave an unsaved 'Untitled' document behind
+		assert.equal(vscode.workspace.textDocuments.filter((d) => d.isUntitled).length, untitledBefore);
 		await ImportIndex.instance.buildFrom([common, util, main]);
 	});
 });

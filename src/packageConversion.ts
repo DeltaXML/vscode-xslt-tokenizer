@@ -20,6 +20,7 @@ import { XdocNotes } from './xdocNote';
 import { HrefPaths } from './hrefPaths';
 import { PackageEdits, TextEdit } from './packageEdits';
 import { PackageScope } from './packageScope';
+import { CodeActionDocument } from './codeActionDocument';
 
 // a line of a module (0-based) - and the offset of the element there, where it's known
 export interface Place {
@@ -1005,7 +1006,8 @@ export class PackageConversion {
 			ranges.push({ variable, start, end: lines.join('\n').split('\n').length - 1 });
 		});
 		lines.push(`</${RecordTypes.xsltQName(xsl, 'stylesheet')}>`);
-		const document = await vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'xslt' });
+		// not an editor document: opening one would leave an unsaved 'Untitled' file for each analysis
+		const document = new CodeActionDocument(vscode.Uri.file(scan.path), lines.join('\n'));
 		const lexer = new XslLexer(XSLTConfiguration.configuration);
 		lexer.provideCharLevelState = true;
 		const tokens = lexer.analyse(document.getText());
