@@ -14,6 +14,7 @@ import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { XSLTCodeActions } from '../../src/xsltCodeActions';
 import { PackageCodeLensProvider } from '../../src/packageCodeLens';
+import { PackageScope } from '../../src/packageScope';
 import { PackageNavigationProvider } from '../../src/packageNavigation';
 import { XSLTReferenceProvider } from '../../src/xsltReferenceProvider';
 import { ImportIndex } from '../../src/importIndex';
@@ -616,9 +617,16 @@ suite('XSLT packages: overrides in code lenses and hover', () => {
 
 	test('a package component\'s lens shows the declarations in the workspace that override it', async () => {
 		const lenses = new PackageCodeLensProvider().provideCodeLenses(await open(p));
-		assert.deepEqual(lenses.map((l) => [l.range.start.line, l.command?.title]), [[1, 'overridden in 1 module']]);
-		const [, , locations] = lenses[0].command!.arguments as [vscode.Uri, vscode.Position, vscode.Location[]];
+		assert.deepEqual(lenses.map((l) => [l.range.start.line, l.command?.title]), [[0, 'used by 1 module - check for problems'], [1, 'overridden in 1 module']]);
+		const [, , locations] = lenses[1].command!.arguments as [vscode.Uri, vscode.Position, vscode.Location[]];
 		assert.deepEqual(locations.map((l) => [l.uri.fsPath, l.range.start.line]), [[user, 3]]);
+	});
+
+	test('the package\'s lens checks the modules that use it - with what they import or include', async () => {
+		const lenses = new PackageCodeLensProvider().provideCodeLenses(await open(p));
+		assert.strictEqual(lenses[0].command?.command, 'xslt-xpath.checkPackageUsers');
+		assert.strictEqual((lenses[0].command!.arguments![0] as vscode.Uri).fsPath, p);
+		assert.deepEqual(PackageScope.usersOf(p), [user]);
 	});
 
 	test('Go to Implementations: from a package component, or a reference to it, to the declarations overriding it', async () => {

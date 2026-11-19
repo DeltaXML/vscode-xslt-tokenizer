@@ -456,6 +456,11 @@
 				"category": "XSLT"
 			},
 			{
+				"command": "xslt-xpath.checkPackageUsers",
+				"title": "Check Modules Using Package",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.clearWorkspaceCheckProblems",
 				"title": "Clear Workspace Check Problems",
 				"category": "XSLT"
@@ -828,6 +833,10 @@
 				{
 					"command": "xslt-xpath.checkFolderProblems",
 					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.checkPackageUsers",
+					"when": "editorLangId == xslt"
 				},
 				{
 					"command": "xslt-xpath.quickRunModule",

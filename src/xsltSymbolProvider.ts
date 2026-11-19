@@ -1584,12 +1584,24 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		};
 		const result = diagnostics.concat(PackageScope.modeProblems(text, prefixBindings, importedGlobals).map((problem) =>
 			withFixes(new vscode.Diagnostic(new vscode.Range(document.positionAt(problem.offset), document.positionAt(problem.offset + problem.length)), problem.message, vscode.DiagnosticSeverity.Error), problem.fixes)));
-		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(text, globalInstructionData, []);
-		if (documentUsePackages.length === 0) {
-			return result;
-		}
+		const { documentUsePackages, documentBindings, all } = PackageScope.usePackagesOf(text, globalInstructionData, importedGlobals);
 		const bindings = prefixBindings ?? documentBindings;
 		const workspace = PackageScope.workspaceFolder();
+		// a reference to a private component of a package the module can use - its own xsl:use-package, or that of the
+		// stylesheet that imports or includes it: not found, as it isn't visible - e.g. once its visibility is narrowed
+		const privates = all.length > 0 ? PackageScope.privatesOf(all, bindings, xsltPackages, workspace) : [];
+		const withPrivates = (diagnostic: vscode.Diagnostic) => {
+			const hidden = privates.find((p) => XsltSymbolProvider.isReferenceTo(diagnostic.message, p));
+			if (!hidden) {
+				return diagnostic;
+			}
+			const label = hidden.kind === 'function' ? `${hidden.name}#${hidden.arity}` : hidden.kind === 'variable' ? '$' + hidden.name : hidden.name;
+			const message = `The ${hidden.kind === 'attribute-set' ? 'attribute set' : hidden.kind} ${label} is private in package '${hidden.packageName}', so it can't be used here - it must be public in the package`;
+			return withFixes(new vscode.Diagnostic(diagnostic.range, message, vscode.DiagnosticSeverity.Error), hidden.fix ? [hidden.fix] : []);
+		};
+		if (documentUsePackages.length === 0) {
+			return privates.length > 0 ? result.map(withPrivates) : result;
+		}
 		// XTSE3008: in a module that's imported - directly, or through xsl:include - as Saxon reports it
 		const importer = document.uri.scheme === 'file' && ImportIndex.isEnabled() && ImportIndex.instance.built ? XsltSymbolProvider.importerOf(document.fileName) : undefined;
 		if (importer) {
@@ -1601,19 +1613,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			});
 		}
 		const abstracts = PackageScope.abstractsOf(text, documentUsePackages, bindings, xsltPackages, workspace);
-		const privates = PackageScope.privatesOf(documentUsePackages, bindings, xsltPackages, workspace);
 		const declarations = globalInstructionData.filter((g) => PackageScope.componentKind(g.type) !== undefined);
 		return result.map((diagnostic) => {
 			const abstract = abstracts.find((a) => XsltSymbolProvider.isReferenceTo(diagnostic.message, a));
 			if (!abstract) {
-				// a reference to a private component of the package: not found, as it isn't visible - e.g. once narrowed
-				const hidden = privates.find((p) => XsltSymbolProvider.isReferenceTo(diagnostic.message, p));
-				if (!hidden) {
-					return diagnostic;
-				}
-				const label = hidden.kind === 'function' ? `${hidden.name}#${hidden.arity}` : hidden.kind === 'variable' ? '$' + hidden.name : hidden.name;
-				const message = `The ${hidden.kind === 'attribute-set' ? 'attribute set' : hidden.kind} ${label} is private in package '${hidden.packageName}', so it can't be used here - it must be public in the package`;
-				return withFixes(new vscode.Diagnostic(diagnostic.range, message, vscode.DiagnosticSeverity.Error), hidden.fix ? [hidden.fix] : []);
+				return withPrivates(diagnostic);
 			}
 			const label = abstract.kind === 'function' ? `${abstract.name}#${abstract.arity}` : abstract.kind === 'variable' ? '$' + abstract.name : abstract.name;
 			const message = `The abstract ${abstract.kind === 'attribute-set' ? 'attribute set' : abstract.kind} ${label} of package '${abstract.packageName}' isn't overridden, so it can't be used here - override it in the xsl:use-package`;

@@ -12,6 +12,7 @@ import { WorkspaceCheck } from '../../src/workspaceCheck';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { XsltPackages } from '../../src/xsltPackages';
+import { ImportIndex } from '../../src/importIndex';
 
 suite('Check Problems in Workspace', function () {
 	this.timeout(30000);
@@ -105,5 +106,35 @@ suite('Check Problems in Workspace', function () {
 		assert.isAbove(check.results.length, 0);
 		check.clear();
 		assert.deepEqual(check.results, []);
+	});
+
+	test('Check Modules Using Package: the modules that use it, and those they include - not other stylesheets', async () => {
+		const qns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:q="urn:q" version="3.0"';
+		const q = file('q/q.xsl', `<xsl:package name="urn:q" package-version="1.0" ${qns}>
+  <xsl:function name="q:hidden" visibility="private"><xsl:sequence select="1"/></xsl:function>
+</xsl:package>`);
+		const top = file('q/top.xsl', `<xsl:stylesheet ${qns}>
+  <xsl:use-package name="urn:q" package-version="1.0"/>
+  <xsl:include href="part.xsl"/>
+</xsl:stylesheet>`);
+		const part = file('q/part.xsl', `<xsl:stylesheet ${qns}>
+  <xsl:template name="main"><xsl:sequence select="q:hidden()"/></xsl:template>
+</xsl:stylesheet>`);
+		const unrelated = file('q/unrelated.xsl', `<xsl:stylesheet ${qns}>
+  <xsl:template name="main"><xsl:sequence select="q:missing()"/></xsl:template>
+</xsl:stylesheet>`);
+		XsltPackages.additional = [{ name: 'urn:p', path: pkg, version: '1.0' }, { name: 'urn:q', path: q, version: '1.0' }];
+		await ImportIndex.instance.buildFrom([q, top, part, unrelated]);
+		try {
+			check.clear();
+			assert.strictEqual(await check.checkPackageUsers(vscode.Uri.file(q), false), 2);
+			assert.deepEqual(check.results.map(([uri]) => uri.fsPath), [part]);
+			assert.match(resultFor(part)![0].message, /^The function q:hidden#0 is private in package 'urn:q'/);
+			assert.isUndefined(resultFor(unrelated));
+			// a module that isn't a package: nothing to check
+			assert.strictEqual(await check.checkPackageUsers(vscode.Uri.file(top), false), 0);
+		} finally {
+			[q, top, part, unrelated].forEach((f) => ImportIndex.instance.setReferences(f, []));
+		}
 	});
 });

@@ -809,6 +809,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(workspaceCheck,
 		vscode.commands.registerCommand('xslt-xpath.checkWorkspaceProblems', () => workspaceCheck.check()),
 		vscode.commands.registerCommand('xslt-xpath.checkFolderProblems', (folder?: vscode.Uri) => workspaceCheck.check(folder)),
+		vscode.commands.registerCommand('xslt-xpath.checkPackageUsers', (packageModule?: vscode.Uri) => workspaceCheck.checkPackageUsers(packageModule)),
 		vscode.commands.registerCommand('xslt-xpath.clearWorkspaceCheckProblems', () => workspaceCheck.clear()));
 	const mcpDefinitions = new XsltMcpDefinitionProvider(mcpServer);
 	context.subscriptions.push(vscode.lm.registerMcpServerDefinitionProvider(XsltMcpServer.providerId, mcpDefinitions));

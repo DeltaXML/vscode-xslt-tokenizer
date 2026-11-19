@@ -313,6 +313,22 @@ export class PackageScope {
 		return components.map((component) => ({ component, overrides: overrides.filter((o) => PackageScope.overrides(o.declaration, component)) }));
 	}
 
+	// for the module of a package (its xsl:package module): the modules in the workspace that use it with xsl:use-package -
+	// those whose name and version find this package - from the index
+	public static usersOf(packagePath: string): string[] {
+		const module = PackageScope.module(packagePath);
+		const declaration = module ? ImportIndex.packageDeclaration(module.text) : undefined;
+		if (!module || !declaration || !ImportIndex.isEnabled()) {
+			return [];
+		}
+		const packages = XsltPackages.all();
+		const workspace = PackageScope.workspaceFolder();
+		return ImportIndex.instance.usersOf(declaration.name).filter((user) => (PackageScope.module(user)?.data ?? []).some((g) => {
+			const found = g.type === GlobalInstructionType.UsePackage && g.name === declaration.name ? XsltPackages.find(packages, g.name, g.version) : undefined;
+			return found !== undefined && HrefPaths.settingsPath(found.path, workspace ?? path.dirname(packagePath)) === packagePath;
+		}));
+	}
+
 	// for the name of a public or abstract component of a package (the module at packagePath) at the position, the
 	// declarations in the workspace that override it - undefined if the position isn't on one
 	public static overridersAt(packagePath: string, position: { line: number, character: number }) {
