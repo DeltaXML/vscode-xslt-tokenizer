@@ -446,6 +446,21 @@
 				"icon": "$(package)"
 			},
 			{
+				"command": "xslt-xpath.checkWorkspaceProblems",
+				"title": "Check Problems in Workspace",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.checkFolderProblems",
+				"title": "Check Problems in Folder",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.clearWorkspaceCheckProblems",
+				"title": "Clear Workspace Check Problems",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.convertToPackage",
 				"title": "Convert to Package...",
 				"category": "XSLT",
@@ -785,6 +800,13 @@
 					"group": "xslt@1"
 				}
 			],
+			"explorer/context": [
+				{
+					"command": "xslt-xpath.checkFolderProblems",
+					"when": "explorerResourceIsFolder",
+					"group": "xslt@1"
+				}
+			],
 			"view/item/context": [
 				{
 					"command": "xslt-xpath.quickRunModule",
@@ -803,6 +825,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "xslt-xpath.checkFolderProblems",
+					"when": "false"
+				},
 				{
 					"command": "xslt-xpath.quickRunModule",
 					"when": "false"
@@ -1106,6 +1132,11 @@
 					"type": "boolean",
 					"default": false,
 					"markdownDescription": "Allow XSLT 4.0 named item types (`xsl:item-type`, with `record(...)` and `enum(...)` types, also in `as` attributes) and `xsl:note` in stylesheets for XSLT 3.0 and earlier. Requires Saxon PE or EE 12.8 or later, run with syntax extensions (the `--allowSyntaxExtensions:on` option). Other XSLT 4.0 features still need `version=\"4.0\"`."
+				},
+				"XSLT.workspaceCheck.includeWarnings": {
+					"type": "boolean",
+					"default": false,
+					"markdownDescription": "**Check Problems in Workspace** and **Check Problems in Folder** show warnings too, as well as errors, for the files that aren't open"
 				},
 				"XSLT.resources.catalog": {
 					"type": "string",

@@ -92,6 +92,7 @@ import { XsltProfileView, XsltProfileCodeLensProvider, ProfileRow, ProfileRun, s
 import { XsltProfileTimeline } from './xsltProfileTimeline';
 import { TimelineCommands } from './timelineCommands';
 import { XsltMcpDefinitionProvider, XsltMcpServer } from './mcp/xsltMcpServer';
+import { WorkspaceCheck } from './workspaceCheck';
 import { ClaudeCodeSetup, ClaudeScope } from './mcp/claudeCodeSetup';
 import { McpRoot } from './mcp/mcpRoot';
 
@@ -803,6 +804,12 @@ export function activate(context: vscode.ExtensionContext) {
 		problems: (document, topLevel) => mcpSymbolProvider(document)?.diagnosticsFor(document, topLevel),
 		declarations: (document, topLevel) => mcpSymbolProvider(document)?.declarationsFor(document, topLevel)
 	}, context.workspaceState);
+	// the problems of the files that aren't open, in the workspace or a folder - checked as the MCP tool lint_files does
+	const workspaceCheck = new WorkspaceCheck((document) => mcpSymbolProvider(document)?.diagnosticsFor(document));
+	context.subscriptions.push(workspaceCheck,
+		vscode.commands.registerCommand('xslt-xpath.checkWorkspaceProblems', () => workspaceCheck.check()),
+		vscode.commands.registerCommand('xslt-xpath.checkFolderProblems', (folder?: vscode.Uri) => workspaceCheck.check(folder)),
+		vscode.commands.registerCommand('xslt-xpath.clearWorkspaceCheckProblems', () => workspaceCheck.clear()));
 	const mcpDefinitions = new XsltMcpDefinitionProvider(mcpServer);
 	context.subscriptions.push(vscode.lm.registerMcpServerDefinitionProvider(XsltMcpServer.providerId, mcpDefinitions));
 	// started for this window's workspace, at its port (see XsltMcpServer.start): when that's another than the last time -

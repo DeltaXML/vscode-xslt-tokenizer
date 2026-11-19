@@ -178,7 +178,9 @@ suite('XSLT debugger: from the output to its source', () => {
 		const contributes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8')).contributes;
 		const knownMenus = ['editor/context', 'editor/title', 'editor/title/run', 'view/title', 'view/item/context', 'commandPalette', 'debug/toolBar', 'debug/variables/context',
 			// the clear-timeline commands (see TimelineCommands)
-			'timeline/title', 'timeline/item/context'];
+			'timeline/title', 'timeline/item/context',
+			// Check Problems in Folder (see WorkspaceCheck)
+			'explorer/context'];
 		const submenus = (contributes.submenus ?? []).map((s: { id: string }) => s.id);
 		assert.deepEqual(Object.keys(contributes.menus).filter((id) => !knownMenus.includes(id) && !submenus.includes(id)), []);
 		assert.deepEqual(contributes.menus['debug/toolBar'], [{ command: 'xslt-xpath.showDebugOutput', when: 'debugType == \'xslt-saxon\'' }]);

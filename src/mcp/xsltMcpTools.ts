@@ -208,7 +208,7 @@ export class XsltMcpTools {
 	// the folders and files lint_files leaves out, within the folder: node_modules, XSpec's generated test runners, hidden
 	// folders such as .git or .vscode-test - unless the pattern names one - and the files.exclude setting's patterns
 	// (findFiles doesn't apply files.exclude when given an exclude pattern)
-	private static lintExcludes(base: string, pattern: string) {
+	public static lintExcludes(base: string, pattern: string) {
 		const excludes = ['**/node_modules/**', '**/xspec/*-compiled.xsl'];
 		if (!/(^|\/)\./.test(pattern)) {
 			excludes.push('**/.*/**');
