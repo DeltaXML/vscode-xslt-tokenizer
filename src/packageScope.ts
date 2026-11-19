@@ -56,10 +56,21 @@ export interface PackageProblem {
 	fixes?: PackageFix[];
 }
 
-// a fix: edits of the module's text (see PackageEdits)
+// a fix: edits of the module's text (see PackageEdits) - or, with a path, of that file's, e.g. a module of the package
 export interface PackageFix {
 	title: string;
 	edits: TextEdit[];
+	path?: string;
+}
+
+// a private component of a used package, which the module can't refer to - named with the module's prefixes, as it's
+// referred to - with a fix that makes it public in the package, where the visibility is on its declaration
+export interface PrivateComponent {
+	kind: string;
+	name: string;
+	arity?: number;
+	packageName: string;
+	fix?: PackageFix;
 }
 
 // an abstract component of a used package that the module doesn't override - named with the module's prefixes, as
@@ -348,6 +359,26 @@ export class PackageScope {
 		return usePackages.flatMap((usePackage) => {
 			const used = PackageScope.usedPackage(usePackage, xsltPackages, workspace, 0, new Set(), true);
 			return used ? PackageScope.abstractComponents(text, usePackage, used.abstracts, moduleBindings) : [];
+		});
+	}
+
+	// the private functions, templates, variables and attribute sets of the packages the module uses - for a reference
+	// to one, which isn't found, to be reported as private, e.g. after its visibility is narrowed. The fix sets
+	// visibility="public" on its declaration in the package - one it declares itself, not one it accepts from another
+	public static privatesOf(usePackages: GlobalInstructionData[], moduleBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[], workspace: string | undefined): PrivateComponent[] {
+		const kinds = ['function', 'template', 'variable', 'attribute-set'];
+		return usePackages.flatMap((usePackage) => {
+			const used = PackageScope.usedPackage(usePackage, xsltPackages, workspace, 0, new Set(), true);
+			return (used?.all ?? []).filter((c) => c.packageVisibility === 'private' && kinds.includes(PackageScope.componentKind(c.type) ?? '')).map((component) => {
+				const kind = PackageScope.componentKind(component.type)!;
+				const name = ModulePrefixes.nameIn(component, moduleBindings);
+				const module = component.href && component.packageName === usePackage.name ? PackageScope.module(component.href) : undefined;
+				const declared = module?.data.some((g) => g.token.line === component.token.line && g.token.startCharacter === component.token.startCharacter);
+				const tagStart = module && declared ? module.text.lastIndexOf('<', XdocNotes.offsetAt(module.text, component.token.line, component.token.startCharacter)) : -1;
+				const edit = module && tagStart >= 0 ? PackageEdits.withAttributes(module.text, RecordTypes.blankMarkup(module.text), tagStart, [['visibility', 'public']]) : undefined;
+				const fix = edit ? { title: `Make ${PackageScope.label(component, moduleBindings)} public in package '${usePackage.name}'`, edits: [edit], path: module!.path } : undefined;
+				return { kind, name, arity: kind === 'function' ? component.idNumber : undefined, packageName: usePackage.name, fix };
+			});
 		});
 	}
 

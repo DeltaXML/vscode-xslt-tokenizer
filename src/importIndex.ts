@@ -151,6 +151,21 @@ export class ImportIndex {
 		return [...this.packageDeclarations].map(([path, declaration]) => ({ path, ...declaration }));
 	}
 
+	// the package a module declares, if it's an xsl:package module: from the index, for a file in it - else from the
+	// file's text, as open in an editor, else as saved - undefined for a file that isn't found
+	public static packageOf(file: string): { name: string; version: string } | undefined {
+		const normalized = path.normalize(file);
+		if (ImportIndex.instance.has(normalized)) {
+			return ImportIndex.instance.packageDeclarations.get(normalized);
+		}
+		const open = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'file' && path.normalize(d.uri.fsPath) === normalized);
+		try {
+			return ImportIndex.packageDeclaration(open ? open.getText() : fs.readFileSync(normalized, 'utf8'));
+		} catch {
+			return undefined;
+		}
+	}
+
 	// the packages the module uses - with xsl:use-package
 	public usedPackagesOf(file: string): UsedPackage[] {
 		return this.usedPackages.get(file) ?? [];

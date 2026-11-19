@@ -99,6 +99,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static documentSymbols = new Map<vscode.Uri, vscode.DocumentSymbol[]>();
 	private importHrefs: Map<string, string[]> = new Map();
 	public static importSymbolHrefs: Map<string, string[]> = new Map();
+	// the imports added for a module's parent stylesheet, which aren't in the module: not checked as its own are
+	private static parentImports = new WeakSet<GlobalInstructionData>();
 	private static readonly useSourceFile: UseSource = <UseSource>vscode.workspace.getConfiguration('XSLT.resources').get('useSourceFile');
 	// the declarations imported by each document, by its URI, when it was last checked
 	private importedGlobalsByDocument = new Map<string, GlobalInstructionData[]>();
@@ -275,6 +277,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					const problem = HrefPaths.importProblem(data.name, document.fileName);
 					if (problem) {
 						importErrors.push({ data, problem });
+					} else if (this.docType !== DocumentTypes.XSPEC && !XsltSymbolProvider.parentImports.has(data)) {
+						// XTSE0165: an xsl:package module can't be imported or included - as Saxon reports it
+						const target = HrefPaths.toPath(data.name, document.fileName);
+						const pkg = target ? ImportIndex.packageOf(target) : undefined;
+						if (pkg) {
+							const imported = data.type === GlobalInstructionType.Import ? 'imported' : 'included';
+							importErrors.push({ data, problem: { message: `XTSE0165: '${data.name}' is the xsl:package '${pkg.name}', so it can't be ${imported} - use it with xsl:use-package`, warning: false } });
+						}
 					}
 				} else if (data.type === GlobalInstructionType.UsePackage && packagesKnown && !XsltPackages.find(xsltPackages, data.name, data.version)) {
 					packageErrors.push(data);
@@ -470,6 +480,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				idNumber: 0
 			};
 
+			XsltSymbolProvider.parentImports.add(importInstruction);
 			globalInstructionData.push(importInstruction);
 		}
 		// XSpec: the utilities XSpec includes in every XSLT test runner - their functions and variables, e.g. x:UQName()
@@ -1590,11 +1601,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			});
 		}
 		const abstracts = PackageScope.abstractsOf(text, documentUsePackages, bindings, xsltPackages, workspace);
+		const privates = PackageScope.privatesOf(documentUsePackages, bindings, xsltPackages, workspace);
 		const declarations = globalInstructionData.filter((g) => PackageScope.componentKind(g.type) !== undefined);
 		return result.map((diagnostic) => {
 			const abstract = abstracts.find((a) => XsltSymbolProvider.isReferenceTo(diagnostic.message, a));
 			if (!abstract) {
-				return diagnostic;
+				// a reference to a private component of the package: not found, as it isn't visible - e.g. once narrowed
+				const hidden = privates.find((p) => XsltSymbolProvider.isReferenceTo(diagnostic.message, p));
+				if (!hidden) {
+					return diagnostic;
+				}
+				const label = hidden.kind === 'function' ? `${hidden.name}#${hidden.arity}` : hidden.kind === 'variable' ? '$' + hidden.name : hidden.name;
+				const message = `The ${hidden.kind === 'attribute-set' ? 'attribute set' : hidden.kind} ${label} is private in package '${hidden.packageName}', so it can't be used here - it must be public in the package`;
+				return withFixes(new vscode.Diagnostic(diagnostic.range, message, vscode.DiagnosticSeverity.Error), hidden.fix ? [hidden.fix] : []);
 			}
 			const label = abstract.kind === 'function' ? `${abstract.name}#${abstract.arity}` : abstract.kind === 'variable' ? '$' + abstract.name : abstract.name;
 			const message = `The abstract ${abstract.kind === 'attribute-set' ? 'attribute set' : abstract.kind} ${label} of package '${abstract.packageName}' isn't overridden, so it can't be used here - override it in the xsl:use-package`;
@@ -1629,7 +1648,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	// whether a diagnostic's message is for a reference to the component that isn't found
-	private static isReferenceTo(message: string, component: AbstractComponent) {
+	private static isReferenceTo(message: string, component: { kind: string, name: string, arity?: number }) {
 		const match = (pattern: RegExp) => pattern.exec(message);
 		switch (component.kind) {
 			case 'function': {

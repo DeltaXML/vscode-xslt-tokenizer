@@ -962,7 +962,7 @@ suite('XSpec', () => {
 
 		test('its public functions can be used, not its private ones', async () => {
 			assert.deepEqual(await problems(helper()), []);
-			assert.deepEqual(await problems(helper().replace('h:triple(1)', 'h:hidden()')), ['XPath: Function: \'h:hidden\' with 0 arguments not found']);
+			assert.deepEqual(await problems(helper().replace('h:triple(1)', 'h:hidden()')), ['The function h:hidden#0 is private in package \'urn:helper-pkg\', so it can\'t be used here - it must be public in the package']);
 		});
 
 		test('completion of the package names and versions, its hover, and Go to Definition', async () => {
