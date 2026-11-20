@@ -94,6 +94,7 @@ import { TimelineCommands } from './timelineCommands';
 import { XsltMcpDefinitionProvider, XsltMcpServer } from './mcp/xsltMcpServer';
 import { WorkspaceCheck } from './workspaceCheck';
 import { ClaudeCodeSetup, ClaudeScope } from './mcp/claudeCodeSetup';
+import { ClaudeSkill } from './mcp/claudeSkill';
 import { McpRoot } from './mcp/mcpRoot';
 
 
@@ -821,6 +822,15 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		mcpDefinitions.refresh();
+		// the skill, if it was installed by the set-up command: brought up to date with this version of the extension
+		try {
+			const skill = ClaudeSkill.refresh(context.extensionUri);
+			if (skill.status === 'updated') {
+				XsltMcpServer.log.info(`The xslt-xpath skill for Claude Code is updated: ${skill.path}`);
+			}
+		} catch (e: any) {
+			XsltMcpServer.log.warn(`The xslt-xpath skill for Claude Code couldn't be updated: ${e?.message ?? e}`);
+		}
 		const folders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === 'file').map((folder) => folder.uri.fsPath);
 		if (folders.length > 0 && mcpServer.url && mcpServer.previousPort !== mcpServer.port) {
 			const { updated, result } = await ClaudeCodeSetup.update(mcpServer.url, await mcpServer.getToken(), folders, false, folders.length > 1);
@@ -888,7 +898,17 @@ export function activate(context: vscode.ExtensionContext) {
 		const setUpUrl = folder && multiRoot ? McpRoot.urlFor(url, folder.uri.fsPath) : url;
 		const result = await ClaudeCodeSetup.setUp(setUpUrl, await mcpServer.getToken(), choice.scope, folder?.uri.fsPath);
 		if (result.ok) {
-			vscode.window.showInformationMessage(`Claude Code is set up to use the XSLT/XPath MCP server${folder ? ` in ${folder.name}` : ' in all projects'}. Start a new Claude Code session to use it: a session already running keeps its old settings.${multiRoot && folder ? ' For another of the workspace\'s folders, run this command again and choose it.' : ''}`);
+			// with the skill that says how to use its tools - for all projects: it only applies where the server is connected
+			let skillText = '';
+			try {
+				const skill = ClaudeSkill.install(context.extensionUri);
+				skillText = skill.status === 'modified' ? ` The xslt-xpath skill at ${skill.path} was edited, so it was left as it is.` :
+					skill.status === 'current' ? '' : ` The xslt-xpath skill is ${skill.status === 'updated' ? 'updated' : 'installed'} in ${path.dirname(skill.path)}.`;
+			} catch (e: any) {
+				XsltMcpServer.log.warn(`The xslt-xpath skill for Claude Code couldn't be installed: ${e?.message ?? e}`);
+				skillText = ' The xslt-xpath skill couldn\'t be installed - see the XSLT MCP Server output.';
+			}
+			vscode.window.showInformationMessage(`Claude Code is set up to use the XSLT/XPath MCP server${folder ? ` in ${folder.name}` : ' in all projects'}.${skillText} Start a new Claude Code session to use it: a session already running keeps its old settings.${multiRoot && folder ? ' For another of the workspace\'s folders, run this command again and choose it.' : ''}`);
 		} else {
 			XsltMcpServer.log.error(`claude mcp add failed: ${result.output}`);
 			await copyClaudeCommand(setUpUrl, choice.scope, result.notFound ? 'Claude Code\'s \'claude\' command wasn\'t found.' : `Claude Code couldn't set up the server: ${result.output}`);
