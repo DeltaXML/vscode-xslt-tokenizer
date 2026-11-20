@@ -57,7 +57,8 @@
 		"onCommand:workbench.action.tasks.runTask",
 		"onDebugResolve:xslt-saxon",
 		"onDebugDynamicConfigurations:xslt-saxon",
-		"onDebugInitialConfigurations"
+		"onDebugInitialConfigurations",
+		"workspaceContains:**/*.{xsl,xslt,xspec,sch}"
 	],
 	"license": "MIT",
 	"main": "./out/src/extension.js",
