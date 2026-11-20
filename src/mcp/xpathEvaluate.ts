@@ -27,6 +27,11 @@ export type XPathToolResult = { content: { type: 'text', text: string }[], isErr
 // XPath', in a Java process of its own, so that a query in the editor can't stop an assistant's, or the reverse
 export class XPathEvaluate {
 	private readonly server = new XPathQueryServer();
+	// the longest an expression may take: then Saxon's process is stopped, and the next request starts another
+	public static timeoutMs = 30000;
+	// a request waits for the one before it: the process runs one at a time, and stops the one running when another comes -
+	// but an assistant sends several at once
+	private queue: Promise<unknown> = Promise.resolve();
 
 	public constructor(private readonly extensionUri: vscode.Uri) {
 	}
@@ -41,7 +46,14 @@ export class XPathEvaluate {
 
 	// xpathVersion: 4.0 by default - or 3.1, with Saxon-HE, which can't evaluate 4.0 (the result says so)
 	// xpathDefaultNamespace: as a stylesheet's xpath-default-namespace, for unprefixed element names - not the document's
-	public async evaluate(xpath: string, xmlPath: string, xpathVersion?: XPathVersionNumber, xpathDefaultNamespace?: string): Promise<XPathToolResult> {
+	public evaluate(xpath: string, xmlPath: string, xpathVersion?: XPathVersionNumber, xpathDefaultNamespace?: string): Promise<XPathToolResult> {
+		const run = () => this.evaluateNow(xpath, xmlPath, xpathVersion, xpathDefaultNamespace);
+		const result = this.queue.then(run, run);
+		this.queue = result.catch(() => undefined);
+		return result;
+	}
+
+	private async evaluateNow(xpath: string, xmlPath: string, xpathVersion?: XPathVersionNumber, xpathDefaultNamespace?: string): Promise<XPathToolResult> {
 		const saxonJar = unquotedPath(vscode.workspace.getConfiguration('XSLT.tasks').get<string>('saxonJar'));
 		if (!saxonJar) {
 			return XPathEvaluate.text('The XSLT.tasks.saxonJar setting - the path of a Saxon jar - isn\'t set, so XPath can\'t be evaluated', true);
@@ -59,14 +71,24 @@ export class XPathEvaluate {
 		const version = xpathVersion ?? (SaxonTaskProvider.isSaxonHE(saxonJar) ? '3.1' : '4.0');
 		const { args, folder: javaFolder } = XPathQuery.javaArguments(this.extensionUri, saxonJar);
 		let result: XPathQueryResult;
+		let timer: NodeJS.Timeout | undefined;
 		try {
-			result = await this.server.request(XsltDebug.javaCommand, args, javaFolder,
+			const timeout = new Promise<never>((_resolve, reject) => {
+				timer = setTimeout(() => {
+					// the reason first: stopping Saxon's process - an expression that doesn't end would hold it for good - fails the request
+					reject(new Error(`the expression took more than ${Math.round(XPathEvaluate.timeoutMs / 1000)} seconds, so it was stopped - use a simpler expression, or one that reads less`));
+					this.server.dispose();
+				}, XPathEvaluate.timeoutMs);
+			});
+			result = await Promise.race([timeout, this.server.request(XsltDebug.javaCommand, args, javaFolder,
 				{ xpath: expression, xml, systemId: uri.toString(), namespaces, xpathVersion: version, xpathDefaultNamespace,
 					// an assistant's expression, as it's for a stylesheet: no extension functions (Java, EXPath), no collection(), and
 					// only files in the workspace folders - and the XML file's folder - for doc() and unparsed-text()
-					sandbox: true, roots: [...new Set([...McpRoot.allowed(), ...(folder ? [folder] : []), path.dirname(resolved)])] });
+					sandbox: true, roots: [...new Set([...McpRoot.allowed(), ...(folder ? [folder] : []), path.dirname(resolved)])] })]);
 		} catch (e: any) {
 			return XPathEvaluate.text(`Saxon couldn't be run: ${e?.message ?? e}`, true);
+		} finally {
+			clearTimeout(timer);
 		}
 		const note = result.xpathVersion && result.xpathVersion !== version ?
 			`\n(Evaluated as XPath ${result.xpathVersion}: XPath ${version} needs Saxon-PE or Saxon-EE)` : '';

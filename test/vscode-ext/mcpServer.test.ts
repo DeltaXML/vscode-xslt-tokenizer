@@ -540,6 +540,21 @@ suite('MCP server', function () {
 			}
 			assert.match((await evaluator.evaluate("unparsed-text('inside.txt')", data, '3.1')).content[0].text, /inside text/, 'a file beside the XML file is read');
 			fs.rmSync(others, { recursive: true, force: true });
+			// several at once, as an assistant sends them: each is answered - none is stopped by the next
+			const together = await Promise.all(['count(//*)', 'string(/*/name())', "map:size(map{'a':1})", 'count(//o:order)'].map((expression) => evaluator.evaluate(expression, data, '3.1')));
+			together.forEach((result, index) => assert.isFalse(result.isError, `${index}: ${result.content[0].text}`));
+			assert.deepEqual(together.map((result) => result.content[0].text.split('\n').pop()), ['3', "'orders'", '1', '2']);
+			// an expression that doesn't end is stopped - and the next one runs
+			const timeoutMs = XPathEvaluate.timeoutMs;
+			XPathEvaluate.timeoutMs = 2000;
+			try {
+				const endless = await evaluator.evaluate('fold-left(1 to 2000000000, 0, function($a, $b) { $a + $b })', data, '3.1');
+				assert.isTrue(endless.isError);
+				assert.match(endless.content[0].text, /took more than 2 seconds, so it was stopped/);
+			} finally {
+				XPathEvaluate.timeoutMs = timeoutMs;
+			}
+			assert.match((await evaluator.evaluate('count(//*)', data, '3.1')).content[0].text, /\n3$/, 'after one was stopped');
 		} finally {
 			evaluator.dispose();
 			await tasks.update('saxonJar', savedJar, vscode.ConfigurationTarget.Global);
