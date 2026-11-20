@@ -2142,8 +2142,8 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 			// otherwise the last XML file (or stylesheet) edited
 			const contextFile = XPathQuery.isQueryFile(document) ? XPathQuery.target : undefined;
 			const xmlData = (contextFile && DocumentChangeHandler.xmlnsPrefixesOf(contextFile)) || DocumentChangeHandler.lastXMLDocumentGlobalData;
-			let diagnostics = expressionTokens.flatMap((allTokens) =>
-				XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, xmlData, XPathSemanticTokensProvider.globalInstructionData, []));
+			let diagnostics = XsltTokenDiagnostics.labelled(expressionTokens.flatMap((allTokens) =>
+				XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, xmlData, XPathSemanticTokensProvider.globalInstructionData, [])));
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
 			} else {

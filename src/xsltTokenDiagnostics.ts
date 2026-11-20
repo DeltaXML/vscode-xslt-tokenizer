@@ -204,6 +204,17 @@ export enum DiagnosticCode {
 }
 
 export class XsltTokenDiagnostics {
+	// the source of the problems this extension reports, shown after each in the Problems view - the extension's name with 'dx.'
+	// (as in its publisher's id) before it, so it's recognisable, e.g. in a user's screenshot, as this extension's: so a user -
+	// whether in VS Code, Cursor or another editor built on it - can tell which extension a problem comes from
+	public static readonly source = 'dx.xslt-xpath';
+
+	// the problems with this extension as their source - unless they have one already, e.g. Schematron's or Saxon's
+	public static labelled<T extends { source?: string }>(diagnostics: T[]): T[] {
+		diagnostics.forEach((diagnostic) => diagnostic.source ||= XsltTokenDiagnostics.source);
+		return diagnostics;
+	}
+
 	static oneCharOps = new Set([')', ']', '}', '-', '+', '|', '*', '.', '×', '÷']);
 	static twoCharOps = new Set(['as', '//', '{}', '[]', '()', '*:', '::', '<<', '>>', '=>']);
 	static threeCharOps = new Set(['div', 'mod', '=!>', '=?>']);

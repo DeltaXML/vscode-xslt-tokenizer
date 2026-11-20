@@ -337,7 +337,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				}
 				importDiagnostics.push(diagnostic);
 			});
-			const allDiagnostics = importDiagnostics.concat(diagnostics);
+			const allDiagnostics = XsltTokenDiagnostics.labelled(importDiagnostics.concat(diagnostics));
 			if (topLevel) {
 				// a check with a top-level stylesheet given: only its results, apart from the editor's
 				this.topLevelChecks.set(XsltSymbolProvider.topLevelKey(document, topLevel), { diagnostics: allDiagnostics, own: globalInstructionData, imported: allImportedGlobals });

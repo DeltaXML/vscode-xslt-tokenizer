@@ -56,7 +56,7 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 					importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(fileRef.item, fileRef.problem));
 				}
 			});
-			let allDiagnostics = importDiagnostics.concat(diagnostics);
+			let allDiagnostics = XsltTokenDiagnostics.labelled(importDiagnostics.concat(diagnostics));
 			if (allDiagnostics.length > 0) {
 				this.collection.set(document.uri, allDiagnostics);
 			} else {
