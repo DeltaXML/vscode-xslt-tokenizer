@@ -10,7 +10,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as http from 'http';
-import { McpServer, StreamableHTTPServerTransport, z } from './sdk';
+import { McpServer, createMcpHandler, loadSkills, toNodeHandler, z } from './sdk';
 import { McpRoot } from './mcpRoot';
 import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools';
 import { RunConfiguration } from './runConfiguration';
@@ -34,12 +34,23 @@ export class XsltMcpServer {
 	private readonly tools: XsltMcpTools;
 
 	private readonly xpath: XPathEvaluate | undefined;
+	private readonly skillsFolder: string | undefined;
+	// serves MCP requests, each with a server of its own (see createServer): the 2026-07-28 protocol, and the 2025-era protocols
+	// that clients such as Claude Code still use, statelessly
+	private readonly mcpHandler = toNodeHandler(createMcpHandler(async () => {
+		const mcp = this.createServer();
+		await this.attachSkills(mcp);
+		return mcp;
+	}));
+	// the skills the server serves (xslt-resources/skills): loaded once, for every server
+	private skills: ReturnType<typeof loadSkills> | undefined;
 
 	// state: the workspace's state, where its port is kept
 	// extensionUri: the extension's folder, where the program that evaluates XPath is - without it, no evaluate_xpath tool
 	public constructor(private readonly secrets: vscode.SecretStorage, modules: XsltModules, private readonly state?: vscode.Memento, extensionUri?: vscode.Uri) {
 		this.tools = new XsltMcpTools(modules);
 		this.xpath = extensionUri ? new XPathEvaluate(extensionUri) : undefined;
+		this.skillsFolder = extensionUri ? vscode.Uri.joinPath(extensionUri, 'xslt-resources', 'skills').fsPath : undefined;
 		// reset in this window or another: the new token is used from the next request
 		secrets.onDidChange((event) => {
 			if (event.key === XsltMcpServer.tokenKey) {
@@ -215,14 +226,22 @@ export class XsltMcpServer {
 		}
 		// for a project's folder in a multi-root workspace, if the URL has it as its root
 		const root = McpRoot.fromUrl(request.url);
-		const mcp = McpRoot.run(root, () => this.createServer());
-		const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-		response.on('close', () => {
-			transport.close();
-			mcp.close();
-		});
-		await mcp.connect(transport);
-		await McpRoot.run(root, () => transport.handleRequest(request, response, message));
+		await McpRoot.run(root, () => this.mcpHandler(request, response, message));
+	}
+
+	// the skills, loaded on first use - none when the extension's folder isn't known (e.g. in tests), or they can't be read
+	private async attachSkills(mcp: McpServer) {
+		if (!this.skillsFolder) {
+			return;
+		}
+		this.skills ??= loadSkills(this.skillsFolder);
+		try {
+			(await this.skills).attach(mcp);
+		} catch (e: any) {
+			// a skill that can't be served isn't a reason for the tools not to be
+			XsltMcpServer.log.warn(`skills not served: ${e?.message ?? e}`);
+			this.skills = undefined;
+		}
 	}
 
 	private createServer() {

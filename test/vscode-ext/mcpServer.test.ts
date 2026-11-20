@@ -4,6 +4,7 @@
  * module_imports, the tree of a module's imports from its top-level stylesheet
  */
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as os from 'os';
@@ -639,5 +640,93 @@ suite('MCP server', function () {
 		assert.notStrictEqual(token, old);
 		assert.strictEqual((await post({ jsonrpc: '2.0', id: ++id, method: 'tools/list' }, { Authorization: `Bearer ${old}` })).status, 401);
 		assert.strictEqual((await post({ jsonrpc: '2.0', id: ++id, method: 'tools/list' }, { Authorization: `Bearer ${token}` })).status, 200);
+	});
+});
+
+// An MCP request, as JSON-RPC over HTTP: the status, and the result or error - from a JSON body or an event stream
+function postTo(serverPort: number, body: object, headers: Record<string, string>): Promise<{ status: number, text: string, message?: any }> {
+	return new Promise((resolve, reject) => {
+		const request = http.request({ host: '127.0.0.1', port: serverPort, path: '/mcp', method: 'POST',
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', ...headers } }, (response) => {
+			let text = '';
+			response.on('data', (chunk) => text += chunk);
+			response.on('end', () => {
+				const data = /^data: (.*)$/m.exec(text);
+				let message: any;
+				try {
+					message = data ? JSON.parse(data[1]) : text ? JSON.parse(text) : undefined;
+				} catch {
+					message = undefined;
+				}
+				resolve({ status: response.statusCode ?? 0, text, message });
+			});
+		});
+		request.on('error', reject);
+		request.end(JSON.stringify(body));
+	});
+}
+
+suite('MCP server: the skill it serves', function () {
+	this.timeout(20000);
+	const skillPort = 6798;
+	const extension = vscode.extensions.getExtension('deltaxml.xslt-xpath')!;
+	const skillFile = path.join(extension.extensionPath, 'xslt-resources', 'skills', 'xslt-xpath', 'SKILL.md');
+	const server = new XsltMcpServer(memorySecrets(), { problems: async () => [], declarations: async () => ({ own: [], imported: [] }) }, undefined, extension.extensionUri);
+	let token = '';
+	let id = 0;
+	// the 2026-07-28 protocol: each request says so in its _meta and in a header, and names its method - and the resource it reads - in others
+	const modern = (method: string, params: object = {}) => postTo(skillPort, { jsonrpc: '2.0', id: ++id, method, params: { ...params, _meta: {
+		'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientInfo': { name: 'test', version: '1' }, 'io.modelcontextprotocol/clientCapabilities': {} } } },
+	{ Authorization: `Bearer ${token}`, 'MCP-Protocol-Version': '2026-07-28', 'Mcp-Method': method, ...('uri' in params ? { 'Mcp-Name': String((params as { uri: string }).uri) } : {}) });
+	// the 2025 protocols: an initialize, then the request
+	const legacy = (method: string, params: object = {}) => postTo(skillPort, { jsonrpc: '2.0', id: ++id, method, params }, { Authorization: `Bearer ${token}` });
+
+	suiteSetup(async () => {
+		assert.isTrue(await server.start(skillPort));
+		token = await server.getToken();
+	});
+
+	suiteTeardown(() => server.stop());
+
+	test('the skill is listed, with the digest and size of its file', async () => {
+		const bytes = fs.readFileSync(skillFile);
+		const listed = await modern('skills/list');
+		assert.strictEqual(listed.status, 200, listed.text);
+		const skills = listed.message?.result?.skills;
+		assert.isArray(skills, listed.text);
+		assert.lengthOf(skills, 1, listed.text);
+		assert.strictEqual(skills[0].uri, 'skill://xslt-xpath/SKILL.md');
+		assert.strictEqual(skills[0].frontmatter.name, 'xslt-xpath');
+		assert.match(skills[0].frontmatter.description, /XSLT/);
+		assert.deepEqual(skills[0].resources, [{ uri: 'skill://xslt-xpath/SKILL.md', digest: `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`, size: bytes.length }]);
+	});
+
+	test('the skill\'s file is read as a resource, as it is on disk', async () => {
+		const read = await modern('resources/read', { uri: 'skill://xslt-xpath/SKILL.md' });
+		assert.strictEqual(read.status, 200, read.text);
+		assert.strictEqual(read.message?.result?.contents?.[0]?.text, fs.readFileSync(skillFile, 'utf8'), read.text);
+	});
+
+	test('skills/get: the skill by its URI - and an error for another', async () => {
+		const got = await modern('skills/get', { uri: 'skill://xslt-xpath/SKILL.md' });
+		assert.strictEqual(got.message?.result?.skill?.frontmatter?.name, 'xslt-xpath', got.text);
+		const unknown = await modern('skills/get', { uri: 'skill://none/SKILL.md' });
+		assert.strictEqual(unknown.message?.error?.code, -32602, unknown.text);
+	});
+
+	test('the tools are served the same way on the new protocol', async () => {
+		const tools = await modern('tools/list');
+		assert.strictEqual(tools.status, 200, tools.text);
+		const names = (tools.message?.result?.tools ?? []).map((tool: { name: string }) => tool.name);
+		assert.include(names, 'lint_file', tools.text);
+		assert.include(names, 'list_declarations', tools.text);
+	});
+
+	test('the 2025 protocol still works: tools are listed, and the server\'s skill is read as a resource', async () => {
+		const tools = await legacy('tools/list');
+		assert.strictEqual(tools.status, 200, tools.text);
+		assert.include((tools.message?.result?.tools ?? []).map((tool: { name: string }) => tool.name), 'lint_file', tools.text);
+		const read = await legacy('resources/read', { uri: 'skill://xslt-xpath/SKILL.md' });
+		assert.strictEqual(read.message?.result?.contents?.[0]?.text, fs.readFileSync(skillFile, 'utf8'), read.text);
 	});
 });

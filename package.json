@@ -2565,7 +2565,7 @@
 		"vscode:prepublish": "npm run compile",
 		"clean": "rm -rf out",
 		"compile": "npm run clean && tsc -p ./ && npm run bundle-mcp",
-		"bundle-mcp": "esbuild src/mcp/sdk.ts --bundle --platform=node --format=cjs --minify --outfile=out/src/mcp/sdk.js --log-level=warning",
+		"bundle-mcp": "esbuild src/mcp/sdk.ts --bundle --platform=node --format=cjs --minify --tsconfig-raw='{}' --outfile=out/src/mcp/sdk.js --log-level=warning",
 		"lint": "eslint src",
 		"lint-fix": "eslint --fix src",
 		"watch": "tsc -watch -p ./",
@@ -2577,7 +2577,8 @@
 		"update-saxon-functions": "curl -sfL https://www.saxonica.com/documentation13/doc/functions.xml -o resources/data/saxon-functions.xml && npm run generate-xpath40-functions"
 	},
 	"devDependencies": {
-		"@modelcontextprotocol/sdk": "^1.32.2",
+		"@modelcontextprotocol/node": "^2.1.2",
+		"@modelcontextprotocol/server": "^2.4.0",
 		"@types/chai": "^5.2.2",
 		"@types/mocha": "^10.0.1",
 		"@types/node": "^26.6.2",
