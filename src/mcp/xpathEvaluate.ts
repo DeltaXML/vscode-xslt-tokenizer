@@ -13,6 +13,8 @@ import * as path from 'path';
 import { McpRoot } from './mcpRoot';
 import { DiskTextDocument } from './diskTextDocument';
 import { XPathQuery, XPathQueryResult } from '../xpathQuery';
+import { XsltSymbolProvider } from '../xsltSymbolProvider';
+import { XMLConfiguration } from '../languageConfigurations';
 import { XPathQueryServer } from '../xpathQueryServer';
 import { XsltDebug } from '../xsltDebug';
 import { unquotedPath } from '../settingPaths';
@@ -50,7 +52,8 @@ export class XPathEvaluate {
 			return XPathEvaluate.text(`File not found: ${resolved}`, true);
 		}
 		const uri = vscode.Uri.file(resolved);
-		const xml = (await DiskTextDocument.current(uri)).getText();
+		const xmlDocument = await DiskTextDocument.current(uri);
+		const xml = xmlDocument.getText();
 		// a prolog declaring prefixes - declare namespace p = 'uri'; - as in a query file
 		const { xpath: expression, namespaces } = XPathQuery.withoutProlog(xpath);
 		const version = xpathVersion ?? (SaxonTaskProvider.isSaxonHE(saxonJar) ? '3.1' : '4.0');
@@ -69,7 +72,10 @@ export class XPathEvaluate {
 			`\n(Evaluated as XPath ${result.xpathVersion}: XPath ${version} needs Saxon-PE or Saxon-EE)` : '';
 		if (result.error) {
 			const where = result.error.line ? ` at ${result.error.line}:${result.error.column ?? 1}` : '';
-			return XPathEvaluate.text(`Error${result.error.code ? ' ' + result.error.code : ''}${where}: ${result.error.message}${note}`, true);
+			// e.g. saxon:parse(): the extension functions of the saxon: namespace are in Saxon-PE and Saxon-EE only
+			const saxonHE = /saxon[:}]|saxon\.sf\.net/i.test(result.error.message) && SaxonTaskProvider.isSaxonHE(saxonJar) ?
+				'\n(The saxon: extension functions need Saxon-PE or Saxon-EE: the XSLT.tasks.saxonJar setting is Saxon-HE)' : '';
+			return XPathEvaluate.text(`Error${result.error.code ? ' ' + result.error.code : ''}${where}: ${result.error.message}${note}${saxonHE}`, true);
 		}
 		const count = result.count ?? result.items?.length ?? 0;
 		const heading = `${count} ${count === 1 ? 'item' : 'items'} for XPath ${result.xpathVersion ?? version} on ${path.basename(resolved)}`;
@@ -83,6 +89,19 @@ export class XPathEvaluate {
 				item.type ? `${item.value} (xs:${item.type})` : `${item.value}`).join('\n') + (count > shown ? `\n… the first ${shown} of ${count} items shown` : '');
 		}
 		const hint = result.hint ? `\n(${result.hint})` : '';
-		return XPathEvaluate.text(`${heading}${note}\n${body}${hint}`.trimEnd());
+		// where the nodes are in the XML file: from the extension's own outline of it - where each node starts, as in the editor
+		// (Find Nodes goes there) - not Saxon's, which are where an element's start tag ends, or where text ends
+		const nodes = (result.items ?? []).filter((item) => item.kind === 'node').slice(0, XPathQuery.maxTextItems);
+		const symbols = nodes.some((item) => !item.otherDocument) ? await new XsltSymbolProvider(XMLConfiguration.configuration, null)
+			.getDocumentSymbols(xmlDocument, false).catch(() => undefined) ?? [] : [];
+		const places = nodes.map((item) => {
+			const range = item.otherDocument ? undefined : XPathQuery.rangeOf(item, symbols, xmlDocument);
+			const place = range ? `${range.start.line + 1}:${range.start.character + 1}` : item.line ? `${item.line}${item.column ? ':' + item.column : ''} (as Saxon records it)` : undefined;
+			return place ? `  ${item.path}  ${place}${item.otherDocument ? ` in ${item.otherDocument}` : ''}` : undefined;
+		}).filter((line): line is string => !!line);
+		const totalNodes = (result.items ?? []).filter((item) => item.kind === 'node').length;
+		const lines = places.length > 0 ? `\n\nLine:column in ${path.basename(resolved)} of where each node starts - an element at its name, an attribute at its name, text at its first character:\n` +
+			places.join('\n') + (totalNodes > nodes.length ? `\n  … the first ${nodes.length} of ${totalNodes} nodes` : '') : '';
+		return XPathEvaluate.text(`${heading}${note}\n${body}${lines}${hint}`.trimEnd());
 	}
 }

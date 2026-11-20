@@ -302,7 +302,9 @@ export class XsltMcpServer {
 					'prefixes are predeclared, but a stylesheet must declare map, array and math itself. There is no stylesheet around the ' +
 					'expression: no variables, keys or functions of a stylesheet. For safety it has no extension functions (Java, EXPath, ' +
 					'such as file:), no collection(), and doc() and unparsed-text() read only files in the workspace folders. An error is given ' +
-					'with Saxon\'s code and position.',
+					'with Saxon\'s code and position. Each node found is listed with its line and column in the XML file, so saxon:line-number() ' +
+					'isn\'t needed. The saxon: extension functions (e.g. saxon:parse) need Saxon-PE or Saxon-EE - not Saxon-HE, the free ' +
+					'edition: run_configuration says which edition the user has.',
 				inputSchema: {
 					xpath: z.string().describe('The XPath expression, e.g. //order[@total > 100]/@id or count(//item)'),
 					xmlPath: filePath.describe('The XML file to evaluate it on, as the context item'),

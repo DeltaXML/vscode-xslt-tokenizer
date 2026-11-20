@@ -479,6 +479,26 @@ suite('MCP server', function () {
 			assert.isTrue(error.isError);
 			assert.match(error.content[0].text, /^Error XPST\d+/, error.content[0].text);
 			assert.isTrue((await evaluator.evaluate('1', path.join(dir, 'none.xml'))).isError);
+			// where the nodes are in the XML file - and saxon:line-number() works, with Saxon-PE or EE
+			const located = path.join(dir, 'lines.xml');
+			// a start tag over two lines: where the element starts, not where Saxon records it (the end of its start tag)
+			fs.writeFileSync(located, '<orders>\n  <order\n      id="a"/>\n  <order id="b">\n    text\n  </order>\n</orders>\n');
+			const lines = (await evaluator.evaluate('//order/@id | //order[1] | //order[2]/text()', located, '3.1')).content[0].text;
+			assert.include(lines, '\n  /orders/order[1]  2:4\n', lines);
+			assert.include(lines, '\n  /orders/order[1]/@id  3:7\n', lines);
+			assert.include(lines, '\n  /orders/order[2]/@id  4:10\n', lines);
+			// text at its first character that isn't white space: 'text' is on line 5
+			assert.match(lines, /\n  \/orders\/order\[2\]\/text\(\)  5:5$/, lines);
+			const withoutNodes = (await evaluator.evaluate('count(//order)', located, '3.1')).content[0].text;
+			assert.notInclude(withoutNodes, 'Line numbers');
+			const lineNumber = await evaluator.evaluate("declare namespace saxon = 'http://saxon.sf.net/'; //order/saxon:line-number(.)", located, '3.1');
+			if (/-HE /.test((await RunConfiguration.saxonReport(saxonJar!)).product ?? '')) {
+				assert.isTrue(lineNumber.isError);
+				assert.include(lineNumber.content[0].text, 'need Saxon-PE or Saxon-EE', lineNumber.content[0].text);
+			} else {
+				// Saxon's own: where each start tag ends - 3 and 4, not the 2 and 4 where the elements start
+				assert.match(lineNumber.content[0].text, /\(\n  3,\n  4\n\)/, lineNumber.content[0].text);
+			}
 			// map:, array: and math: are predeclared - a stylesheet must declare them itself
 			assert.match((await evaluator.evaluate('map:size(map{1:2}) + array:size([1]) + xs:integer(math:pi() > 3)', data, '3.1')).content[0].text, /\n3$/);
 			// the document's default namespace isn't bound, as in a stylesheet: nothing found, with a hint - unless the stylesheet's

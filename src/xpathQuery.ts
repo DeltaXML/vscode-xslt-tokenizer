@@ -28,6 +28,11 @@ export interface XPathQueryItem {
 	textIndex?: number;
 	value?: string;
 	type?: string;
+	// where it is in the XML file, 1-based - for an assistant's query only: an attribute or text has its element's
+	line?: number;
+	column?: number;
+	// for a node in another document than the one queried, e.g. from doc(): its URI - its positions are that document's
+	otherDocument?: string;
 }
 
 // as VS Code's vscode.getEditorLayout gives it: groups in rows or columns, nested, each with its size

@@ -126,6 +126,10 @@ final class XPathQuery {
         final XdmView view;
 
         Session(boolean want40, boolean sandbox) {
+            if (sandbox) {
+                // before the Processor: it registers the extension function libraries (EXPath modules) as it's made
+                restrictFeatures(config);
+            }
             boolean is40 = want40 && !"HE".equals(config.getEditionCode());
             if (is40) {
                 try {
@@ -146,7 +150,8 @@ final class XPathQuery {
                 } catch (RuntimeException | LinkageError e) {
                     // the result is then listed by item
                 }
-                restrict(config);
+                restrictResources(config);
+                verifySandbox(processor);
             }
         }
     }
@@ -158,7 +163,7 @@ final class XPathQuery {
     // modules such as file:, which can write files and run programs), no protocol but file:, and only files in the
     // folders the request gives, for doc(), collection(), unparsed-text() and the XML parser's entities. Failing to
     // restrict is an error, not an unrestricted run
-    private static void restrict(Configuration config) {
+    private static void restrictFeatures(Configuration config) {
         config.setConfigurationProperty("http://saxon.sf.net/feature/allow-external-functions", Boolean.FALSE);
         config.setConfigurationProperty("http://saxon.sf.net/feature/allowedProtocols", "file");
         // no external entities or DTDs in the XML parser: its parser is reused, and after the first document its
@@ -167,6 +172,10 @@ final class XPathQuery {
                 "http://xml.org/sax/features/external-parameter-entities", "http://apache.org/xml/features/nonvalidating/load-external-dtd" }) {
             config.setConfigurationProperty("http://saxon.sf.net/feature/parserFeature?uri=" + feature.replace(":", "%3A").replace("/", "%2F"), Boolean.FALSE);
         }
+    }
+
+    // the files the expression can read: after xdm-view, which reads its own stylesheet, is compiled
+    private static void restrictResources(Configuration config) {
         final ResourceResolver delegate = config.getResourceResolver();
         config.setResourceResolver(new ResourceResolver() {
             public Source resolve(ResourceRequest request) throws XPathException {
@@ -189,6 +198,21 @@ final class XPathQuery {
                 throw new XPathException("collection() and uri-collection() aren't available here: use doc() for a file in the workspace", "FODC0004");
             }
         });
+    }
+
+    // fails, rather than runs without a restriction: an extension function that compiles is one that could run
+    private static void verifySandbox(Processor processor) {
+        for (String call : new String[] { "Q{http://expath.org/ns/file}exists('/')", "Q{java:java.lang.Math}abs(-1)" }) {
+            boolean compiled = true;
+            try {
+                processor.newXPathCompiler().compile(call);
+            } catch (SaxonApiException | RuntimeException e) {
+                compiled = false;
+            }
+            if (compiled) {
+                throw new IllegalStateException("Extension functions couldn't be turned off in this Saxon, so an expression isn't evaluated");
+            }
+        }
     }
 
     private static void checkAllowed(String uri) throws XPathException {
@@ -226,6 +250,8 @@ final class XPathQuery {
         boolean xpath40 = session.xpath40;
         Processor processor = session.processor;
         DocumentBuilder builder = processor.newDocumentBuilder();
+        // for an assistant: where a node is in the XML file, in the result and saxon:line-number()
+        builder.setLineNumbering(Json.bool(request, "sandbox"));
         String systemId = Json.string(request, "systemId");
         boolean sandbox = Json.bool(request, "sandbox");
         if (sandbox) {
@@ -287,7 +313,7 @@ final class XPathQuery {
             if (++n > MAX_ITEMS) {
                 break;
             }
-            items.add(item.isNode() ? node((XdmNode) item) : item instanceof XdmAtomicValue ?
+            items.add(item.isNode() ? node((XdmNode) item, document) : item instanceof XdmAtomicValue ?
                     Json.obj().with("kind", "atomic").with("type", ((XdmAtomicValue) item).getPrimitiveTypeName().getLocalName())
                             .with("value", item.getStringValue()) :
                     Json.obj().with("kind", "other").with("value", adaptive(processor, item)));
@@ -330,10 +356,15 @@ final class XPathQuery {
         return text.length() > MAX_VALUE_LENGTH ? text.substring(0, MAX_VALUE_LENGTH - 1) + "…" : text;
     }
 
-    private static Json.Obj node(XdmNode node) {
+    private static Json.Obj node(XdmNode node, XdmNode context) {
         XdmNodeKind kind = node.getNodeKind();
         Json.Obj result = Json.obj().with("kind", "node").with("nodeKind", kind.toString().toLowerCase(java.util.Locale.ROOT))
                 .with("path", path(node));
+        // in another document, e.g. one doc() read: its positions are not the context document's
+        if (node.getUnderlyingNode().getTreeInfo() != context.getUnderlyingNode().getTreeInfo()) {
+            String uri = node.getBaseURI() == null ? null : node.getBaseURI().toString();
+            result.with("otherDocument", uri == null ? "another document" : uri);
+        }
         // the element it is, or is in
         XdmNode element = kind == XdmNodeKind.ELEMENT ? node : node.getParent();
         if (element != null && element.getNodeKind() == XdmNodeKind.ELEMENT) {
@@ -351,6 +382,20 @@ final class XPathQuery {
                 }
             }
             result.with("textIndex", textIndex);
+        }
+        // where it is in the XML file, if the document was built with line numbers: for an attribute or text, its element's
+        // if it has none of its own
+        int line = node.getLineNumber();
+        int column = node.getColumnNumber();
+        if (line <= 0 && element != null && element.getNodeKind() == XdmNodeKind.ELEMENT) {
+            line = element.getLineNumber();
+            column = element.getColumnNumber();
+        }
+        if (line > 0) {
+            result.with("line", (long) line);
+            if (column > 0) {
+                result.with("column", (long) column);
+            }
         }
         if (kind != XdmNodeKind.ELEMENT && kind != XdmNodeKind.DOCUMENT) {
             String text = node.getStringValue();
