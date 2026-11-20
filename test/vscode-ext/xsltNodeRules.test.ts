@@ -227,7 +227,8 @@ suite('XSLT debugger: the template rules each input node was processed by', func
 		assert.deepStrictEqual(XsltNodeRules.markers(input), { processed: [], builtIn: [] });
 	});
 
-	test('the input file replaced outside VS Code - e.g. deleted and copied again by a script: what was recorded for it is dropped', async () => {
+	test('the input file replaced outside VS Code - e.g. deleted and copied again by a script: what was recorded for it is dropped', async function () {
+		this.timeout(30000);
 		const xml = file('node-rules.xml');
 		const products = file('node-rules-products.xml');
 		XsltNodeRules.update({
@@ -239,10 +240,14 @@ suite('XSLT debugger: the template rules each input node was processed by', func
 		const other = await vscode.workspace.openTextDocument(vscode.Uri.file(products));
 		assert.lengthOf(XsltNodeRules.markers(input).processed, 1);
 		const text = fs.readFileSync(xml, 'utf8');
-		fs.rmSync(xml);
-		fs.writeFileSync(xml, text);
-		// as reported by the file watcher
-		for (let waited = 0; waited < 5000 && XsltNodeRules.markers(input).processed.length > 0; waited += 100) {
+		// as reported by the file watcher - which VS Code starts a moment after it's made, for a folder outside the workspace: a
+		// file replaced before then is never reported, so it's replaced again each second until it is (the first report after
+		// the watcher is running drops it). A script replacing an input file does so long after a run, not at once
+		for (let waited = 0; waited < 20000 && XsltNodeRules.markers(input).processed.length > 0; waited += 100) {
+			if (waited % 1000 === 0) {
+				fs.rmSync(xml);
+				fs.writeFileSync(xml, text);
+			}
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		}
 		assert.deepStrictEqual(XsltNodeRules.markers(input), { processed: [], builtIn: [] });

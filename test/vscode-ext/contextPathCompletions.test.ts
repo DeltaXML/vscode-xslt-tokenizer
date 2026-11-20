@@ -161,7 +161,9 @@ suite('Problems of an older version of a file, in a source control diff', functi
 });
 
 suite('Problems of the files of a folder removed from the workspace', () => {
-	test('are cleared, except for a file that is open in an editor - and not those of other folders', async () => {
+	test('are cleared, except for a file that is open in an editor - and not those of other folders', async function () {
+		// 66 ms alone, but it waits for VS Code to register the editor - slow when the machine is busy, e.g. swapping
+		this.timeout(30000);
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'removed-folder-'));
 		try {
 			const gone = path.join(dir, 'gone');

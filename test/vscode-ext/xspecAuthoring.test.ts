@@ -56,7 +56,10 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		await revertAndCloseEditorsIn(os.tmpdir());
 	});
 
-	test('an XSpec file created for a stylesheet, then deleted: the stylesheet isn\'t checked as a module of it', async () => {
+	test('an XSpec file created for a stylesheet, then deleted: the stylesheet isn\'t checked as a module of it', async function () {
+		// it waits on purpose - up to 2 s for the XSpec file to be checked, and 3 s for an error that shouldn't appear, which is
+		// the usual way it passes - so about 7.5 s alone: over the 10 s default on a busy full run
+		this.timeout(30000);
 		const uri = stylesheet(`deleted${count++}.xsl`);
 		const editor = await XSpecScenario.create(uri, at('<xsl:function'));
 		const xspecUri = editor!.document.uri;
