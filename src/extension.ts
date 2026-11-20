@@ -803,7 +803,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const mcpServer = new XsltMcpServer(context.secrets, {
 		problems: (document, topLevel) => mcpSymbolProvider(document)?.diagnosticsFor(document, topLevel),
 		declarations: (document, topLevel) => mcpSymbolProvider(document)?.declarationsFor(document, topLevel)
-	}, context.workspaceState);
+	}, context.workspaceState, context.extensionUri);
 	// the problems of the files that aren't open, in the workspace or a folder - checked as the MCP tool lint_files does
 	const workspaceCheck = new WorkspaceCheck((document) => mcpSymbolProvider(document)?.diagnosticsFor(document));
 	context.subscriptions.push(workspaceCheck,

@@ -11,6 +11,7 @@ import * as path from 'path';
 import { assert } from 'chai';
 import { XsltMcpServer } from '../../src/mcp/xsltMcpServer';
 import { RunConfiguration } from '../../src/mcp/runConfiguration';
+import { XPathEvaluate } from '../../src/mcp/xpathEvaluate';
 import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
@@ -249,7 +250,7 @@ suite('MCP server', function () {
 
 	test('the tools', async () => {
 		const response = await post({ jsonrpc: '2.0', id: ++id, method: 'tools/list' }, { Authorization: `Bearer ${token}` });
-		assert.deepEqual(response.message.result.tools.map((tool: { name: string }) => tool.name), ['lint_file', 'lint_files', 'module_imports', 'find_declaration', 'find_references', 'describe_type', 'xpath_function', 'run_configuration']);
+		assert.deepEqual(response.message.result.tools.map((tool: { name: string }) => tool.name), ['lint_file', 'lint_files', 'module_imports', 'list_declarations', 'find_declaration', 'find_references', 'describe_type', 'xpath_function', 'run_configuration']);
 	});
 
 	test('lint_file: a module that is not open, checked with its imports', async () => {
@@ -434,6 +435,95 @@ suite('MCP server', function () {
 		assert.match(text(await call('lint_files', { folder: dir, pattern: 'sub/*.xsl' })), /^Checked 1 file in .*: 1 problem in 1 file \(warnings or worse\)\n\n.*empty\.xsl - 1 problem:\n {2}1:1 error The file is empty/);
 		assert.match(text(await call('lint_files', { folder: dir, pattern: '.hidden/*.xsl' })), /^Checked 1 file in .*\n\n.*history\.xsl - 1 problem/);
 		assert.isTrue((await call('lint_files', { folder: path.join(dir, 'none') })).message.result.isError);
+	});
+
+	test('list_declarations: the module\'s own, then those it imports - the overridden one marked, a kind to narrow it', async () => {
+		const all = text(await call('list_declarations', { path: main }));
+		assert.match(all, /^\d+ declarations usable from .*main\.xsl/, all);
+		const own = all.split('\n\n').find((section) => section.startsWith('Declared in this module'))!;
+		assert.match(own, /xsl:function f:local#1\(\$a\)/);
+		const imported = all.split('\n\n').find((section) => section.startsWith('Declared in the modules and packages it uses'))!;
+		assert.match(imported, /xsl:function f:twice#1\(\$n\) - .*overrides\.xsl:2:\d+\n/);
+		assert.match(imported, /xsl:function f:twice#1\(\$n as xs:integer\) as xs:integer - .*lib\.xsl:3:\d+ - not used: overridden by one with a higher import precedence/);
+		assert.match(all, /find_declaration/);
+		// a kind: only those
+		const templates = text(await call('list_declarations', { path: types, kind: 'template' }));
+		assert.match(templates, /xsl:template name="xsl:initial-template"/);
+		assert.notMatch(templates, /xsl:variable/);
+		assert.match(text(await call('list_declarations', { path: types, kind: 'item-type' })), /xsl:item-type cx:point as record\(x as xs:double, y\? as xs:double\)/);
+		assert.match(text(await call('list_declarations', { path: types, kind: 'key' })), /^No key declarations in .*types\.xsl/);
+		// the first line of a declaration's documentation
+		assert.match(text(await call('list_declarations', { path: documented, kind: 'function' })), /xsl:function d:area#2\(.*documented\.xsl:2:\d+ - The area of a rectangle\./);
+		assert.isTrue((await call('list_declarations', { path: path.join(dir, 'missing.xsl') })).message.result.isError);
+	});
+
+	test('evaluate_xpath: with a real Saxon jar, in XSLT_TEST_SAXON_JAR - counts, nodes, a prolog, and Saxon\'s error', async function () {
+		const saxonJar = process.env.XSLT_TEST_SAXON_JAR;
+		if (!saxonJar) {
+			this.skip();
+		}
+		const data = path.join(dir, 'orders.xml');
+		fs.writeFileSync(data, '<orders xmlns:o="urn:o"><o:order id="a" total="50"/><o:order id="b" total="150"/></orders>');
+		const tasks = vscode.workspace.getConfiguration('XSLT.tasks');
+		const savedJar = tasks.inspect<string>('saxonJar')?.globalValue;
+		await tasks.update('saxonJar', saxonJar, vscode.ConfigurationTarget.Global);
+		const evaluator = new XPathEvaluate(vscode.extensions.getExtension('deltaxml.xslt-xpath')!.extensionUri);
+		try {
+			const count = await evaluator.evaluate('count(//*)', data, '3.1');
+			assert.isFalse(count.isError, count.content[0].text);
+			assert.match(count.content[0].text, /^1 item for XPath 3\.1 on orders\.xml\n3$/);
+			const nodes = await evaluator.evaluate("declare namespace o = 'urn:o'; //o:order[@total > 100]/@id", data, '3.1');
+			assert.match(nodes.content[0].text, /^1 item for XPath 3\.1 on orders\.xml\n[\s\S]*@id/, nodes.content[0].text);
+			assert.include(nodes.content[0].text, 'b');
+			const error = await evaluator.evaluate('count(', data, '3.1');
+			assert.isTrue(error.isError);
+			assert.match(error.content[0].text, /^Error XPST\d+/, error.content[0].text);
+			assert.isTrue((await evaluator.evaluate('1', path.join(dir, 'none.xml'))).isError);
+			// map:, array: and math: are predeclared - a stylesheet must declare them itself
+			assert.match((await evaluator.evaluate('map:size(map{1:2}) + array:size([1]) + xs:integer(math:pi() > 3)', data, '3.1')).content[0].text, /\n3$/);
+			// the document's default namespace isn't bound, as in a stylesheet: nothing found, with a hint - unless the stylesheet's
+			// xpath-default-namespace is given
+			const defaulted = path.join(dir, 'default.xml');
+			fs.writeFileSync(defaulted, '<orders xmlns="urn:o" xmlns:o="urn:o"><order/></orders>');
+			const unmatched = await evaluator.evaluate('//order', defaulted, '3.1');
+			assert.match(unmatched.content[0].text, /^0 items/);
+			assert.include(unmatched.content[0].text, 'xpath-default-namespace');
+			assert.match((await evaluator.evaluate('count(//order)', defaulted, '3.1', 'urn:o')).content[0].text, /\n1$/);
+			assert.match((await evaluator.evaluate('count(//o:order)', defaulted, '3.1')).content[0].text, /\n1$/, 'a prefix the document declares is bound');
+			// safe for an assistant: no extension functions, no collection(), and only files in the workspace folders (and the XML
+			// file's) - not another folder's, a ../ path, a symbolic link out, a network address, or an XML entity
+			const others = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-mcp-other-'));
+			const secret = path.join(others, 'secret.txt');
+			fs.writeFileSync(secret, 'secret text');
+			fs.writeFileSync(path.join(dir, 'inside.txt'), 'inside text');
+			const entity = path.join(dir, 'entity.xml');
+			fs.writeFileSync(entity, `<?xml version="1.0"?>\n<!DOCTYPE r [<!ENTITY x SYSTEM "${vscode.Uri.file(secret).toString()}">]>\n<r>&x;</r>`);
+			fs.symlinkSync(secret, path.join(dir, 'link.txt'));
+			const blocked = async (expression: string, file = data) => {
+				const result = await evaluator.evaluate(expression, file, '3.1');
+				assert.isTrue(result.isError, `${expression}: ${result.content[0].text}`);
+				assert.notInclude(result.content[0].text, 'secret text');
+				return result.content[0].text;
+			};
+			assert.match(await blocked("Q{java:java.lang.Runtime}getRuntime()"), /XPST0017/);
+			assert.match(await blocked("Q{http://expath.org/ns/file}exists('/tmp')"), /XPST0017/);
+			assert.match(await blocked(`unparsed-text('${vscode.Uri.file(secret).toString()}')`), /Not allowed to read/);
+			assert.match(await blocked(`doc('${vscode.Uri.file(path.join(others, 'x.xml')).toString()}')`), /Not allowed to read/);
+			assert.match(await blocked(`unparsed-text('../${path.basename(others)}/secret.txt')`), /Not allowed to read|FOUT1170/);
+			assert.match(await blocked("unparsed-text('link.txt')"), /Not allowed to read/);
+			assert.match(await blocked("unparsed-text('http://example.com/')"), /Not allowed to read/);
+			assert.match(await blocked(`collection('${vscode.Uri.file(dir).toString()}?select=*.xml')`), /collection\(\) and uri-collection\(\) aren't available/);
+			// an external entity isn't read: not even after a document has been parsed, when the XML parser is reused
+			for (const file of [data, entity, data, entity]) {
+				const read = await evaluator.evaluate('string(/)', file, '3.1');
+				assert.notInclude(read.content[0].text, 'secret text', read.content[0].text);
+			}
+			assert.match((await evaluator.evaluate("unparsed-text('inside.txt')", data, '3.1')).content[0].text, /inside text/, 'a file beside the XML file is read');
+			fs.rmSync(others, { recursive: true, force: true });
+		} finally {
+			evaluator.dispose();
+			await tasks.update('saxonJar', savedJar, vscode.ConfigurationTarget.Global);
+		}
 	});
 
 	test('find_declaration: from a module, the one with the highest import precedence first', async () => {

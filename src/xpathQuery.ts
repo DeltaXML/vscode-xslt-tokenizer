@@ -49,6 +49,8 @@ export interface XPathQueryResult {
 	text?: string;
 	// the XPath version Saxon used: 3.1 when 4.0 was asked for with Saxon-HE
 	xpathVersion?: XPathVersionNumber;
+	// for an assistant's query only: why nothing was found may be the document's default namespace
+	hint?: string;
 	error?: { message: string; code?: string; line?: number; column?: number };
 }
 
@@ -745,12 +747,18 @@ export class XPathQuery {
 			.map((range) => new vscode.Location(xmlDocument.uri, range));
 	}
 
-	private evaluate(saxonJar: string, request: object): Promise<XPathQueryResult> {
-		const adapterJar = vscode.Uri.joinPath(this.context.extensionUri, 'xslt-resources', 'xslt-debugger', 'xslt-debugger.jar').fsPath;
+	// the Java arguments to run the query program with the Saxon jar, and the folder to run it in - also for the MCP
+	// server's evaluate_xpath tool
+	public static javaArguments(extensionUri: vscode.Uri, saxonJar: string): { args: string[]; folder: string | undefined } {
+		const adapterJar = vscode.Uri.joinPath(extensionUri, 'xslt-resources', 'xslt-debugger', 'xslt-debugger.jar').fsPath;
 		const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		// a relative path is relative to the workspace folder, as for tasks
 		const jar = folder && !path.isAbsolute(saxonJar) ? path.join(folder, saxonJar) : saxonJar;
-		const args = ['-cp', [adapterJar, jar].join(path.delimiter), XPathQuery.mainClass];
+		return { args: ['-cp', [adapterJar, jar].join(path.delimiter), XPathQuery.mainClass], folder };
+	}
+
+	private evaluate(saxonJar: string, request: object): Promise<XPathQueryResult> {
+		const { args, folder } = XPathQuery.javaArguments(this.context.extensionUri, saxonJar);
 		const version = XPathVersion.getQueryFileVersion();
 		const versioned = { ...request, xpathVersion: version };
 		// in the Java process kept running - or, if that fails (other than for a newer query), in one of its own

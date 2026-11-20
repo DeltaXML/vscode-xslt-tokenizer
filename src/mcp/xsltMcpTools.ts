@@ -61,6 +61,7 @@ export class XsltMcpTools {
 	private static readonly severities: Severity[] = ['error', 'warning', 'info', 'hint'];
 	private static readonly maxFiles = 1000;
 	private static readonly maxReferences = 200;
+	private static readonly maxDeclarations = 500;
 
 	public constructor(private readonly modules: XsltModules) {
 	}
@@ -347,6 +348,67 @@ export class XsltMcpTools {
 		return XsltMcpTools.describe(global, document) + (text ? '\n' + text.split('\n').map((line) => '    ' + line).join('\n') : '');
 	}
 
+	// a declaration's identity for import precedence: the same name, kind and (for a function) arity - the first has the
+	// highest import precedence and is used
+	private static precedenceKey(global: GlobalInstructionData) {
+		return `${global.type === GlobalInstructionType.Parameter ? GlobalInstructionType.Variable : global.type} ${global.name}#${global.type === GlobalInstructionType.Function ? global.idNumber : ''}`;
+	}
+
+	// every component the module can use: its own declarations, then those of the modules it imports or includes and the
+	// packages it uses - each with its parameters and types, and the first line of its documentation - to see what can be
+	// reused before writing a new one
+	// topLevelStylesheet: as for lintFile - the declarations as seen with it
+	public async listDeclarations(filePath: string, kind?: string, topLevelStylesheet?: string): Promise<ToolResult> {
+		const document = await XsltMcpTools.open(filePath, true);
+		if (typeof document === 'string') {
+			return XsltMcpTools.text(document, true);
+		}
+		const { topLevel, error } = XsltMcpTools.topLevelArgument(document, topLevelStylesheet);
+		if (error) {
+			return error;
+		}
+		const declared = await this.declarationsOf(document, topLevel);
+		if (!declared) {
+			return XsltMcpTools.text(`Not an XSLT or XSpec file: ${document.fileName}`, true);
+		}
+		const types = kind ? declarationKinds[kind] : Object.values(declarationKinds).flat();
+		const wanted = (global: GlobalInstructionData) => types.includes(global.type) && !!global.name;
+		const seen = new Set<string>();
+		let shown = 0;
+		const line = (global: GlobalInstructionData) => {
+			const key = XsltMcpTools.precedenceKey(global);
+			const overridden = seen.has(key);
+			seen.add(key);
+			const first = overridden ? undefined : XsltMcpTools.documentation(global, document).text?.split('\n').map((l) => l.trim()).find((l) => l !== '');
+			const brief = first ? ' - ' + (first.length > 100 ? first.substring(0, 100) + '…' : first) : '';
+			return '  ' + XsltMcpTools.describe(global, document) + (overridden ? ' - not used: overridden by one with a higher import precedence' : brief);
+		};
+		const sections: string[] = [];
+		let total = 0;
+		for (const [title, globals] of [['Declared in this module', declared.own], ['Declared in the modules and packages it uses', declared.imported]] as const) {
+			const wantedGlobals = globals.filter(wanted);
+			total += wantedGlobals.length;
+			const lines: string[] = [];
+			for (const global of wantedGlobals) {
+				if (shown >= XsltMcpTools.maxDeclarations) {
+					break;
+				}
+				shown++;
+				lines.push(line(global));
+			}
+			if (wantedGlobals.length > 0) {
+				sections.push(`${title} (${wantedGlobals.length}):\n${lines.join('\n')}`);
+			}
+		}
+		const what = kind ? `${kind} declarations` : 'declarations';
+		if (total === 0) {
+			return XsltMcpTools.text(`No ${what} in ${XsltMcpTools.shown(document.fileName)} or the modules and packages it uses${XsltMcpTools.withTopLevel(topLevel)}`);
+		}
+		const more = total > shown ? ` - the first ${shown} are listed: give a kind to narrow it` : '';
+		return XsltMcpTools.text(`${total} ${what} usable from ${XsltMcpTools.shown(document.fileName)}${XsltMcpTools.withTopLevel(topLevel)}${more}\n\n${sections.join('\n\n')}\n\n` +
+			'Use find_declaration for a declaration\'s full documentation, and find_references for where it is used.');
+	}
+
 	// topLevelStylesheet: as for lintFile - the declarations as seen with it
 	public async findDeclaration(filePath: string, name: string, kind?: string, topLevelStylesheet?: string): Promise<ToolResult> {
 		const document = await XsltMcpTools.open(filePath, true);
@@ -364,7 +426,7 @@ export class XsltMcpTools {
 				(builtIn ? ` - ${name.replace(/#\d+$/, '')} is a built-in function: see the xpath_function tool` : ''));
 		}
 		// for the same name, kind and arity in more than one module, the first - with the highest import precedence - is used
-		const key = (global: GlobalInstructionData) => `${global.type === GlobalInstructionType.Parameter ? GlobalInstructionType.Variable : global.type} ${global.name}#${global.type === GlobalInstructionType.Function ? global.idNumber : ''}`;
+		const key = XsltMcpTools.precedenceKey;
 		const seen = new Set<string>();
 		const lines = found.map((global) => {
 			const isUsed = !seen.has(key(global));

@@ -14,9 +14,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import javax.xml.transform.Source;
 import javax.xml.transform.stream.StreamSource;
 
 import net.sf.saxon.Configuration;
+import net.sf.saxon.expr.XPathContext;
+import net.sf.saxon.lib.CollectionFinder;
+import net.sf.saxon.lib.ResourceCollection;
+import net.sf.saxon.lib.ResourceRequest;
+import net.sf.saxon.lib.ResourceResolver;
+import net.sf.saxon.trans.XPathException;
 import net.sf.saxon.om.NamespaceBinding;
 import net.sf.saxon.s9api.Axis;
 import net.sf.saxon.s9api.DocumentBuilder;
@@ -88,10 +95,12 @@ final class XPathQuery {
             @SuppressWarnings("unchecked")
             Map<String, Object> request = (Map<String, Object>) Json.parse(json);
             String version = "3.1".equals(Json.string(request, "xpathVersion")) ? "3.1" : "4.0";
-            session = sessions.get(version);
+            boolean sandbox = Json.bool(request, "sandbox");
+            String key = version + (sandbox ? " sandbox" : "");
+            session = sessions.get(key);
             if (session == null) {
-                session = new Session("4.0".equals(version));
-                sessions.put(version, session);
+                session = new Session("4.0".equals(version), sandbox);
+                sessions.put(key, session);
             }
             return evaluate(session, request);
         } catch (SaxonApiException e) {
@@ -116,7 +125,7 @@ final class XPathQuery {
         final boolean xpath40;
         final XdmView view;
 
-        Session(boolean want40) {
+        Session(boolean want40, boolean sandbox) {
             boolean is40 = want40 && !"HE".equals(config.getEditionCode());
             if (is40) {
                 try {
@@ -129,7 +138,88 @@ final class XPathQuery {
             processor = new Processor(config);
             // one result at a time: each entry, member and item on a line of its own
             view = new XdmView(config, true);
+            if (sandbox) {
+                // xdm-view compiles on first use: before extension functions and file access are turned off, so
+                // the result is still shown as xdm:debug() does
+                try {
+                    view.renderPlain(new XdmAtomicValue(1L));
+                } catch (RuntimeException | LinkageError e) {
+                    // the result is then listed by item
+                }
+                restrict(config);
+            }
         }
+    }
+
+    // the folders a sandboxed request may read files in (canonical paths), set for each request
+    private static volatile List<String> allowedRoots = new ArrayList<String>();
+
+    // For an assistant's expression, not one a person wrote: no extension functions (calls to Java methods, EXPath
+    // modules such as file:, which can write files and run programs), no protocol but file:, and only files in the
+    // folders the request gives, for doc(), collection(), unparsed-text() and the XML parser's entities. Failing to
+    // restrict is an error, not an unrestricted run
+    private static void restrict(Configuration config) {
+        config.setConfigurationProperty("http://saxon.sf.net/feature/allow-external-functions", Boolean.FALSE);
+        config.setConfigurationProperty("http://saxon.sf.net/feature/allowedProtocols", "file");
+        // no external entities or DTDs in the XML parser: its parser is reused, and after the first document its
+        // entities were no longer read through the resolver below
+        for (String feature : new String[] { "http://xml.org/sax/features/external-general-entities",
+                "http://xml.org/sax/features/external-parameter-entities", "http://apache.org/xml/features/nonvalidating/load-external-dtd" }) {
+            config.setConfigurationProperty("http://saxon.sf.net/feature/parserFeature?uri=" + feature.replace(":", "%3A").replace("/", "%2F"), Boolean.FALSE);
+        }
+        final ResourceResolver delegate = config.getResourceResolver();
+        config.setResourceResolver(new ResourceResolver() {
+            public Source resolve(ResourceRequest request) throws XPathException {
+                String uri = request.uri;
+                if (uri == null && request.relativeUri != null) {
+                    try {
+                        uri = request.baseUri != null ? new java.net.URI(request.baseUri).resolve(request.relativeUri).toString() : request.relativeUri;
+                    } catch (java.net.URISyntaxException e) {
+                        uri = request.relativeUri;
+                    }
+                }
+                checkAllowed(uri);
+                return delegate.resolve(request);
+            }
+        });
+        // collection() and uri-collection() list and read files themselves, not through the resolver, and follow symbolic
+        // links out of the folders - so they're not available: doc() reads a file
+        config.setCollectionFinder(new CollectionFinder() {
+            public ResourceCollection findCollection(XPathContext context, String collectionURI) throws XPathException {
+                throw new XPathException("collection() and uri-collection() aren't available here: use doc() for a file in the workspace", "FODC0004");
+            }
+        });
+    }
+
+    private static void checkAllowed(String uri) throws XPathException {
+        try {
+            java.net.URI parsed = new java.net.URI(uri);
+            if ("file".equals(parsed.getScheme())) {
+                String path = new java.io.File(parsed).getCanonicalPath();
+                for (String root : allowedRoots) {
+                    if (path.equals(root) || path.startsWith(root.endsWith(java.io.File.separator) ? root : root + java.io.File.separator)) {
+                        return;
+                    }
+                }
+            }
+        } catch (java.net.URISyntaxException | IllegalArgumentException | java.io.IOException e) {
+            // not allowed
+        }
+        throw new XPathException("Not allowed to read " + uri + ": the expression can read only files in the workspace folders", "FODC0002");
+    }
+
+    private static List<String> canonicalRoots(List<Object> roots) {
+        List<String> result = new ArrayList<String>();
+        if (roots != null) {
+            for (Object root : roots) {
+                try {
+                    result.add(new java.io.File(String.valueOf(root)).getCanonicalPath());
+                } catch (java.io.IOException e) {
+                    // not a folder that exists
+                }
+            }
+        }
+        return result;
     }
 
     static Object evaluate(Session session, Map<String, Object> request) throws SaxonApiException {
@@ -137,6 +227,10 @@ final class XPathQuery {
         Processor processor = session.processor;
         DocumentBuilder builder = processor.newDocumentBuilder();
         String systemId = Json.string(request, "systemId");
+        boolean sandbox = Json.bool(request, "sandbox");
+        if (sandbox) {
+            allowedRoots = canonicalRoots(Json.array(request, "roots"));
+        }
         XdmNode document = builder.build(new StreamSource(new StringReader(Json.string(request, "xml")), systemId));
 
         XPathCompiler compiler = processor.newXPathCompiler();
@@ -152,12 +246,30 @@ final class XPathQuery {
                 // no base URI
             }
         }
+        if (sandbox) {
+            // the prefixes XPath 3.1 predeclares that Saxon's API doesn't - a stylesheet has to declare them
+            compiler.declareNamespace("map", "http://www.w3.org/2005/xpath-functions/map");
+            compiler.declareNamespace("array", "http://www.w3.org/2005/xpath-functions/array");
+            compiler.declareNamespace("math", "http://www.w3.org/2005/xpath-functions/math");
+            compiler.declareNamespace("err", "http://www.w3.org/2005/xqt-errors");
+        }
         XdmNode root = documentElement(document);
+        String documentDefault = null;
         if (root != null) {
             for (NamespaceBinding binding : root.getUnderlyingNode().getAllNamespaces()) {
+                if (sandbox && binding.getPrefix().isEmpty()) {
+                    // not bound: in a stylesheet, unprefixed element names are in no namespace, unless it sets
+                    // xpath-default-namespace - which the request gives
+                    documentDefault = binding.getNamespaceUri().toString();
+                    continue;
+                }
                 // the default namespace, for unprefixed element names, as the prefix ""
                 compiler.declareNamespace(binding.getPrefix(), binding.getNamespaceUri().toString());
             }
+        }
+        String defaultElementNamespace = Json.string(request, "xpathDefaultNamespace");
+        if (sandbox && defaultElementNamespace != null) {
+            compiler.declareNamespace("", defaultElementNamespace);
         }
         Map<String, Object> namespaces = Json.object(request, "namespaces");
         if (namespaces != null) {
@@ -185,6 +297,10 @@ final class XPathQuery {
         String text = text(session.view, value);
         if (text != null) {
             result.with("text", text);
+        }
+        if (sandbox && value.size() == 0 && documentDefault != null && !documentDefault.isEmpty() && defaultElementNamespace == null) {
+            result.with("hint", "The document's default namespace is " + documentDefault + ", which unprefixed element names don't match, as in a "
+                    + "stylesheet - unless it sets xpath-default-namespace (the xpathDefaultNamespace argument) or the expression uses a prefix or Q{" + documentDefault + "}name");
         }
         return result;
     }

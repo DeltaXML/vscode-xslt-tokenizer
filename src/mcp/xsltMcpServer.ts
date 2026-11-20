@@ -14,6 +14,7 @@ import { McpServer, StreamableHTTPServerTransport, z } from './sdk';
 import { McpRoot } from './mcpRoot';
 import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools';
 import { RunConfiguration } from './runConfiguration';
+import { XPathEvaluate } from './xpathEvaluate';
 
 // The extension's MCP server, for AI assistants: tools that use its linter and its knowledge of XSLT modules (see
 // XsltMcpTools). It runs in the extension host, so the tools use the same code as the editor - with the Streamable
@@ -32,9 +33,13 @@ export class XsltMcpServer {
 	private token: string | undefined;
 	private readonly tools: XsltMcpTools;
 
+	private readonly xpath: XPathEvaluate | undefined;
+
 	// state: the workspace's state, where its port is kept
-	public constructor(private readonly secrets: vscode.SecretStorage, modules: XsltModules, private readonly state?: vscode.Memento) {
+	// extensionUri: the extension's folder, where the program that evaluates XPath is - without it, no evaluate_xpath tool
+	public constructor(private readonly secrets: vscode.SecretStorage, modules: XsltModules, private readonly state?: vscode.Memento, extensionUri?: vscode.Uri) {
 		this.tools = new XsltMcpTools(modules);
+		this.xpath = extensionUri ? new XPathEvaluate(extensionUri) : undefined;
 		// reset in this window or another: the new token is used from the next request
 		secrets.onDidChange((event) => {
 			if (event.key === XsltMcpServer.tokenKey) {
@@ -173,6 +178,7 @@ export class XsltMcpServer {
 		this.httpServer?.close();
 		this.httpServer = undefined;
 		this.port = undefined;
+		this.xpath?.dispose();
 	}
 
 	private async handle(request: http.IncomingMessage, response: http.ServerResponse, port: number) {
@@ -265,6 +271,47 @@ export class XsltMcpServer {
 			inputSchema: { path: filePath },
 			annotations: readOnly
 		}, async (args) => tools.moduleImports(args.path));
+		mcp.registerTool('list_declarations', {
+			title: 'List the components an XSLT module can use',
+			description: 'Every function, named template, global variable and parameter, mode, attribute set, key, accumulator, item type and ' +
+				'character map usable from an XSLT module: its own declarations, then those of the modules it imports or includes and the ' +
+				'packages it uses - each with its parameters and types, its location, and the first line of its documentation. Call it ' +
+				'before writing or changing a stylesheet, to reuse what exists rather than write it again. A declaration overridden by one ' +
+				'with a higher import precedence is marked. For a declaration\'s full documentation use find_declaration. A module that a ' +
+				'top-level stylesheet imports or includes sees that stylesheet\'s declarations too: the one found for it in the workspace, or topLevelStylesheet.',
+			inputSchema: {
+				path: filePath.describe('The XSLT module or XSpec file to list the components usable from'), kind,
+				topLevelStylesheet: topLevelStylesheet('list the declarations with')
+			},
+			annotations: readOnly
+		}, async (args) => tools.listDeclarations(args.path, args.kind, args.topLevelStylesheet));
+		if (this.xpath) {
+			const xpath = this.xpath;
+			mcp.registerTool('evaluate_xpath', {
+				title: 'Evaluate an XPath expression on an XML file',
+				description: 'Evaluates an XPath expression with Saxon (the user\'s jar, as for Find Nodes with XPath) on an XML file, and gives the ' +
+					'result: the number of items, and the first 100 as the debugger shows values - a node as its path, a map, array or atomic ' +
+					'value in full. Use it on the stylesheet\'s source XML (see run_configuration for its XML context file) to check input ' +
+					'structure, a match pattern or a select/test expression, or the count of nodes, before writing or changing templates. ' +
+					'It is evaluated as in a stylesheet: unprefixed element names are in no namespace unless xpathDefaultNamespace is given (as ' +
+					'xpath-default-namespace), whatever the document\'s default namespace. Prefixes the document declares are bound. To use ' +
+					'a prefix it doesn\'t declare, put one declare namespace line for each at the very start, each ending in a semicolon, ' +
+					'e.g. declare namespace o = \'urn:orders\'; declare namespace x = \'urn:x\'; //o:order/x:ref - these lines are the only ' +
+					'thing allowed before the XPath: it is XPath, not XQuery, so there is no declare variable, declare function or default ' +
+					'element namespace (use xpathDefaultNamespace for unprefixed element names). The xs, fn, map, array, math and err ' +
+					'prefixes are predeclared, but a stylesheet must declare map, array and math itself. There is no stylesheet around the ' +
+					'expression: no variables, keys or functions of a stylesheet. For safety it has no extension functions (Java, EXPath, ' +
+					'such as file:), no collection(), and doc() and unparsed-text() read only files in the workspace folders. An error is given ' +
+					'with Saxon\'s code and position.',
+				inputSchema: {
+					xpath: z.string().describe('The XPath expression, e.g. //order[@total > 100]/@id or count(//item)'),
+					xmlPath: filePath.describe('The XML file to evaluate it on, as the context item'),
+					xpathDefaultNamespace: z.string().optional().describe('The namespace URI of unprefixed element names, as the stylesheet\'s xpath-default-namespace - none, if not given'),
+					xpathVersion: z.enum(['3.1', '4.0']).optional().describe('4.0 by default - 3.1 with Saxon-HE, which can\'t evaluate XPath 4.0. Use 3.1 for an XSLT 3.0 stylesheet')
+				},
+				annotations: readOnly
+			}, async (args) => xpath.evaluate(args.xpath, args.xmlPath, args.xpathVersion, args.xpathDefaultNamespace));
+		}
 		mcp.registerTool('find_declaration', {
 			title: 'Find the declaration of an XSLT component',
 			description: 'Where a function, named template, global variable or parameter, mode, attribute set, key, accumulator, item type or ' +
