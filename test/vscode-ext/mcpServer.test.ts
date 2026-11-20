@@ -722,6 +722,41 @@ suite('MCP server: the skill it serves', function () {
 		assert.include(names, 'list_declarations', tools.text);
 	});
 
+	test('a stream a client keeps open on the new protocol (subscriptions/listen) ends when the server is stopped - not when the client gives up', async () => {
+		const streamPort = 6797;
+		const streaming = new XsltMcpServer(memorySecrets(), { problems: async () => [], declarations: async () => ({ own: [], imported: [] }) }, undefined, extension.extensionUri);
+		assert.isTrue(await streaming.start(streamPort));
+		const streamToken = await streaming.getToken();
+		try {
+			const request = http.request({ host: '127.0.0.1', port: streamPort, path: '/mcp', method: 'POST', headers: { 'Content-Type': 'application/json',
+				'Accept': 'application/json, text/event-stream', Authorization: `Bearer ${streamToken}`, 'MCP-Protocol-Version': '2026-07-28', 'Mcp-Method': 'subscriptions/listen' } });
+			const opened = new Promise<http.IncomingMessage>((resolve, reject) => { request.on('response', resolve); request.on('error', reject); });
+			request.end(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'subscriptions/listen', params: { notifications: { toolsListChanged: true }, _meta: {
+				'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientInfo': { name: 'test', version: '1' }, 'io.modelcontextprotocol/clientCapabilities': {} } } }));
+			const response = await opened;
+			assert.strictEqual(response.statusCode, 200);
+			// a stream: still open, after its first message
+			let ended = false;
+			response.on('data', () => undefined);
+			response.on('close', () => ended = true);
+			response.on('error', () => ended = true);
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			assert.isFalse(ended, 'the stream is open while the server runs');
+			streaming.stop();
+			for (let waited = 0; waited < 3000 && !ended; waited += 100) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			}
+			assert.isTrue(ended, 'the stream is closed by stopping the server');
+			// and it serves again when it's started again - e.g. the setting turned off, then on
+			assert.isTrue(await streaming.start(streamPort));
+			const again = await postTo(streamPort, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }, { Authorization: `Bearer ${await streaming.getToken()}` });
+			assert.strictEqual(again.status, 200, again.text);
+			assert.isArray(again.message?.result?.tools, again.text);
+		} finally {
+			streaming.stop();
+		}
+	});
+
 	test('the 2025 protocol still works: tools are listed, and the server\'s skill is read as a resource', async () => {
 		const tools = await legacy('tools/list');
 		assert.strictEqual(tools.status, 200, tools.text);

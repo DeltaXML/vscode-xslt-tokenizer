@@ -187,6 +187,9 @@ export class XsltMcpServer {
 
 	public stop() {
 		this.httpServer?.close();
+		// and the connections it has open: a client keeps a stream open on the 2026-07-28 protocol (subscriptions/listen), which
+		// would go on being served after the server is turned off
+		this.httpServer?.closeAllConnections();
 		this.httpServer = undefined;
 		this.port = undefined;
 		this.xpath?.dispose();
