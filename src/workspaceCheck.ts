@@ -10,6 +10,7 @@ import { ImportIndex } from './importIndex';
 import { DiskTextDocument } from './mcp/diskTextDocument';
 import { XsltMcpTools } from './mcp/xsltMcpTools';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { PackageScope } from './packageScope';
 
 /**
@@ -21,7 +22,8 @@ import { PackageScope } from './packageScope';
  * longer apply. Errors only, unless the XSLT.workspaceCheck.includeWarnings setting is on.
  */
 export class WorkspaceCheck implements vscode.Disposable {
-	public static readonly source = 'XSLT (workspace check)';
+	// the linter's source (see XsltTokenDiagnostics.source), with what tells these problems from an open file's
+	public static readonly source = `${XsltTokenDiagnostics.source} (workspace check)`;
 	public static readonly clearTitle = 'Clear';
 	private static readonly askAbove = 1000;
 	private readonly collection = vscode.languages.createDiagnosticCollection('xslt-workspace-check');
