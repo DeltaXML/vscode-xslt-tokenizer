@@ -401,6 +401,22 @@ export class SchematronValidation {
 		return picked?.file;
 	}
 
+	// the arguments of the java command that validates the XML file with the schema, writing the SVRL report to a file: one run of
+	// Saxon, with the schema compiled by SchXslt2 and run on the file (see validate.xsl). The phase: its id, or '#DEFAULT'
+	public static validationArgs(xmlUri: vscode.Uri, schema: string, schemaText: string, phase: string, svrl: string): string[] {
+		const extensions = XSpecRunner.schematronSyntaxExtensions(xmlUri, schema, schemaText);
+		const catalog = CatalogSetting.taskOption({});
+		const transpiler = path.join(XSpecRunner.home(xmlUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
+		return ['-cp', XSpecRunner.saxonJar(xmlUri)!, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
+			'-s:' + xmlUri.fsPath, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'validate.xsl'), '-o:' + svrl,
+			// as XPath string literals, not text - with which Saxon 13 fails (see validate.xsl)
+			'?schema=' + XSpecRunner.xpathString(vscode.Uri.file(schema).toString()), '?transpiler=' + XSpecRunner.xpathString(vscode.Uri.file(transpiler).toString()),
+			// a phase that was chosen: not the schema's default phase - if it still has the phase
+			...(phase !== '#DEFAULT' ? ['?phase=' + XSpecRunner.xpathString(phase)] : []),
+			// text value templates in messages, with xsl:expand-text: the XSLT.schematron.allowExpandText setting
+			...(SchExpandText.allowed() ? ['?allow-expand-text=true()'] : [])];
+	}
+
 	// the file validated with the schema - its problems, in the Problems view - after saving either if it has changes
 	public static async validate(xmlUri: vscode.Uri, schema: string, interactive: boolean): Promise<SchematronResult[] | undefined> {
 		const problem = SchematronValidation.problem(xmlUri, schema);
@@ -425,17 +441,7 @@ export class SchematronValidation {
 		const previous = SchematronValidation.outcomes.get(xmlUri.fsPath);
 		SchematronValidation.setOutcome({ xml: xmlUri.fsPath, schema, phase: SchematronValidation.phaseName(phase, schemaText), state: 'running',
 			errors: previous?.errors ?? 0, warnings: previous?.warnings ?? 0, infos: previous?.infos ?? 0, at: new Date() });
-		const extensions = XSpecRunner.schematronSyntaxExtensions(xmlUri, schema, schemaText);
-		const catalog = CatalogSetting.taskOption({});
-		const transpiler = path.join(XSpecRunner.home(xmlUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
-		const args = ['-cp', XSpecRunner.saxonJar(xmlUri)!, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
-			'-s:' + xmlUri.fsPath, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'validate.xsl'), '-o:' + svrl,
-			// as XPath string literals, not text - with which Saxon 13 fails (see validate.xsl)
-			'?schema=' + XSpecRunner.xpathString(vscode.Uri.file(schema).toString()), '?transpiler=' + XSpecRunner.xpathString(vscode.Uri.file(transpiler).toString()),
-			// a phase that was chosen: not the schema's default phase - if it still has the phase
-			...(phase !== '#DEFAULT' ? ['?phase=' + XSpecRunner.xpathString(phase)] : []),
-			// text value templates in messages, with xsl:expand-text: the XSLT.schematron.allowExpandText setting
-			...(SchExpandText.allowed() ? ['?allow-expand-text=true()'] : [])];
+		const args = SchematronValidation.validationArgs(xmlUri, schema, schemaText, phase, svrl);
 		const channel = SchematronValidation.output();
 		channel.appendLine(`Validating ${xmlUri.fsPath} with ${schema}:`);
 		channel.appendLine('java ' + args.map((arg) => /[\s"]/.test(arg) ? `"${arg}"` : arg).join(' '));

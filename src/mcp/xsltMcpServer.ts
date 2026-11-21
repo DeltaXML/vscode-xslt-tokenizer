@@ -14,6 +14,7 @@ import { McpServer, createMcpHandler, loadSkills, toNodeHandler, z } from './sdk
 import { McpRoot } from './mcpRoot';
 import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools';
 import { RunConfiguration } from './runConfiguration';
+import { TestConfiguration, ValidationConfiguration } from './assistantRuns';
 import { XPathEvaluate } from './xpathEvaluate';
 
 // The extension's MCP server, for AI assistants: tools that use its linter and its knowledge of XSLT modules (see
@@ -392,6 +393,39 @@ export class XsltMcpServer {
 			inputSchema: { path: filePath.optional().describe('A stylesheet (.xsl, .xslt) to describe the Quick Run of: absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)') },
 			annotations: readOnly
 		}, async (args) => ({ content: [{ type: 'text' as const, text: await RunConfiguration.describe(args.path) }] }));
+		const configuration = async (run: Promise<{ text: string, isError: boolean }>) => {
+			const { text, isError } = await run;
+			return { content: [{ type: 'text' as const, text }], isError };
+		};
+		mcp.registerTool('test_configuration', {
+			title: 'How to run an XSpec file\'s tests',
+			description: 'The commands that run the tests of an XSpec file (.xspec) - for a stylesheet, or a Schematron schema - as the Test Explorer runs ' +
+				'them: with the user\'s Saxon jar, and the options the extension works out - Saxon\'s syntax extensions, the XML catalog, the ' +
+				'packages and the Saxon settings of the stylesheet\'s task. It runs nothing: run the commands yourself, in order, with the ' +
+				'user\'s permission. XSpec has no single command here - the tests are compiled to a test runner, then it is run, with more ' +
+				'steps for a Schematron - so don\'t write your own. The files they write go to a folder in the temporary files, not the ' +
+				'project. The run exits with 0 even when tests fail: it also gives the command that summarises the result as text - the ' +
+				'numbers passed, failed and pending, and each failure with what was expected and what the test gave - and lists the ' +
+				'file\'s scenarios. Use it after changing a stylesheet or its XSpec file.',
+			inputSchema: { path: filePath.describe('The XSpec file (.xspec): absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)') },
+			annotations: readOnly
+		}, async (args) => configuration(TestConfiguration.describe(args.path)));
+		mcp.registerTool('validation_configuration', {
+			title: 'How to validate an XML file with a Schematron schema',
+			description: 'The command that validates an XML file with a Schematron schema (.sch), as Schematron: Validate does: one run of Saxon, with ' +
+				'the schema compiled by SchXslt2 - with the user\'s Saxon jar, the phase, Saxon\'s syntax extensions and the XML catalog the ' +
+				'extension works out. It runs nothing: run the command yourself, with the user\'s permission. It writes the SVRL report to the ' +
+				'temporary files, and the result also gives the command that summarises the report as text - the number of failed assertions ' +
+				'and successful reports, and each with its role, location and message - as the run exits with 0 even when assertions fail. ' +
+				'A location is an XPath for the XML file: give it to evaluate_xpath for its line and column. Give a schema or an XML file; ' +
+				'the other is its XML context file, or the schema its xml-model names - or give it as pairedWith.',
+			inputSchema: {
+				path: filePath.describe('A Schematron schema (.sch) or the XML file to validate'),
+				pairedWith: z.string().optional().describe('The other file, if it isn\'t the one the extension knows: for a schema, the XML file to validate; for an XML file, the schema'),
+				phase: z.string().optional().describe('The id of the schema\'s phase to validate with - the one chosen for the pair, or the default, if not given')
+			},
+			annotations: readOnly
+		}, async (args) => configuration(ValidationConfiguration.describe(args.path, args.pairedWith, args.phase)));
 		return mcp;
 	}
 }

@@ -21,10 +21,13 @@ than one that looks right.
 | `evaluate_xpath` | Try an XPath expression on the stylesheet's source XML before relying on it |
 | `xpath_function` | Look up a built-in function's signature, for XPath 3.1 or 4.0 |
 | `describe_type` | Read an XSLT 4.0 record or enumeration item type |
-| `run_configuration` | Get the user's Saxon jar and edition, XML context file, parameters, catalog, packages - and the exact command that runs a stylesheet or XSpec test |
+| `run_configuration` | Get the user's Saxon jar and edition, XML context file, parameters, catalog, packages - and for a stylesheet, the exact command that runs it |
+| `test_configuration` | For an XSpec file: the commands that compile and run its tests as the Test Explorer does, and the command that summarises the result as text |
+| `validation_configuration` | For a Schematron schema and an XML file: the command that validates it as Schematron: Validate does, and the command that summarises the report |
 
-The tools only read. You edit files yourself, and run Saxon yourself with the command `run_configuration` gives (the user may be
-asked to allow it).
+The tools only read. You edit files yourself, and run Saxon yourself with the commands `run_configuration`, `test_configuration` and
+`validation_configuration` give (the user may be asked to allow them). Those runs exit with 0 even when tests or assertions fail, so
+read the summary each gives, not the exit code.
 
 ## Workflow
 
@@ -40,7 +43,8 @@ asked to allow it).
 5. **Run it.** Get the command from `run_configuration` for the stylesheet and run it, rather than writing your own Saxon
    command - the options (`--allowSyntaxExtensions:on` for 4.0, `-catalog`, `-lib` for packages) matter.
 6. **Test it.** If there are XSpec tests, `find_references` shows the scenarios for a function or template; update them with
-   the change and run them with the XSpec command from `run_configuration`. For new logic, add a scenario.
+   the change, and for new logic add a scenario. Run them with `test_configuration`'s commands - XSpec has no single command here, so
+   don't write your own - and read the summary. For a Schematron schema, `validation_configuration` does the same for a validation.
 
 ## Reading the linter
 
