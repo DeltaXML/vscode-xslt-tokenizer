@@ -163,6 +163,30 @@ suite('MCP server', function () {
 		}
 	});
 
+	test('run_configuration: an xsl:package is noted, with the public templates and modes it could be started from', () => {
+		const xsl = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform"';
+		const write = (name: string, body: string) => {
+			const file = path.join(dir, name);
+			fs.writeFileSync(file, body);
+			return { file, text: body };
+		};
+		const notes = (name: string, body: string) => { const f = write(name, body); return RunConfiguration.packageNotes(f.file, f.text); };
+		assert.deepStrictEqual(notes('entry-stylesheet.xsl', `<xsl:stylesheet ${xsl} version="3.0"><xsl:template name="a" visibility="public"/></xsl:stylesheet>`), []);
+		// a > in an attribute, a template element that isn't XSLT's, an xsl:expose, a private template and a comment
+		const [note] = notes('entry-package.xsl', `<?xml version="1.0"?><!-- <xsl:package> --><xsl:package ${xsl} version="3.0" name="urn:entry-points" package-version="1.0">
+			<xsl:expose component="template" names="exposed" visibility="public"/>
+			<xsl:template match="a[b > 1]" name="start" visibility="public"/>
+			<xsl:template name="exposed"/><xsl:template name="hidden" visibility="private"/>
+			<xsl:mode name="m1" visibility="public"/><xsl:mode name="m2"/>
+			<xsl:variable name="v"><template name="notxslt" visibility="public"/></xsl:variable></xsl:package>`);
+		assert.include(note, 'public named templates start, exposed (-it:name)');
+		assert.include(note, 'public modes m1 (-im:name)');
+		assert.notInclude(note, 'hidden');
+		assert.notInclude(note, 'notxslt');
+		assert.notInclude(note, 'm2');
+		assert.include(notes('entry-none.xsl', `<xsl:package ${xsl} version="3.0" name="urn:entry-none" package-version="1.0"/>`)[0], 'makes no named template or mode public');
+	});
+
 	test('run_configuration: the Saxon jar, with its edition, version and licence - and for a stylesheet, its Quick Run\'s source and command line', async () => {
 		assert.strictEqual(RunConfiguration.saxonEdition('/a/saxon-pe-13.1.jar'), 'PE');
 		assert.strictEqual(RunConfiguration.saxonVersion('/a/saxon-pe-13.1.jar'), '13.1');
@@ -210,6 +234,8 @@ suite('MCP server', function () {
 			assert.include(forMain, `For ${main}:`);
 			assert.include(forMain, 'this is the one Quick Run would create');
 			assert.include(forMain, `XML source: ${data}`);
+			assert.include(forMain, 'only the last one picked in the editor, not chosen for this stylesheet', 'a guessed XML source is flagged as one');
+			assert.notInclude(forMain, 'this is an xsl:package');
 			const command = forMain.split('\n').find((line) => line.trim().startsWith('Command:'))!;
 			assert.include(command, `java -cp ${jar} net.sf.saxon.Transform`, 'Saxon\'s own Transform - not the extension\'s terminal-output variant');
 			assert.include(command, `-xsl:${main}`);

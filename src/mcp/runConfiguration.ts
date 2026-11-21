@@ -17,6 +17,7 @@ import { SaxonTaskProvider, XSLTTask } from '../saxonTaskProvider';
 import { CatalogSetting } from '../catalogSetting';
 import { XsltPackages } from '../xsltPackages';
 import { ImportIndex } from '../importIndex';
+import { PackageScope } from '../packageScope';
 import { McpRoot } from './mcpRoot';
 import { XSpecRunner } from '../xspecRunner';
 import { DocumentChangeHandler } from '../documentChangeHandler';
@@ -123,6 +124,18 @@ export class RunConfiguration {
 		return /(?:he|pe|ee)[-_]?(\d+(?:[.-]\d+)*)/i.exec(path.basename(jar).replace(/\.jar$/i, ''))?.[1].replace(/-/g, '.');
 	}
 
+	// for an xsl:package run as the principal stylesheet: it has no entry points of its own beyond its public named templates and
+	// modes, so say what could be started from - as its visibility works out, with xsl:expose and the packages it uses
+	public static packageNotes(file: string, text: string): string[] {
+		const declaration = ImportIndex.packageDeclaration(text);
+		if (!declaration) {
+			return [];
+		}
+		const { templates, modes } = PackageScope.entryPoints(file, declaration.name, declaration.version);
+		const found = [...(templates.length ? [`public named templates ${templates.join(', ')} (-it:name)`] : []), ...(modes.length ? [`public modes ${modes.join(', ')} (-im:name)`] : [])];
+		return [`  Note: this is an xsl:package - Saxon can run one as the principal stylesheet, but only through what it makes public${found.length ? `: ${found.join('; ')}` : ' - this one makes no named template or mode public'}. A package is normally used by another stylesheet through xsl:use-package`];
+	}
+
 	// the stylesheet's Quick Run: its task, its XML context file, its parameters, and the command line
 	private static async forStylesheet(stylesheet: string, folder: string | undefined): Promise<string[]> {
 		const xsltFsPath = path.isAbsolute(stylesheet) || !folder ? path.resolve(stylesheet) : path.resolve(folder, stylesheet);
@@ -143,6 +156,12 @@ export class RunConfiguration {
 		const task = (persisted ?? SaxonTaskProvider.createQuickRunTaskDefinition('xslt', 'Quick Run', xsltFsPath, context.isNone ? undefined : contextFile ?? '')) as XSLTTask;
 		lines.push(persisted ? `  Quick Run task: '${persisted.label}' in .vscode/tasks.json` : '  Quick Run task: none yet in .vscode/tasks.json - this is the one Quick Run would create');
 		lines.push(`  XML source: ${task.xmlSource ? RunConfiguration.resolved(task.xmlSource, folder) : task.initialTemplate !== undefined ? 'none - it starts from its initial template (-it)' : 'none chosen yet - Quick Run asks for one'}`);
+		if (!persisted && context.fromLastPicked && task.xmlSource) {
+			lines.push('  Note: that XML file was only the last one picked in the editor, not chosen for this stylesheet - check it suits this stylesheet, or run it on another file');
+		} else if (!persisted && context.fromLastPicked && task.initialTemplate === undefined) {
+			lines.push('  Note: no XML file is known for this stylesheet - give Saxon one with -s:path');
+		}
+		lines.push(...RunConfiguration.packageNotes(xsltFsPath, document.getText()));
 		const parameters = task.parameters ?? [];
 		const unresolved = (value: string) => /\$\{(input|command):/.test(value);
 		if (parameters.length > 0) {

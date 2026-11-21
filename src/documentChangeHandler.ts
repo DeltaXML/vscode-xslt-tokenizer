@@ -107,7 +107,7 @@ export class DocumentChangeHandler {
 	// the XML context file for the stylesheet: the one picked for it (or its top-level stylesheet), else the source
 	// of its Quick Run task, else the last one picked. A null uri with isNone for 'None' - starting from
 	// xsl:initial-template - or with !isNone, when there's no context file yet
-	public static async contextFor(document: vscode.TextDocument | undefined): Promise<{ uri: vscode.Uri | null; isNone: boolean; stylesheet?: string }> {
+	public static async contextFor(document: vscode.TextDocument | undefined): Promise<{ uri: vscode.Uri | null; isNone: boolean; stylesheet?: string; fromLastPicked?: boolean }> {
 		if (document && DocumentChangeHandler.isStylesheetFile(document)) {
 			const stylesheet = DocumentChangeHandler.stylesheetKey(document);
 			const picked = FileSelection.instance?.getStylesheetContextFile(stylesheet);
@@ -119,7 +119,7 @@ export class DocumentChangeHandler {
 				return { uri: vscode.Uri.file(fsPath), isNone: false, stylesheet };
 			}
 		}
-		return { uri: DocumentChangeHandler.lastPickedUri, isNone: DocumentChangeHandler.lastPickedIsNone };
+		return { uri: DocumentChangeHandler.lastPickedUri, isNone: DocumentChangeHandler.lastPickedIsNone, fromLastPicked: true };
 	}
 
 	// makes the stylesheet's context file the one in use - e.g. when its editor becomes active

@@ -973,6 +973,15 @@ export class PackageScope {
 		return components;
 	}
 
+	// what a package makes public that a stylesheet can start from: its named templates and its modes, by name - as the package
+	// declares them, after its xsl:expose elements, and including those it accepts from the packages it uses
+	public static entryPoints(packagePath: string, name: string, version: string | undefined): { templates: string[], modes: string[] } {
+		const components = PackageScope.packageComponents({ name, version, path: packagePath }, packagePath, XsltPackages.all(), PackageScope.workspaceFolder(), 0, new Set([packagePath]));
+		const isPublic = (c: PackageComponent) => c.packageVisibility === 'public' || c.packageVisibility === 'final';
+		const names = (type: GlobalInstructionType) => [...new Set(components.filter((c) => c.type === type && isPublic(c) && c.name).map((c) => c.name))];
+		return { templates: names(GlobalInstructionType.Template), modes: names(GlobalInstructionType.ModeInstruction) };
+	}
+
 	// the modules of the package: its xsl:package module, then those it imports or includes, directly or indirectly
 	private static packageModules(pkgPath: string): PackageModule[] {
 		const result: PackageModule[] = [];
