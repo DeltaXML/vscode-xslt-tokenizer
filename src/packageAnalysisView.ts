@@ -150,7 +150,8 @@ export class PackageAnalysisView {
 		['abstract', 'Abstract components', 'The library uses these, but only the stylesheets declare them.'],
 		['included', 'Modules included in the package', 'The library uses what these shared modules declare, so the package includes them, rather than each stylesheet having a copy.'],
 		['modes', 'Modes and template rules', ''],
-		['not-shared', 'Not exposed by a package', 'These apply only to a package\'s own code, so the stylesheets need their own.']
+		['not-shared', 'Not exposed by a package', 'These apply only to a package\'s own code, so the stylesheets need their own.'],
+		['tests', 'XSpec tests', 'XSpec imports the stylesheet it tests into its test runner, which a package, or a stylesheet that uses one, can\'t be - so these tests need changes after converting.']
 	];
 
 	// the report: a summary, then the items by section - each with a link to its first place, and its other places in a

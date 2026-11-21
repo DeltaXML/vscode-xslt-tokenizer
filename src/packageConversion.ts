@@ -23,6 +23,8 @@ import { PackageScope } from './packageScope';
 import { FunctionData } from './functionData';
 import { FixedNamespaces } from './fixedNamespaces';
 import { CodeActionDocument } from './codeActionDocument';
+import { XSpecRunner } from './xspecRunner';
+import { XSpecHrefs } from './xspecHrefs';
 
 // a line of a module (0-based) - and the offset of the element there, where it's known
 export interface Place {
@@ -35,7 +37,7 @@ export interface Place {
 // package - or can't be made until the item is reworked
 export type ConversionSeverity = 'change' | 'decision' | 'blocker';
 
-export type ConversionSection = 'library' | 'visibility' | 'override' | 'abstract' | 'included' | 'modes' | 'not-shared' | 'blockers';
+export type ConversionSection = 'library' | 'visibility' | 'override' | 'abstract' | 'included' | 'modes' | 'not-shared' | 'tests' | 'blockers';
 
 export interface ConversionItem {
 	section: ConversionSection;
@@ -465,6 +467,7 @@ export class PackageConversion {
 		const packageName = PackageConversion.proposedName(library, libraryDeclarations, items.some((i) => i.section === 'library'), ImportIndex.instance.packages().map((p) => p.name));
 		// with the library's prefix for the package's namespace, if it has one
 		// else with the first prefix it declares for a namespace of its own
+		items.push(...await PackageConversion.xspecItems(library, topLevels, userModules, packageName, '1.0', PackageConversion.tree));
 		const bindings = [...(scan(library).bindings ?? new Map<string, string>())];
 		const prefix = bindings.find(([, uri]) => uri === packageName)?.[0] ??
 			bindings.find(([name, uri]) => name !== '' && !PackageConversion.isStandardNamespace(uri))?.[0];
@@ -473,6 +476,64 @@ export class PackageConversion {
 			unnamedModeName: prefix ? `${prefix}:default` : 'default',
 			items, plan
 		};
+	}
+
+	// The XSpec tests the conversion affects, in every workspace folder: XSpec imports the stylesheet it tests into its test runner,
+	// and neither a package nor a stylesheet with an xsl:use-package at its top level can be imported (XTSE3008). So after the
+	// conversion, the tests of the library - now a package - and of a top-level stylesheet that now uses it stop, and the tests of
+	// a module that imported or included the library have no package for the runner: the module no longer reaches it. A test
+	// with run-as="external" doesn't import what it tests, so it's left out. A report only: what's needed is for the user to decide
+	// (see the text of each item)
+	// the XSpec files in the workspace - replaced for testing
+	public static xspecFiles = async (): Promise<string[]> => (await vscode.workspace.findFiles('**/*.xspec', '**/node_modules/**', 2000)).map((uri) => uri.fsPath);
+
+	private static async xspecItems(library: string, topLevels: string[], userModules: string[], packageName: string, packageVersion: string,
+		tree: (file: string) => string[]): Promise<ConversionItem[]> {
+		const normal = (file: string) => path.normalize(file);
+		const affected: { library: Place[]; topLevel: Place[]; module: Place[] } = { library: [], topLevel: [], module: [] };
+		for (const xspecPath of await PackageConversion.xspecFiles()) {
+			let text: string;
+			let tested: string[];
+			try {
+				text = fs.readFileSync(xspecPath, 'utf8');
+				tested = XSpecRunner.testedModules(xspecPath, text).stylesheets.map(normal);
+			} catch {
+				continue;
+			}
+			if (/<(?:[\w.-]+:)?description\b[^>]*\srun-as\s*=\s*["']\s*external\s*["']/.test(text)) {
+				continue;
+			}
+			// the line of the stylesheet attribute that names it
+			const place = (module: string): Place => {
+				const href = XSpecHrefs.find(text, xspecPath).find((h) => h.attribute === 'stylesheet' && HrefPaths.toPath(h.value, h.basePath) !== undefined && normal(HrefPaths.toPath(h.value, h.basePath)!) === module);
+				return { path: xspecPath, line: href ? text.substring(0, href.start).split('\n').length - 1 : 0, offset: href?.start };
+			};
+			for (const module of tested) {
+				if (module === normal(library)) {
+					affected.library.push(place(module));
+				} else if (topLevels.map(normal).includes(module)) {
+					affected.topLevel.push(place(module));
+				} else if (userModules.map(normal).includes(module) && tree(module).map(normal).some((file) => file === normal(library))) {
+					affected.module.push(place(module));
+				}
+			}
+		}
+		const count = (places: Place[]) => new Set(places.map((p) => p.path)).size;
+		const subject = (places: Place[], what: string) => `${count(places)} XSpec file${count(places) === 1 ? ' tests' : 's test'} ${what}`;
+		const items: ConversionItem[] = [];
+		if (affected.library.length > 0) {
+			items.push({ section: 'tests', severity: 'decision', subject: subject(affected.library, 'the library'), places: affected.library,
+				text: `the library becomes an xsl:package, which XSpec can't import into its test runner: add run-as="external" to x:description - then only x:call reaches its public components, not an XPath expression in the file - or test it with an x:helper package-name="${packageName}" and a stylesheet that does nothing, so its public functions can be called in expressions too` });
+		}
+		if (affected.topLevel.length > 0) {
+			items.push({ section: 'tests', severity: 'decision', subject: subject(affected.topLevel, 'a stylesheet that will use the package'), places: affected.topLevel,
+				text: 'it gets an xsl:use-package, which can\'t be in a stylesheet XSpec imports (XTSE3008): these tests stop with that error after the conversion. Test the modules it imports or includes instead, with an x:helper package-name on x:description for the package, so the test runner uses it as the top-level stylesheet does' });
+		}
+		if (affected.module.length > 0) {
+			items.push({ section: 'tests', severity: 'decision', subject: subject(affected.module, 'a module that uses the library'), places: affected.module,
+				text: `the module no longer imports or includes the library - its top-level stylesheet uses the package - so the test runner needs the package: add <x:helper package-name="${packageName}" package-version="${packageVersion}"/> to x:description of each` });
+		}
+		return items;
 	}
 
 	// the errors in the modules the conversion reads - the library's and the stylesheets' that use it, in every workspace

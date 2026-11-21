@@ -43,7 +43,13 @@ teardown(async () => {
 			await vscode.window.showTextDocument(document, { viewColumn: tab.group.viewColumn, preserveFocus: false });
 			await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 		} else {
-			await vscode.window.tabGroups.close(tab);
+			// a tab that's already closed - by the test, or VS Code - is as it should be: closing it throws 'Tab close: Invalid tab
+			// not found!', which would fail this hook, and stop the run
+			try {
+				await vscode.window.tabGroups.close(tab);
+			} catch {
+				// already closed
+			}
 		}
 	}
 });

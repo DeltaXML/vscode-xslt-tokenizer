@@ -614,3 +614,84 @@ suite('XSLT packages: a module that is a part of a larger library', () => {
 	});
 });
 
+
+suite('XSLT packages: the XSpec tests a conversion affects', () => {
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'package-conversion-xspec-')));
+	const file = (name: string, content: string) => {
+		const fsPath = path.join(dir, name);
+		fs.mkdirSync(path.dirname(fsPath), { recursive: true });
+		fs.writeFileSync(fsPath, content);
+		return fsPath;
+	};
+	const xspec = (name: string, stylesheet: string, attributes = '') => file(name,
+		`<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:c="urn:common" stylesheet="${stylesheet}"${attributes}>\n  <x:scenario label="s"><x:call function="c:pad"><x:param select="'x'"/></x:call><x:expect label="e" select="'x '"/></x:scenario>\n</x:description>`);
+	const library = file('lib/common.xsl', `<xsl:stylesheet ${ns}>
+  <xsl:function name="c:pad"><xsl:param name="s"/><xsl:sequence select="$s || ' '"/></xsl:function>
+</xsl:stylesheet>`);
+	// the top-level stylesheet imports a module, which imports the library
+	const module = file('module.xsl', `<xsl:stylesheet ${ns}>
+  <xsl:import href="lib/common.xsl"/>
+  <xsl:function name="u:label"><xsl:param name="s"/><xsl:sequence select="c:pad($s)"/></xsl:function>
+</xsl:stylesheet>`);
+	const top = file('top.xsl', `<xsl:stylesheet ${ns}>
+  <xsl:import href="module.xsl"/>
+  <xsl:template match="/"><xsl:sequence select="u:label('a')"/></xsl:template>
+</xsl:stylesheet>`);
+	const unrelated = file('unrelated.xsl', `<xsl:stylesheet ${ns}/>`);
+	const ofLibrary = xspec('of-library.xspec', 'lib/common.xsl');
+	const ofTopLevel = xspec('of-top.xspec', 'top.xsl');
+	const ofModule = xspec('of-module.xspec', 'module.xsl');
+	const external = xspec('external.xspec', 'lib/common.xsl', ' run-as="external"');
+	const ofUnrelated = xspec('of-unrelated.xspec', 'unrelated.xsl');
+	const xspecFiles = PackageConversion.xspecFiles;
+	let analysis: ConversionAnalysis;
+
+	suiteSetup(async () => {
+		PackageConversion.xspecFiles = async () => [ofLibrary, ofTopLevel, ofModule, external, ofUnrelated];
+		await ImportIndex.instance.buildFrom([library, module, top, unrelated]);
+		const result = await PackageConversion.analyse(library);
+		assert.notTypeOf(result, 'string', String(result));
+		analysis = result as ConversionAnalysis;
+	});
+	suiteTeardown(() => {
+		PackageConversion.xspecFiles = xspecFiles;
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	const tests = () => analysis.items.filter((i) => i.section === 'tests');
+
+	test('a test of the library, of a top-level stylesheet and of a module that imports the library: each is reported, with where it names the stylesheet', () => {
+		assert.deepEqual(tests().map((i) => `${i.severity}: ${i.subject}`), [
+			'decision: 1 XSpec file tests the library',
+			'decision: 1 XSpec file tests a stylesheet that will use the package',
+			'decision: 1 XSpec file tests a module that uses the library'
+		]);
+		const [library_, topLevel, moduleTest] = tests();
+		assert.deepEqual(library_.places.map((p) => p.path), [ofLibrary]);
+		assert.deepEqual(topLevel.places.map((p) => p.path), [ofTopLevel]);
+		assert.deepEqual(moduleTest.places.map((p) => p.path), [ofModule]);
+		// the line of the stylesheet attribute: x:description's start tag, the first line
+		assert.strictEqual(library_.places[0].line, 0);
+	});
+
+	test('what each needs: run-as="external" or a helper for the library, helpers for the modules, and why a top-level stylesheet can\'t be tested', () => {
+		const [library_, topLevel, moduleTest] = tests();
+		assert.include(library_.text, 'run-as="external"');
+		assert.include(library_.text, `x:helper package-name="${analysis.packageName}"`);
+		assert.include(topLevel.text, 'XTSE3008');
+		assert.include(topLevel.text, 'x:helper package-name');
+		assert.include(moduleTest.text, `<x:helper package-name="${analysis.packageName}" package-version="${analysis.packageVersion}"/>`);
+	});
+
+	test('not reported: a test with run-as="external", and a test of a stylesheet that has nothing to do with the library', () => {
+		const paths = tests().flatMap((i) => i.places.map((p) => p.path));
+		assert.notInclude(paths, external);
+		assert.notInclude(paths, ofUnrelated);
+	});
+
+	test('the report has a section for them', () => {
+		const text = PackageAnalysisView.markdown(analysis, (p) => path.relative(dir, p), (p) => p);
+		assert.match(text, /XSpec tests/);
+		assert.include(text, 'of-module.xspec');
+	});
+});

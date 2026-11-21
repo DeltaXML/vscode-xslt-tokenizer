@@ -35,6 +35,7 @@ import { XSpecRequired } from './xspecRequired';
 import { XSpecCallArity } from './xspecCallArity';
 import { XSpecExpectResult } from './xspecExpectResult';
 import { SchXslt2Checks } from './schXslt2Checks';
+import { XSpecUsePackage } from './xspecUsePackage';
 import { SchReferences } from './schReferences';
 import { SchRequired } from './schRequired';
 import { DcpValueAttributes } from './dcpValueAttributes';
@@ -3851,6 +3852,10 @@ export class XsltTokenDiagnostics {
 			if (stylesheetHref) {
 				allDiagnostics.push(new vscode.Diagnostic(new vscode.Range(document.positionAt(stylesheetHref.start), document.positionAt(stylesheetHref.end)),
 					`XSpec: '${stylesheetHref.value}' is the package ${xspecScope!.packageName} - XSpec can only test a package with run-as="external" on x:description`, vscode.DiagnosticSeverity.Error));
+			}
+			// a stylesheet tested, or a helper's, that uses a package: the runner imports it, and xsl:use-package can't be in an imported stylesheet
+			if (!xspecScope?.packageName) {
+				allDiagnostics.push(...XSpecUsePackage.problems(document));
 			}
 			// the problems with XSpec's elements and attributes, as XSpec's
 			allDiagnostics.forEach((d) => d.message = d.message

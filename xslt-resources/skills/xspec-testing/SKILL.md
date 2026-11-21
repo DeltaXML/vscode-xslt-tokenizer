@@ -46,14 +46,17 @@ command: `test_configuration` gives the commands, and a command that summarises 
 
 ## A package, or a stylesheet that uses one
 
-By default XSpec **imports** the stylesheet into its test runner, and an `xsl:package` can't be imported - nor can a stylesheet with an
-`xsl:use-package` at its top level (Saxon stops with XTSE3008 when the tests are run - the linter doesn't warn about it yet). Test it with
-either:
+By default XSpec **imports** the stylesheet into its test runner. An `xsl:package` can't be imported, and nor can a stylesheet with an
+`xsl:use-package` at its top level - or in a module it includes or imports: Saxon stops the run with XTSE3008. The linter reports both, on
+the `stylesheet` attribute, so a test that's reported will not run.
 
-- `run-as="external"` on `x:description`, with `stylesheet` the package or stylesheet: it's run as a separate transformation, so only
-  `x:call` reaches its public components - not an XPath expression in the XSpec file;
-- an `x:helper package-name="..."` (with `package-version`) and a `stylesheet` that does nothing: the runner uses the package, so
-  its public functions can be called in XPath expressions too.
+- **To test a package itself:** `run-as="external"` on `x:description`, with `stylesheet` the package: it's run as a separate transformation,
+  so only `x:call` reaches its public components - not an XPath expression in the XSpec file. Or an `x:helper package-name="..."` (with
+  `package-version`) and a `stylesheet` that does nothing: the runner uses the package, so its public functions can be called in XPath
+  expressions too.
+- **To test a stylesheet that uses a package:** keep the `xsl:use-package` out of what is tested. Put it in a top-level stylesheet, test the module
+  that has the logic, and give the runner the package with `x:helper package-name="..."` on `x:description`. Don't reach for
+  `run-as="external"`: with Saxon-PE 13.1 the separate transformation didn't find the package passed with `-lib` (XTSE3000).
 
 Calling a component that isn't public is reported. The tools pass the packages to Saxon with `-lib`.
 
