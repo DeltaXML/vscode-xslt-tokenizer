@@ -86,6 +86,9 @@ export interface ConversionPlan {
 	movedRules: { rule: ModeUse, top: string }[];
 	// the library's declarations copied into each top-level stylesheet: keys, xsl:strip-space, xsl:output etc.
 	copies: { place: Place, kind: string, name?: string }[];
+	// the XSpec files that test a module that used the library: each gets an x:helper for the package, as the module doesn't reach
+	// it any more (see xspecHelperEdit)
+	xspecHelpers: string[];
 	// the conversion waits for these: what has to be reworked first
 	preventing: ConversionItem[];
 	// the library shares the unnamed mode with the stylesheets: it becomes a named, public mode of the package
@@ -220,7 +223,7 @@ export class PackageConversion {
 		const userUses = userScans.flatMap((s) => s.uses);
 		const libraryUses = libraryScans.flatMap((s) => s.uses);
 		const components: Kind[] = ['function', 'template', 'variable', 'attribute-set'];
-		const plan: ConversionPlan = { scans, trees, publicDeclarations: [], overrides: [], callbacks: [], absorb: [], publicModes: [], movedRules: [], copies: [], preventing: [], renameUnnamed: false };
+		const plan: ConversionPlan = { scans, trees, publicDeclarations: [], overrides: [], callbacks: [], absorb: [], publicModes: [], movedRules: [], copies: [], xspecHelpers: [], preventing: [], renameUnnamed: false };
 		// a module whose code moves into xsl:override is changed: it must be in the workspace, and used only by the top-level
 		// stylesheets that use the library - each gets the code moved, in its own xsl:override
 		const topsOf = (file: string) => topLevels.filter((top) => trees.get(top)!.has(file));
@@ -467,7 +470,9 @@ export class PackageConversion {
 		const packageName = PackageConversion.proposedName(library, libraryDeclarations, items.some((i) => i.section === 'library'), ImportIndex.instance.packages().map((p) => p.name));
 		// with the library's prefix for the package's namespace, if it has one
 		// else with the first prefix it declares for a namespace of its own
-		items.push(...await PackageConversion.xspecItems(library, topLevels, userModules, packageName, '1.0', PackageConversion.tree));
+		const xspec = await PackageConversion.xspecItems(library, topLevels, userModules, packageName, '1.0', PackageConversion.tree);
+		items.push(...xspec.items);
+		plan.xspecHelpers.push(...xspec.helperFiles);
 		const bindings = [...(scan(library).bindings ?? new Map<string, string>())];
 		const prefix = bindings.find(([, uri]) => uri === packageName)?.[0] ??
 			bindings.find(([name, uri]) => name !== '' && !PackageConversion.isStandardNamespace(uri))?.[0];
@@ -488,7 +493,7 @@ export class PackageConversion {
 	public static xspecFiles = async (): Promise<string[]> => (await vscode.workspace.findFiles('**/*.xspec', '**/node_modules/**', 2000)).map((uri) => uri.fsPath);
 
 	private static async xspecItems(library: string, topLevels: string[], userModules: string[], packageName: string, packageVersion: string,
-		tree: (file: string) => string[]): Promise<ConversionItem[]> {
+		tree: (file: string) => string[]): Promise<{ items: ConversionItem[]; helperFiles: string[] }> {
 		const normal = (file: string) => path.normalize(file);
 		const affected: { library: Place[]; topLevel: Place[]; module: Place[] } = { library: [], topLevel: [], module: [] };
 		for (const xspecPath of await PackageConversion.xspecFiles()) {
@@ -530,10 +535,44 @@ export class PackageConversion {
 				text: 'it gets an xsl:use-package, which can\'t be in a stylesheet XSpec imports (XTSE3008): these tests stop with that error after the conversion. Test the modules it imports or includes instead, with an x:helper package-name on x:description for the package, so the test runner uses it as the top-level stylesheet does' });
 		}
 		if (affected.module.length > 0) {
-			items.push({ section: 'tests', severity: 'decision', subject: subject(affected.module, 'a module that uses the library'), places: affected.module,
-				text: `the module no longer imports or includes the library - its top-level stylesheet uses the package - so the test runner needs the package: add <x:helper package-name="${packageName}" package-version="${packageVersion}"/> to x:description of each` });
+			items.push({ section: 'tests', severity: 'change', subject: subject(affected.module, 'a module that uses the library'), places: affected.module,
+				text: `the module no longer imports or includes the library - its top-level stylesheet uses the package - so the test runner needs the package: Convert to Package... changes ${count(affected.module) === 1 ? 'this XSpec file' : 'these XSpec files'}, adding an x:helper for the package to x:description (it is in the Refactor Preview, where you can leave it out)` });
 		}
-		return items;
+		return { items, helperFiles: [...new Set(affected.module.map((place) => place.path))] };
+	}
+
+	// The x:helper that gives an XSpec file's test runner the package, after its x:import and x:helper elements, or at the start of
+	// x:description: the module the file tests no longer imports or includes the library, so only the helper gives the runner the
+	// package, as the top-level stylesheet's xsl:use-package does. Not if it has one for the package already, or x:description has no
+	// content
+	private static xspecHelperEdit(file: string, packageName: string, packageVersion: string): TextEdit | undefined {
+		const text = fs.readFileSync(file, 'utf8');
+		const markup = RecordTypes.blankMarkup(text);
+		const root = /<(?:([\w.-]+):)?description\b/.exec(markup);
+		if (!root) {
+			return undefined;
+		}
+		const prefix = root[1] ? root[1] + ':' : '';
+		const extent = PackageEdits.elementExtent(markup, root.index);
+		if (!extent || extent.selfClosing) {
+			return undefined;
+		}
+		const quoted = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		if (new RegExp(`<${prefix}helper\\b[^>]*\\spackage-name\\s*=\\s*(["'])${quoted}\\1`).test(text)) {
+			return undefined;
+		}
+		const attribute = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+		let after = extent.startTagEnd;
+		let indent = PackageEdits.contentIndent(text, extent.startTagEnd);
+		const grouped = new RegExp(`<${prefix}(?:import|helper)\\b`, 'g');
+		for (let match = grouped.exec(markup); match !== null && match.index < extent.endTagStart; match = grouped.exec(markup)) {
+			const element = PackageEdits.elementExtent(markup, match.index);
+			if (element) {
+				after = element.end;
+				indent = PackageEdits.lineIndent(text, match.index);
+			}
+		}
+		return { start: after, end: after, text: `\n${indent}<${prefix}helper package-name="${attribute(packageName)}" package-version="${attribute(packageVersion)}"/>` };
 	}
 
 	// the errors in the modules the conversion reads - the library's and the stylesheets' that use it, in every workspace
@@ -813,6 +852,13 @@ export class PackageConversion {
 			fileEdits.forEach((edit) => edit.text = RecordTypes.withXsltPrefix(edit.text, scanOf(file).prefix));
 			fileEdits.sort((a, b) => a.start - b.start);
 		});
+		// the XSpec files, which aren't modules, so after that
+		for (const file of plan.xspecHelpers) {
+			const edit = PackageConversion.xspecHelperEdit(file, packageName, packageVersion);
+			if (edit) {
+				edits.set(file, [edit]);
+			}
+		}
 		return edits;
 	}
 

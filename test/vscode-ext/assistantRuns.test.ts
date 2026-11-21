@@ -100,6 +100,20 @@ suite('MCP tools: how to run XSpec tests and a Schematron validation', function 
 		assert.match(text, /-lib:\S*invoicing\.xsl/);
 	});
 
+	test('test_configuration: a test runner left by an earlier run - from before the XSpec file had its helper - doesn\'t decide the packages', async () => {
+		const xspec = await packageXSpec();
+		const text = (await TestConfiguration.describe(xspec)).text;
+		const compiled = /-o:(\S+-compiled\.xsl)/.exec(text)![1];
+		fs.mkdirSync(path.dirname(compiled), { recursive: true });
+		fs.writeFileSync(compiled, '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>');
+		try {
+			const again = (await TestConfiguration.describe(xspec)).text;
+			assert.match(again, /-lib:\S*invoicing\.xsl/, again);
+		} finally {
+			fs.rmSync(compiled, { force: true });
+		}
+	});
+
 	test('test_configuration: not an XSpec file, or not there', async () => {
 		const notXSpec = await TestConfiguration.describe(path.join(xspecDemo, 'order-report.xsl'));
 		assert.isTrue(notXSpec.isError);

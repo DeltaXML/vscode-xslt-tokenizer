@@ -2,6 +2,7 @@
  * Test suite for the analysis of converting a library - a module that stylesheets import or include - to an XSLT
  * package (see PackageConversion): what has to change for the stylesheets to work as before, as Saxon 13 behaves.
  */
+import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -10,6 +11,7 @@ import { ImportIndex } from '../../src/importIndex';
 import { ConversionAnalysis, ConversionItem, PackageConversion } from '../../src/packageConversion';
 import { PackageAnalysisView } from '../../src/packageAnalysisView';
 import { PackageEdits } from '../../src/packageEdits';
+import { TestConfiguration } from '../../src/mcp/assistantRuns';
 import * as vscode from 'vscode';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
@@ -664,7 +666,7 @@ suite('XSLT packages: the XSpec tests a conversion affects', () => {
 		assert.deepEqual(tests().map((i) => `${i.severity}: ${i.subject}`), [
 			'decision: 1 XSpec file tests the library',
 			'decision: 1 XSpec file tests a stylesheet that will use the package',
-			'decision: 1 XSpec file tests a module that uses the library'
+			'change: 1 XSpec file tests a module that uses the library'
 		]);
 		const [library_, topLevel, moduleTest] = tests();
 		assert.deepEqual(library_.places.map((p) => p.path), [ofLibrary]);
@@ -680,7 +682,8 @@ suite('XSLT packages: the XSpec tests a conversion affects', () => {
 		assert.include(library_.text, `x:helper package-name="${analysis.packageName}"`);
 		assert.include(topLevel.text, 'XTSE3008');
 		assert.include(topLevel.text, 'x:helper package-name');
-		assert.include(moduleTest.text, `<x:helper package-name="${analysis.packageName}" package-version="${analysis.packageVersion}"/>`);
+		// the conversion makes this change: the report says so
+		assert.include(moduleTest.text, 'Convert to Package... changes this XSpec file, adding an x:helper for the package');
 	});
 
 	test('not reported: a test with run-as="external", and a test of a stylesheet that has nothing to do with the library', () => {
@@ -693,5 +696,139 @@ suite('XSLT packages: the XSpec tests a conversion affects', () => {
 		const text = PackageAnalysisView.markdown(analysis, (p) => path.relative(dir, p), (p) => p);
 		assert.match(text, /XSpec tests/);
 		assert.include(text, 'of-module.xspec');
+	});
+});
+
+// its own package name: the workspace index keeps the packages of the suites before it, and one of them is urn:common
+suite('XSLT packages: converting - the XSpec files that get an x:helper for the package', () => {
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'package-conversion-helper-')));
+	const file = (name: string, content: string) => {
+		const fsPath = path.join(dir, name);
+		fs.mkdirSync(path.dirname(fsPath), { recursive: true });
+		fs.writeFileSync(fsPath, content);
+		return fsPath;
+	};
+	const scenario = `<x:scenario label="s"><x:call function="u:label"><x:param select="'a'"/></x:call><x:expect label="e" select="'a '"/></x:scenario>`;
+	const xmlns = 'xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:u="urn:util"';
+	const library = file('lib/common.xsl', `<xsl:stylesheet ${ns}>
+  <xsl:function name="c:pad"><xsl:param name="s"/><xsl:sequence select="$s || ' '"/></xsl:function>
+</xsl:stylesheet>`);
+	const module = file('module.xsl', `<xsl:stylesheet ${ns}>
+  <xsl:import href="lib/common.xsl"/>
+  <xsl:function name="u:label"><xsl:param name="s"/><xsl:sequence select="c:pad($s)"/></xsl:function>
+</xsl:stylesheet>`);
+	const top = file('top.xsl', `<xsl:stylesheet ${ns}>
+  <xsl:import href="module.xsl"/>
+  <xsl:template match="/"><xsl:sequence select="u:label('a')"/></xsl:template>
+</xsl:stylesheet>`);
+	const plainText = `<x:description ${xmlns} stylesheet="module.xsl">\n  ${scenario}\n</x:description>`;
+	const plain = file('plain.xspec', plainText);
+	const withImports = file('with-imports.xspec', `<x:description ${xmlns} stylesheet="module.xsl">\n  <x:import href="other.xspec"/>\n  <x:helper package-name="urn:other" package-version="2.0"/>\n  ${scenario}\n</x:description>`);
+	const hasHelper = file('has-helper.xspec', `<x:description ${xmlns} stylesheet="module.xsl">\n  <x:helper package-name="urn:helper-test"/>\n  ${scenario}\n</x:description>`);
+	const prefixed = file('prefixed.xspec', `<t:description xmlns:t="http://www.jenitennison.com/xslt/xspec" xmlns:u="urn:util" stylesheet="module.xsl">\n\t<t:scenario label="s"><t:call function="u:label"><t:param select="'a'"/></t:call><t:expect label="e" select="'a '"/></t:scenario>\n</t:description>`);
+	const ofLibrary = file('of-library.xspec', `<x:description ${xmlns} stylesheet="lib/common.xsl">\n  ${scenario}\n</x:description>`);
+	const ofTop = file('of-top.xspec', `<x:description ${xmlns} stylesheet="top.xsl">\n  ${scenario}\n</x:description>`);
+	const xspecFiles = PackageConversion.xspecFiles;
+	let analysis: ConversionAnalysis;
+	let edits: Map<string, { start: number, end: number, text: string }[]>;
+
+	// the file's text with its edits made, from the end
+	const edited = (name: string) => {
+		let text = fs.readFileSync(name, 'utf8');
+		[...(edits.get(name) ?? [])].sort((a, b) => b.start - a.start).forEach((e) => text = text.substring(0, e.start) + e.text + text.substring(e.end));
+		return text;
+	};
+
+	suiteSetup(async () => {
+		PackageConversion.xspecFiles = async () => [plain, withImports, hasHelper, prefixed, ofLibrary, ofTop];
+		await ImportIndex.instance.buildFrom([library, module, top]);
+		const result = await PackageConversion.analyse(library);
+		assert.notTypeOf(result, 'string', String(result));
+		analysis = result as ConversionAnalysis;
+		const converted = PackageConversion.convert(analysis, 'urn:helper-test', '1.0');
+		assert.notTypeOf(converted, 'string', String(converted));
+		edits = converted as Map<string, { start: number, end: number, text: string }[]>;
+	});
+	suiteTeardown(() => {
+		PackageConversion.xspecFiles = xspecFiles;
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	test('an XSpec file for a module that used the library: the helper, at the start of x:description', () => {
+		assert.strictEqual(edited(plain), plainText.replace('stylesheet="module.xsl">', 'stylesheet="module.xsl">\n  <x:helper package-name="urn:helper-test" package-version="1.0"/>'));
+	});
+
+	test('after its x:import and x:helper elements - with the indentation they have', () => {
+		const text = edited(withImports);
+		const lines = text.split('\n');
+		assert.deepEqual(lines.slice(1, 5), ['  <x:import href="other.xspec"/>', '  <x:helper package-name="urn:other" package-version="2.0"/>',
+			'  <x:helper package-name="urn:helper-test" package-version="1.0"/>', '  ' + scenario]);
+	});
+
+	test('not if it has a helper for the package already', () => {
+		assert.isFalse(edits.has(hasHelper));
+	});
+
+	test('with the prefix the file uses for XSpec', () => {
+		assert.include(edited(prefixed), '<t:helper package-name="urn:helper-test" package-version="1.0"/>');
+		assert.notInclude(edited(prefixed), '<x:helper');
+		// its own indentation: a tab
+		assert.include(edited(prefixed), '>\n\t<t:helper ');
+	});
+
+	test('only those: a test of the library or of a top-level stylesheet is for the user to change - the report says how', () => {
+		assert.isFalse(edits.has(ofLibrary));
+		assert.isFalse(edits.has(ofTop));
+		assert.sameMembers(analysis.plan.xspecHelpers, [plain, withImports, hasHelper, prefixed]);
+	});
+
+	test('the file is changed as the Refactor Preview shows it - one edit, an insertion', () => {
+		assert.deepEqual(edits.get(plain)!.map((e) => e.start === e.end), [true]);
+		assert.lengthOf(edits.get(withImports)!, 1);
+	});
+
+	// the whole conversion made, then the module's tests run as the Test Explorer runs them: the package is in the workspace, and the
+	// test runner gets it from the helper - the module doesn't reach it any more
+	test('end to end - with a real Saxon jar, in XSLT_TEST_SAXON_JAR: after the conversion, the module\'s tests run, with the package from the helper', async function () {
+		const realJar = process.env.XSLT_TEST_SAXON_JAR;
+		if (!realJar || process.platform === 'win32') {
+			this.skip();
+		}
+		// the extension's XSpec is found once it's active
+		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+		const tasks = vscode.workspace.getConfiguration('XSLT.tasks');
+		const savedJar = tasks.inspect<string>('saxonJar')?.globalValue;
+		await tasks.update('saxonJar', realJar, vscode.ConfigurationTarget.Global);
+		try {
+			// before: the tests pass, as the module imports the library
+			const run = async (xspecFile: string) => {
+				const described = await TestConfiguration.describe(xspecFile);
+				assert.isFalse(described.isError, described.text);
+				const text = described.text;
+				const shell = (command: string) => {
+					try {
+						return childProcess.execSync(command, { cwd: os.tmpdir(), encoding: 'utf8', shell: '/bin/sh', stdio: 'pipe', env: { ...process.env, SAXON_LICENSE_DIR: process.env.SAXON_LICENSE_DIR ?? '' } });
+					} catch (e: any) {
+						throw new Error(`Saxon stopped: ${e.stderr ?? e.message}`);
+					}
+				};
+				shell(/In one line: (java [^\n]+)/.exec(text)![1]);
+				return shell(new RegExp('prints the numbers passed[^\\n]*\\n\\s+(java [^\\n]+)').exec(text)![1]);
+			};
+			assert.match(await run(plain), /^XSpec: 1 passed, 0 failed, 0 pending/m);
+			// the conversion: every file it changes
+			for (const name of edits.keys()) {
+				fs.writeFileSync(name, edited(name));
+			}
+			await ImportIndex.instance.buildFrom([library, module, top]);
+			assert.match(fs.readFileSync(library, 'utf8'), /<xsl:package /);
+			assert.match(fs.readFileSync(top, 'utf8'), /<xsl:use-package name="urn:helper-test"/);
+			// after: the module no longer imports the library - and the tests still pass, with the helper
+			assert.notMatch(fs.readFileSync(module, 'utf8'), /xsl:import href="lib\/common\.xsl"/);
+			assert.include(fs.readFileSync(plain, 'utf8'), '<x:helper package-name="urn:helper-test" package-version="1.0"/>');
+			assert.match(await run(plain), /^XSpec: 1 passed, 0 failed, 0 pending/m);
+		} finally {
+			await tasks.update('saxonJar', savedJar, vscode.ConfigurationTarget.Global);
+		}
 	});
 });

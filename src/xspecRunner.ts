@@ -295,15 +295,16 @@ export class XSpecRunner {
 
 	// the packages the runner uses - for an x:helper's package-name, and those the stylesheet under test uses - and
 	// with run-as="external", which doesn't import the stylesheet, those it uses. Not with a Saxon configuration file,
-	// which may declare the packages itself, as for a task (see SaxonTaskProvider.libOption). From the compiled test runner, if it
-	// exists - else from the XSpec file's stylesheet and helpers
-	public static libraryPaths(xspecPath: string, files: XSpecFiles, taskSettings?: XSpecTaskSettings): string[] {
+	// which may declare the packages itself, as for a task (see SaxonTaskProvider.libOption). From the compiled test runner, just
+	// compiled - or, with fromCompiled false, as when the commands are only given, not run, so a runner left by an earlier run
+	// may be out of date - from the XSpec file's stylesheet and helpers
+	public static libraryPaths(xspecPath: string, files: XSpecFiles, taskSettings?: XSpecTaskSettings, fromCompiled = true): string[] {
 		if (taskSettings?.configFilename) {
 			return [];
 		}
 		const stylesheet = XSpecRunner.stylesheetOf(xspecPath);
 		// before it's compiled: those the stylesheets use, and the helpers' packages and those they use
-		const tested = fs.existsSync(files.compiled) ? undefined : XSpecRunner.testedModules(xspecPath);
+		const tested = fromCompiled && fs.existsSync(files.compiled) ? undefined : XSpecRunner.testedModules(xspecPath);
 		const fromRunner = tested === undefined ? XsltPackages.libraryPaths(files.compiled) :
 			tested.stylesheets.flatMap((module) => XsltPackages.libraryPaths(module)).concat(tested.packages.flatMap((pkg) => [pkg, ...XsltPackages.libraryPaths(pkg)]));
 		return [...new Set(fromRunner.concat(stylesheet && fs.existsSync(stylesheet) ? XsltPackages.libraryPaths(stylesheet) : []))];

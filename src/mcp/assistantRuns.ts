@@ -118,7 +118,8 @@ export class TestConfiguration {
 		const candidates = stylesheet ? XSpecTaskSettingsFinder.candidates(stylesheet) : [];
 		const taskSettings: XSpecTaskSettings | undefined = candidates[0];
 		const differ = candidates.length > 1 && !XSpecTaskSettingsFinder.allTheSame(candidates);
-		const libraryPaths = XSpecRunner.libraryPaths(xspecPath, files, taskSettings);
+		// not from a test runner an earlier run left: the XSpec file may have changed since
+		const libraryPaths = XSpecRunner.libraryPaths(xspecPath, files, taskSettings, false);
 		const steps = [
 			...prepared.steps.map((step) => ({ title: step.title, command: AssistantRuns.command(XSpecRunner.javaArgs(uri, step.saxonArgs)) })),
 			{ title: 'Compile the tests to a test runner, a stylesheet', command: AssistantRuns.command(XSpecRunner.javaArgs(uri, XSpecRunner.compileArgs(xspecPath, files, undefined, prepared.source, false))) },
