@@ -800,7 +800,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	// the MCP server for AI assistants, while XSLT.mcp.enabled is on - its tools check a document as when it's open
-	const mcpSymbolProvider = (document: vscode.TextDocument) => document.languageId === 'xslt' ? xsltSymbolProvider : document.languageId === 'xspec' ? xspecSymbolProvider : undefined;
+	const mcpSymbolProvider = (document: vscode.TextDocument) => document.languageId === 'xslt' ? xsltSymbolProvider : document.languageId === 'xspec' ? xspecSymbolProvider : document.languageId === 'sch' ? schSymbolProvider : undefined;
 	const mcpServer = new XsltMcpServer(context.secrets, {
 		problems: (document, topLevel) => mcpSymbolProvider(document)?.diagnosticsFor(document, topLevel),
 		declarations: (document, topLevel) => mcpSymbolProvider(document)?.declarationsFor(document, topLevel)
@@ -822,14 +822,14 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		mcpDefinitions.refresh();
-		// the skill, if it was installed by the set-up command: brought up to date with this version of the extension
+		// the skills that were installed by the set-up command: brought up to date with this version of the extension
 		try {
-			const skill = ClaudeSkill.refresh(context.extensionUri);
-			if (skill.status === 'updated') {
-				XsltMcpServer.log.info(`The xslt-xpath skill for Claude Code is updated: ${skill.path}`);
+			const updated = ClaudeSkill.refreshAll(context.extensionUri).filter((skill) => skill.status === 'updated');
+			if (updated.length > 0) {
+				XsltMcpServer.log.info(`The skills for Claude Code are updated: ${updated.map((skill) => skill.path).join(', ')}`);
 			}
 		} catch (e: any) {
-			XsltMcpServer.log.warn(`The xslt-xpath skill for Claude Code couldn't be updated: ${e?.message ?? e}`);
+			XsltMcpServer.log.warn(`The skills for Claude Code couldn't be updated: ${e?.message ?? e}`);
 		}
 		const folders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === 'file').map((folder) => folder.uri.fsPath);
 		if (folders.length > 0 && mcpServer.url && mcpServer.previousPort !== mcpServer.port) {
@@ -898,15 +898,21 @@ export function activate(context: vscode.ExtensionContext) {
 		const setUpUrl = folder && multiRoot ? McpRoot.urlFor(url, folder.uri.fsPath) : url;
 		const result = await ClaudeCodeSetup.setUp(setUpUrl, await mcpServer.getToken(), choice.scope, folder?.uri.fsPath);
 		if (result.ok) {
-			// with the skill that says how to use its tools - for all projects: it only applies where the server is connected
+			// with the skills that say how to use its tools - for all projects: they only apply where the server is connected
 			let skillText = '';
 			try {
-				const skill = ClaudeSkill.install(context.extensionUri);
-				skillText = skill.status === 'modified' ? ` The xslt-xpath skill at ${skill.path} was edited, so it was left as it is.` :
-					skill.status === 'current' ? '' : ` The xslt-xpath skill is ${skill.status === 'updated' ? 'updated' : 'installed'} in ${path.dirname(skill.path)}.`;
+				const skills = ClaudeSkill.installAll(context.extensionUri);
+				const added = skills.filter((skill) => skill.status === 'installed' || skill.status === 'updated');
+				const edited = skills.filter((skill) => skill.status === 'modified');
+				if (added.length > 0) {
+					skillText += ` The skills ${added.map((skill) => skill.name).join(', ')} are ${added.every((skill) => skill.status === 'updated') ? 'updated' : 'installed'} in ${path.dirname(path.dirname(added[0].path))}.`;
+				}
+				if (edited.length > 0) {
+					skillText += ` ${edited.map((skill) => skill.name).join(', ')} ${edited.length === 1 ? 'was' : 'were'} edited, so ${edited.length === 1 ? 'it was' : 'they were'} left as ${edited.length === 1 ? 'it is' : 'they are'}.`;
+				}
 			} catch (e: any) {
-				XsltMcpServer.log.warn(`The xslt-xpath skill for Claude Code couldn't be installed: ${e?.message ?? e}`);
-				skillText = ' The xslt-xpath skill couldn\'t be installed - see the XSLT MCP Server output.';
+				XsltMcpServer.log.warn(`The skills for Claude Code couldn't be installed: ${e?.message ?? e}`);
+				skillText = ' The skills couldn\'t be installed - see the XSLT MCP Server output.';
 			}
 			vscode.window.showInformationMessage(`Claude Code is set up to use the XSLT/XPath MCP server${folder ? ` in ${folder.name}` : ' in all projects'}.${skillText} Start a new Claude Code session to use it: a session already running keeps its old settings.${multiRoot && folder ? ' For another of the workspace\'s folders, run this command again and choose it.' : ''}`);
 		} else {

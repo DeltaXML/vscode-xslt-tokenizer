@@ -23,7 +23,7 @@ See the [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) f
 - **Profiling in the editor** - [times shown at each template and function](https://deltaxml.github.io/vscode-xslt-xpath/profiler.html), with earlier profiles to compare (Saxon-PE/EE).
 - **Documentation in the code** - [notes](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-notes.html) in Markdown, with Javadoc-style tags such as `@param` and `@see`, shown in hover help wherever a function or template is used, and checked against its parameters - in XSLT 3.0 too.
 - **Help moving to packages** - [Analyse as Package](https://deltaxml.github.io/vscode-xslt-xpath/xslt-packages.html#converting) shows what would change before a library becomes a package. Packages in the workspace are found with no setup, and `xsl:override` declarations are written for you.
-- **Ready for AI assistants** - GitHub Copilot, Claude Code and other assistants in VS Code [see the extension's problems](https://deltaxml.github.io/vscode-xslt-xpath/ai-assistants.html) and fix them - and, through its [MCP server](https://deltaxml.github.io/vscode-xslt-xpath/ai-assistants.html#mcp), check files that aren't open, find declarations and references, try XPath on your XML, and get the exact command to run a stylesheet as you do - with a skill that teaches the assistant to use them (Copilot: VS Code 1.147 or later).
+- **Ready for AI assistants** - GitHub Copilot, Claude Code and other assistants in VS Code [see the extension's problems](https://deltaxml.github.io/vscode-xslt-xpath/ai-assistants.html) and fix them - and, through its [MCP server](https://deltaxml.github.io/vscode-xslt-xpath/ai-assistants.html#mcp), check files that aren't open, find declarations and references, try XPath on your XML, and get the exact command to run a stylesheet as you do - with skills for XSLT, XSpec tests and Schematron that teach the assistant to use them (Copilot: VS Code 1.147 or later).
 - **Free and open source** - MIT licensed, and running and debugging work with the free Saxon-HE.
 
 **XML schema validation:** this extension checks that XML files are well-formed, but doesn't validate them against an XML Schema, RELAX NG schema or DTD - for that, install [Red Hat's XML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-xml) alongside it. The two work together: XSLT, XSpec and Schematron files are handled by this extension, and while Red Hat's extension is validating XML files, this one doesn't report the same well-formedness problems again. Schema-aware XSLT isn't supported.
@@ -105,7 +105,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
       <li>References across imported modules</li>
       <li>Saxon errors from runs, in the Problems panel</li>
       <li>Quick fixes for common problems</li>
-      <li><a href="https://deltaxml.github.io/vscode-xslt-xpath/ai-assistants.html#mcp">MCP server</a> for AI assistants, with a skill for Copilot (VS Code 1.147 or later) and Claude Code</li>
+      <li><a href="https://deltaxml.github.io/vscode-xslt-xpath/ai-assistants.html#mcp">MCP server</a> for AI assistants, with skills for Copilot (VS Code 1.147 or later) and Claude Code</li>
     </ul>
   </td>
   <td width="50%" valign="top">

@@ -81,10 +81,11 @@ export class XsltMcpTools {
 		return folder && file.startsWith(folder + path.sep) ? path.relative(folder, file) : file;
 	}
 
-	private static async open(filePath: string, withXSpec: boolean): Promise<vscode.TextDocument | string> {
+	// withSchematron: a Schematron schema (.sch) too - for the tool that checks a file, as the extension does
+	private static async open(filePath: string, withXSpec: boolean, withSchematron = false): Promise<vscode.TextDocument | string> {
 		const resolved = XsltMcpTools.resolve(filePath);
-		if (!(withXSpec ? /\.(xslt?|xspec)$/i : /\.xslt?$/i).test(resolved)) {
-			return `Not an XSLT${withXSpec ? ' or XSpec' : ''} file: ${resolved}`;
+		if (!(withSchematron ? /\.(xslt?|xspec|sch)$/i : withXSpec ? /\.(xslt?|xspec)$/i : /\.xslt?$/i).test(resolved)) {
+			return `Not an XSLT${withSchematron ? ', XSpec or Schematron' : withXSpec ? ' or XSpec' : ''} file: ${resolved}`;
 		}
 		if (!fs.existsSync(resolved)) {
 			return `File not found: ${resolved}`;
@@ -189,7 +190,7 @@ export class XsltMcpTools {
 	// topLevelStylesheet: one to check an XSLT module with, instead of the one found for it - e.g. one outside the
 	// workspace, or another of those that include it
 	public async lintFile(filePath: string, minSeverity: Severity = 'hint', topLevelStylesheet?: string): Promise<ToolResult> {
-		const document = await XsltMcpTools.open(filePath, true);
+		const document = await XsltMcpTools.open(filePath, true, true);
 		if (typeof document === 'string') {
 			return XsltMcpTools.text(document, true);
 		}
@@ -199,7 +200,7 @@ export class XsltMcpTools {
 		}
 		const lines = await this.problemLines(document, minSeverity, topLevel);
 		if (!lines) {
-			return XsltMcpTools.text(`Not checked - the file's language is '${document.languageId}', not XSLT or XSpec: ${document.fileName}`, true);
+			return XsltMcpTools.text(`Not checked - the file's language is '${document.languageId}', not XSLT, XSpec or Schematron: ${document.fileName}`, true);
 		}
 		const withTopLevel = XsltMcpTools.withTopLevel(topLevel);
 		return XsltMcpTools.text(lines.length === 0 ? `No problems: ${document.fileName}${withTopLevel}` :
@@ -225,13 +226,13 @@ export class XsltMcpTools {
 	}
 
 	// the problems of the XSLT and XSpec files in a folder - not XSpec's generated test runners or hidden folders
-	public async lintFiles(folder: string | undefined, pattern = '**/*.{xsl,xslt,xspec}', minSeverity: Severity = 'warning'): Promise<ToolResult> {
+	public async lintFiles(folder: string | undefined, pattern = '**/*.{xsl,xslt,xspec,sch}', minSeverity: Severity = 'warning'): Promise<ToolResult> {
 		const base = folder ? XsltMcpTools.resolve(folder) : McpRoot.current();
 		if (!base || !fs.existsSync(base) || !fs.statSync(base).isDirectory()) {
 			return XsltMcpTools.text(base ? `Folder not found: ${base}` : 'No folder given, and no workspace folder is open', true);
 		}
 		const uris = await vscode.workspace.findFiles(new vscode.RelativePattern(base, pattern), XsltMcpTools.lintExcludes(base, pattern), XsltMcpTools.maxFiles + 1);
-		const files = uris.map((uri) => uri.fsPath).filter((file) => /\.(xslt?|xspec)$/i.test(file)).sort();
+		const files = uris.map((uri) => uri.fsPath).filter((file) => /\.(xslt?|xspec|sch)$/i.test(file)).sort();
 		const results: string[] = [];
 		let checked = 0;
 		let problems = 0;

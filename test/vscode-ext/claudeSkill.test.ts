@@ -33,9 +33,50 @@ suite('Claude Code skill', function () {
 		fs.rmSync(extension, { recursive: true, force: true });
 	});
 
-	test('the shipped skill is a skill: with a name and a description', () => {
-		const real = fs.readFileSync(path.join(vscode.extensions.getExtension('deltaxml.xslt-xpath')!.extensionPath, 'xslt-resources', 'skills', 'xslt-xpath', 'SKILL.md'), 'utf8');
-		assert.match(real, /^---\nname: xslt-xpath\ndescription: .{40,}\n---\n/);
+	test('the shipped skills are skills: each with a name that is its folder\'s, and a description', () => {
+		const real = vscode.extensions.getExtension('deltaxml.xslt-xpath')!.extensionUri;
+		assert.deepEqual(ClaudeSkill.names(real), ['xslt-xpath', 'schematron', 'xspec-testing']);
+		for (const name of ClaudeSkill.names(real)) {
+			const text = fs.readFileSync(path.join(real.fsPath, 'xslt-resources', 'skills', name, 'SKILL.md'), 'utf8');
+			assert.match(text, new RegExp(`^---\\nname: ${name}\\ndescription: .{80,}\\n---\\n`), name);
+		}
+	});
+
+	test('several skills: each installed, the main one first - and updated, or left alone if edited, one at a time', () => {
+		const shipSkill = (name: string, text: string) => {
+			const file = path.join(extension, 'xslt-resources', 'skills', name, 'SKILL.md');
+			fs.mkdirSync(path.dirname(file), { recursive: true });
+			fs.writeFileSync(file, text);
+		};
+		shipSkill('xspec-testing', '---\nname: xspec-testing\n---\n\ntesting one\n');
+		// a folder with no SKILL.md isn't a skill
+		fs.mkdirSync(path.join(extension, 'xslt-resources', 'skills', 'notes'), { recursive: true });
+		assert.deepEqual(ClaudeSkill.names(extensionUri), ['xslt-xpath', 'xspec-testing']);
+		const first = ClaudeSkill.installAll(extensionUri);
+		assert.deepEqual(first.map((r) => [r.name, r.status]), [['xslt-xpath', 'installed'], ['xspec-testing', 'installed']]);
+		assert.isTrue(fs.existsSync(ClaudeSkill.skillFile('xspec-testing')));
+		assert.deepEqual(ClaudeSkill.installAll(extensionUri).map((r) => r.status), ['current', 'current']);
+		// one out of date, and the other edited by the user
+		shipSkill('xspec-testing', '---\nname: xspec-testing\n---\n\ntesting two\n');
+		fs.writeFileSync(ClaudeSkill.skillFile(), fs.readFileSync(ClaudeSkill.skillFile(), 'utf8').replace('version one', 'my own notes'));
+		shipSkill('xslt-xpath', '---\nname: xslt-xpath\n---\n\nversion three\n');
+		assert.deepEqual(ClaudeSkill.installAll(extensionUri).map((r) => [r.name, r.status]), [['xslt-xpath', 'modified'], ['xspec-testing', 'updated']]);
+		assert.include(fs.readFileSync(ClaudeSkill.skillFile('xspec-testing'), 'utf8'), 'testing two');
+		assert.include(fs.readFileSync(ClaudeSkill.skillFile(), 'utf8'), 'my own notes');
+	});
+
+	test('refreshing several: only those installed are updated - a new skill, or one that was deleted, isn\'t installed', () => {
+		ClaudeSkill.install(extensionUri);
+		const shipSkill = (name: string, text: string) => {
+			const file = path.join(extension, 'xslt-resources', 'skills', name, 'SKILL.md');
+			fs.mkdirSync(path.dirname(file), { recursive: true });
+			fs.writeFileSync(file, text);
+		};
+		shipSkill('xspec-testing', '---\nname: xspec-testing\n---\n\ntesting\n');
+		shipSkill('xslt-xpath', '---\nname: xslt-xpath\n---\n\nversion four\n');
+		const results = ClaudeSkill.refreshAll(extensionUri);
+		assert.deepEqual(results.map((r) => [r.name, r.status]), [['xslt-xpath', 'updated'], ['xspec-testing', 'absent']]);
+		assert.isFalse(fs.existsSync(ClaudeSkill.skillFile('xspec-testing')));
 	});
 
 	test('installed where Claude Code looks for it, with the text as shipped', () => {

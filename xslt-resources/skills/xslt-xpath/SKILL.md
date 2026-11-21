@@ -5,6 +5,8 @@ description: Use for any task that writes, edits, refactors, debugs or explains 
 
 # XSLT and XPath with the xslt-xpath MCP server
 
+For XSpec tests, use the `xspec-testing` skill; for Schematron schemas, the `schematron` skill. This one covers the XSLT and XPath.
+
 The server's tools use the user's VS Code extension: its linter, its knowledge of the stylesheet's imports, includes and
 packages, and the user's Saxon jar. Prefer them to guessing - a stylesheet that passes `lint_file` and runs is better evidence
 than one that looks right.
@@ -17,7 +19,7 @@ than one that looks right.
 | `find_declaration` | Read one declaration's parameters, types and documentation (its `xsl:note`, or a comment above it) |
 | `find_references` | Find every use of a component, including the XSpec scenarios that test it - **before changing or renaming** it |
 | `module_imports` | See the import/include/package tree and import precedence |
-| `lint_file` / `lint_files` | Check one module, or a folder, as the Problems view does - **after every edit** |
+| `lint_file` / `lint_files` | Check one module, XSpec file or Schematron schema, or a folder, as the Problems view does - **after every edit** |
 | `evaluate_xpath` | Try an XPath expression on the stylesheet's source XML before relying on it |
 | `xpath_function` | Look up a built-in function's signature, for XPath 3.1 or 4.0 |
 | `describe_type` | Read an XSLT 4.0 record or enumeration item type |

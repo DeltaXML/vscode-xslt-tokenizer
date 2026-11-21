@@ -15,7 +15,7 @@ import { RunConfiguration } from '../../src/mcp/runConfiguration';
 import { XPathEvaluate } from '../../src/mcp/xpathEvaluate';
 import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
-import { XSLTConfiguration } from '../../src/languageConfigurations';
+import { SchConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
 import { ImportIndex } from '../../src/importIndex';
 import { McpRoot } from '../../src/mcp/mcpRoot';
 
@@ -108,7 +108,10 @@ suite('MCP server', function () {
 </xsl:stylesheet>`);
 
 	const symbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, null);
-	const server = new XsltMcpServer(memorySecrets(), { problems: (document, topLevel) => symbolProvider.diagnosticsFor(document, topLevel), declarations: (document, topLevel) => symbolProvider.declarationsFor(document, topLevel) });
+	// a Schematron schema is checked by its own provider, as the extension does
+	const schematronProvider = new XsltSymbolProvider(SchConfiguration.configuration, null);
+	const providerFor = (document: vscode.TextDocument) => document.languageId === 'sch' ? schematronProvider : symbolProvider;
+	const server = new XsltMcpServer(memorySecrets(), { problems: (document, topLevel) => providerFor(document).diagnosticsFor(document, topLevel), declarations: (document, topLevel) => providerFor(document).declarationsFor(document, topLevel) });
 	let token = '';
 	let id = 0;
 	const call = (name: string, args: object) => post({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } }, { Authorization: `Bearer ${token}` });
@@ -323,6 +326,27 @@ suite('MCP server', function () {
 		fs.rmSync(edited);
 	});
 
+	test('lint_file and lint_files: a Schematron schema, with the extension\'s Schematron checks', async () => {
+		// a folder of its own, so the other tests' files are the same
+		const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-mcp-schematron-'));
+		// a rule with no context, which ISO Schematron requires - and a prefix that only xmlns declares, which SchXslt2 doesn't
+		const schema = path.join(folder, 'rules.sch');
+		fs.writeFileSync(schema, `<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" xmlns:xs="http://www.w3.org/2001/XMLSchema" queryBinding="xslt3">
+  <sch:pattern>
+    <sch:rule><sch:assert test="true()">never reached</sch:assert></sch:rule>
+    <sch:rule context="item"><sch:assert test="xs:integer(@n) gt 0">n must be positive</sch:assert></sch:rule>
+  </sch:pattern>
+</sch:schema>`);
+		const linted = text(await call('lint_file', { path: schema, minSeverity: 'warning' }));
+		assert.match(linted, /problems? in .*rules\.sch/, linted);
+		assert.match(linted, /error .*context/i, linted);
+		assert.match(linted, /xs/, linted);
+		const folderResult = text(await call('lint_files', { folder }));
+		assert.match(folderResult, /^Checked 1 file in /, folderResult);
+		assert.match(folderResult, /rules\.sch - \d+ problems?/, folderResult);
+		fs.rmSync(folder, { recursive: true, force: true });
+	});
+
 	test('lint_file: an import problem', async () => {
 		assert.match(text(await call('lint_file', { path: lib })), /2:\d+ error .*missing\.xsl/);
 	});
@@ -330,7 +354,7 @@ suite('MCP server', function () {
 	test('lint_file: not an XSLT file, or not found', async () => {
 		const notXslt = await call('lint_file', { path: path.join(dir, 'data.xml') });
 		assert.isTrue(notXslt.message.result.isError);
-		assert.match(text(notXslt), /^Not an XSLT or XSpec file/);
+		assert.match(text(notXslt), /^Not an XSLT, XSpec or Schematron file/);
 		assert.match(text(await call('lint_file', { path: path.join(dir, 'none.xsl') })), /^File not found/);
 	});
 
@@ -694,11 +718,16 @@ suite('MCP server: the skill it serves', function () {
 		assert.strictEqual(listed.status, 200, listed.text);
 		const skills = listed.message?.result?.skills;
 		assert.isArray(skills, listed.text);
-		assert.lengthOf(skills, 1, listed.text);
-		assert.strictEqual(skills[0].uri, 'skill://xslt-xpath/SKILL.md');
-		assert.strictEqual(skills[0].frontmatter.name, 'xslt-xpath');
-		assert.match(skills[0].frontmatter.description, /XSLT/);
-		assert.deepEqual(skills[0].resources, [{ uri: 'skill://xslt-xpath/SKILL.md', digest: `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`, size: bytes.length }]);
+		// each skill in xslt-resources/skills: the XSLT and XPath, Schematron and XSpec ones
+		assert.deepEqual(skills.map((skill: { frontmatter: { name: string } }) => skill.frontmatter.name).sort(), ['schematron', 'xslt-xpath', 'xspec-testing'], listed.text);
+		const skill = skills.find((s: { frontmatter: { name: string } }) => s.frontmatter.name === 'xslt-xpath');
+		assert.strictEqual(skill.uri, 'skill://xslt-xpath/SKILL.md');
+		assert.match(skill.frontmatter.description, /XSLT/);
+		assert.deepEqual(skill.resources, [{ uri: 'skill://xslt-xpath/SKILL.md', digest: `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`, size: bytes.length }]);
+		for (const other of ['xspec-testing', 'schematron']) {
+			const found = skills.find((s: { frontmatter: { name: string } }) => s.frontmatter.name === other);
+			assert.strictEqual(found.uri, `skill://${other}/SKILL.md`);
+		}
 	});
 
 	test('the skill\'s file is read as a resource, as it is on disk', async () => {

@@ -261,8 +261,8 @@ export class XsltMcpServer {
 			'that imports or includes it, directly or indirectly - instead of the one found for it, e.g. one outside the workspace, or ' +
 			'another of the stylesheets that include it. Absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)');
 		mcp.registerTool('lint_file', {
-			title: 'Lint an XSLT or XSpec file',
-			description: 'The problems in an XSLT module (.xsl, .xslt) or XSpec file (.xspec), as the XSLT/XPath extension reports them in the ' +
+			title: 'Lint an XSLT, XSpec or Schematron file',
+			description: 'The problems in an XSLT module (.xsl, .xslt), XSpec file (.xspec) or Schematron schema (.sch), as the XSLT/XPath extension reports them in the ' +
 				'Problems panel - with its imports, includes and packages - whether or not the file is open in an editor. A module ' +
 				'that a top-level stylesheet imports or includes is checked with that stylesheet\'s declarations too: the one found ' +
 				'for it in the workspace, or topLevelStylesheet. Each problem is given as line:column (1-based), severity and message.',
@@ -274,14 +274,14 @@ export class XsltMcpServer {
 			annotations: readOnly
 		}, async (args) => tools.lintFile(args.path, args.minSeverity, args.topLevelStylesheet));
 		mcp.registerTool('lint_files', {
-			title: 'Lint the XSLT and XSpec files in a folder',
-			description: 'The problems in each XSLT module and XSpec file in a folder and its subfolders, as lint_file finds them - only the files ' +
+			title: 'Lint the XSLT, XSpec and Schematron files in a folder',
+			description: 'The problems in each XSLT module, XSpec file and Schematron schema in a folder and its subfolders, as lint_file finds them - only the files ' +
 				'with problems are listed, after a summary. XSpec\'s generated test runners (xspec/*-compiled.xsl), node_modules, hidden ' +
 				'folders such as .git (unless the pattern names one) and the files.exclude setting\'s files aren\'t checked. In a window with several ' +
 				'workspace folders, the folder not given is the project\'s folder alone: to check the others too, call it for each folder.',
 			inputSchema: {
 				folder: z.string().optional().describe('The folder: absolute, or relative to the project\'s folder - the project\'s folder, if not given'),
-				pattern: z.string().optional().describe('A glob pattern for the files, relative to the folder - default **/*.{xsl,xslt,xspec}'),
+				pattern: z.string().optional().describe('A glob pattern for the files, relative to the folder - default **/*.{xsl,xslt,xspec,sch}'),
 				minSeverity: minSeverity.optional().describe('Only problems of this severity or worse - default warning, so hints such as unused variables are left out')
 			},
 			annotations: readOnly
