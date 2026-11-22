@@ -28,10 +28,12 @@ than one that looks right.
 | `validation_configuration` | For a Schematron schema and an XML file: the command that validates it as Schematron: Validate does, and the command that summarises the report |
 | `output_origin` | For a line of the output, or text in it, from the user's last run in VS Code: the instruction that wrote it, its template and mode, and the input node it was written for |
 | `input_rules` | For an input element (or a whole input file), from the user's last run in VS Code: the templates, `xsl:for-each` etc. and built-in rules that processed it and its attributes and text |
+| `trace_configuration` | For a stylesheet: the command that runs it with logpoints (no VS Code) - the local variables, or `{XPath}` messages, at lines you choose, each time they're reached |
+| `debug_status` / `debug_evaluate` | Read the user's paused XSLT debug session: where it's paused, the call stack, a frame's variables and context - and XPath evaluated there. Read-only |
 | `profile_configuration` | For a stylesheet: the command that runs it with Saxon's timing profile (PE/EE), and the command that summarises the profile as text, ranked by net time |
 
 The tools only read. You edit files yourself, and run Saxon yourself with the commands `run_configuration`, `test_configuration`,
-`validation_configuration` and `profile_configuration` give (the user may be asked to allow them). Those runs exit with 0 even when tests or assertions fail, so
+`validation_configuration`, `trace_configuration` and `profile_configuration` give (the user may be asked to allow them). Those runs exit with 0 even when tests or assertions fail, so
 read the summary each gives, not the exit code.
 
 ## Workflow
@@ -61,11 +63,36 @@ Find the code that wrote it instead of searching the stylesheet for the output's
    stylesheet has changed since, ask the user to run it again - you can't start that run yourself.
 3. Check the input node with `evaluate_xpath` (its path is an XPath for the input file), then fix the instruction. A part written by the
    wrong template often means a match pattern, a mode or a priority is wrong: `find_references` on the mode shows the other templates.
-4. Only XML output is mapped. Literal text is mapped to where it is in the stylesheet, and copied nodes to the source document.
+4. Only XML output (`method="xml"`) is mapped - not `html`, `xhtml`, `json` or `text`. For HTML output, ask the user before changing
+   `xsl:output` to `method="xml"` for the investigation - the elements are the same, written as XML - then ask them to run it again, and
+   change it back afterwards. Literal text is mapped to where it is in the stylesheet, and copied nodes to the source document.
 5. **Output missing, or stray text in it?** Start from the input: `input_rules` on the input file lists the elements only built-in rules
    processed - no template matched them, so with the default `text-only-copy` their text went to the output as it is - and, for an
    element (by its path), every rule that processed it, its attributes and text, in which mode. An element no rule processed wasn't
    selected by any `xsl:apply-templates` or `xsl:for-each`: look at the templates of its nearest processed ancestor, which it gives.
+
+## Seeing values inside the stylesheet
+
+`evaluate_xpath` has no stylesheet around it: no variables, parameters, keys or functions. To see those as the stylesheet runs, trace it
+instead of adding `xsl:message` and editing the stylesheet:
+
+1. `trace_configuration` with the top-level stylesheet (and `source`, for other input). It gives a command with `LOGPOINTS` to replace.
+2. Choose lines with `find_declaration` or `list_declarations`: `--log FILE:LINE` prints the local variables there each time it's reached;
+   `--log 'FILE:LINE=total {$total} for {@id}'` prints a message with XPath parts. Narrow a template that runs often with
+   `--when 'FILE:LINE=CONDITION'` and `--max-hits N`.
+3. Read the end of the output: a logpoint **never reached** means that template, function or branch didn't run - often the real bug.
+   For a large input, trace on a smaller `source` first: a traced run is slower than a normal one, and a run your command times out
+   ends before that summary is printed.
+4. Values are in the debugger's notation: strings in single quotes, `true()`, nodes with their paths (`/orders/order[2]`), small maps
+   and arrays in full. The same notation as the user's Variables view.
+
+## With the user's debug session
+
+When the user is debugging, or agrees to: ask them to set a breakpoint where you want to look and start a session (or run on to it),
+then `debug_status` with `waitForPauseSeconds` waits for the pause and gives the call stack and the frame's variables and context.
+`debug_evaluate` evaluates XPath there, with the stylesheet's variables, functions and keys - go into a value with XPath (`$m?key`,
+`$order/line[2]`). You can't step, continue or change breakpoints: ask the user, then call `debug_status` again. Without a session,
+use `trace_configuration`.
 
 ## Profiling a slow stylesheet
 

@@ -14,9 +14,10 @@ import { McpServer, createMcpHandler, loadSkills, toNodeHandler, z } from './sdk
 import { McpRoot } from './mcpRoot';
 import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools';
 import { RunConfiguration } from './runConfiguration';
-import { ProfileConfiguration, TestConfiguration, ValidationConfiguration } from './assistantRuns';
+import { ProfileConfiguration, TestConfiguration, TraceConfiguration, ValidationConfiguration } from './assistantRuns';
 import { OutputOrigin } from './outputOrigin';
 import { InputRules } from './inputRules';
+import { DebugSessionTools } from './debugSessionTools';
 import { XPathEvaluate } from './xpathEvaluate';
 
 // The extension's MCP server, for AI assistants: tools that use its linter and its knowledge of XSLT modules (see
@@ -460,6 +461,45 @@ export class XsltMcpServer {
 			},
 			annotations: readOnly
 		}, async (args) => configuration(Promise.resolve(InputRules.describe(args.path, args.line, args.xpath))));
+		mcp.registerTool('trace_configuration', {
+			title: 'How to run a stylesheet with logpoints',
+			description: 'The command that runs a stylesheet as Quick Run does - its XML source and parameters, or a source you give - with logpoints, and ' +
+				'no VS Code: at each logpoint, as it runs, it prints the local variables there (or a message with {XPath} parts), each time it\'s ' +
+				'reached, with xsl:message output and errors in between - then how many times each was reached. Nothing pauses. Use it to see values ' +
+				'inside templates and functions - variables, parameters, the context item - which evaluate_xpath, with no stylesheet around it, ' +
+				'can\'t; and to find whether a template or branch runs at all. It runs nothing: put the logpoints in the command and run it yourself, ' +
+				'with the user\'s permission. The result goes to the temporary files, not the project.',
+			inputSchema: {
+				path: filePath.describe('The stylesheet (.xsl, .xslt) to run: its top-level stylesheet - absolute, or relative to the project\'s folder'),
+				source: z.string().optional().describe('The XML file to run it on, if not the stylesheet\'s XML context file')
+			},
+			annotations: readOnly
+		}, async (args) => configuration(TraceConfiguration.describe(args.path, args.source)));
+		mcp.registerTool('debug_status', {
+			title: 'The user\'s XSLT debug session',
+			description: 'Read-only: the user\'s XSLT debug session in their VS Code window - whether it\'s paused, and if so where, the call stack, and ' +
+				'a frame\'s local variables, parameters and context item (position(), last()) as one-line values in the debugger\'s notation. Use it ' +
+				'when the user is debugging, or has agreed to: ask them to set a breakpoint and start the session (or run to the next breakpoint), ' +
+				'and give waitForPauseSeconds to wait for the pause. You can\'t step, continue or change breakpoints - ask the user. Then use ' +
+				'debug_evaluate for more. Without a session, trace_configuration shows values by logpoints instead.',
+			inputSchema: {
+				waitForPauseSeconds: z.number().int().min(0).max(600).optional().describe('Wait up to this long for the session to pause - 0 by default'),
+				frame: z.number().int().min(0).optional().describe('The call stack frame to show the variables of - 0, where it\'s paused, by default')
+			},
+			annotations: readOnly
+		}, async (args) => configuration(DebugSessionTools.status(args.waitForPauseSeconds, args.frame)));
+		mcp.registerTool('debug_evaluate', {
+			title: 'Evaluate XPath in the user\'s paused debug session',
+			description: 'Evaluates an XPath expression in a frame of the user\'s paused XSLT debug session, as the Debug Console does - with the ' +
+				'stylesheet\'s variables, parameters, functions, keys and the frame\'s context item - and gives the value, with the first items of a ' +
+				'sequence, entries of a map, members of an array or children of an element. Go further with XPath: $m?key, $order/line[2], count(...). ' +
+				'It doesn\'t move the session on. The session must be paused: see debug_status.',
+			inputSchema: {
+				expression: z.string().describe('The XPath expression, e.g. $total, $order/@id, $config?lines, count($rows)'),
+				frame: z.number().int().min(0).optional().describe('The call stack frame to evaluate it in - 0, where it\'s paused, by default')
+			},
+			annotations: readOnly
+		}, async (args) => configuration(DebugSessionTools.evaluate(args.expression, args.frame)));
 		mcp.registerTool('profile_configuration', {
 			title: 'How to profile a stylesheet',
 			description: 'The commands that profile a stylesheet - to find why a transformation is slow - as the Profile Stylesheet command does: its ' +

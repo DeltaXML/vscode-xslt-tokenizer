@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
-import { ProfileConfiguration, TestConfiguration, ValidationConfiguration } from '../../src/mcp/assistantRuns';
+import { ProfileConfiguration, TestConfiguration, TraceConfiguration, ValidationConfiguration } from '../../src/mcp/assistantRuns';
 import { RunConfiguration } from '../../src/mcp/runConfiguration';
 
 suite('MCP tools: how to run XSpec tests and a Schematron validation', function () {
@@ -268,5 +268,34 @@ suite('MCP tools: how to run XSpec tests and a Schematron validation', function 
 		assert.match(output, /^Profile: average of runs 2-5, after a warm-up run; total [\d.,]+ ms/m, output);
 		assert.match(output, /^[\d.,]+ net +\d+% +[\d.,]+ gross +[\d,]+ calls +template .+ order-report\.xsl:\d+$/m, output);
 		assert.isFalse(fs.existsSync(path.join(xspecDemo, 'profile.xml')), 'nothing is written beside the stylesheet');
+	});
+
+	test('trace_configuration: the Quick Run with TraceRun from the debugger jar, LOGPOINTS to fill in, the result in the temporary files', async () => {
+		const result = await TraceConfiguration.describe(path.join(xspecDemo, 'order-report.xsl'), path.join(xspecDemo, 'orders.xml'));
+		assert.isFalse(result.isError, result.text);
+		const command = /(java -cp [^\n]+)/.exec(result.text)![1];
+		assert.include(command, 'xslt-debugger.jar');
+		assert.include(command, 'com.deltaxml.xslt.debug.TraceRun LOGPOINTS -- ');
+		assert.include(command, '-s:' + path.join(xspecDemo, 'orders.xml'));
+		assert.include(command, '-o:' + path.join(os.tmpdir(), 'xslt-xpath', 'trace', 'order-report-'));
+		assert.match(result.text, /--log FILE:LINE /);
+		assert.match(result.text, /--when 'FILE:LINE=CONDITION'/);
+		assert.isTrue((await TraceConfiguration.describe(path.join(xspecDemo, 'orders.xml'))).isError);
+	});
+
+	test('trace_configuration: its command runs with logpoints - values at each, a condition, and the hits - with a real Saxon jar, in XSLT_TEST_SAXON_JAR', async function () {
+		if (!realJar || process.platform === 'win32') {
+			this.skip();
+		}
+		const xsl = path.join(xspecDemo, 'order-report.xsl');
+		const text = (await TraceConfiguration.describe(xsl, path.join(xspecDemo, 'orders.xml'))).text;
+		const command = /(java -cp [^\n]+)/.exec(text)![1];
+		// the variable in o:line-total, when it's over 10 - and a line with no instruction
+		const output = runInShell(command.replace('LOGPOINTS', `--log ${xsl}:25 --when '${xsl}:25=$total gt 10' --log ${xsl}:1`));
+		assert.match(output, /Logpoint .*order-report\.xsl:1 not set: /);
+		assert.match(output, /order-report\.xsl:25 #1: .*o:line-total#2[\s\S]*total: +40/);
+		assert.notInclude(output, '3.6');
+		assert.match(output, /--- The run ended\n.*order-report\.xsl:25: 2 hits/);
+		assert.isFalse(fs.existsSync(path.join(xspecDemo, 'result.out')));
 	});
 });

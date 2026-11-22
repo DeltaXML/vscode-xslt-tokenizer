@@ -91,7 +91,8 @@ export class OutputOrigin {
 		const lineNumber = outputText.substring(0, start).split('\n').length;
 		const lines: string[] = [`Output ${name}${OutputOrigin.when()}, line ${lineNumber}: ${OutputOrigin.short(outputText.substring(outputText.lastIndexOf('\n', start - 1) + 1, OutputOrigin.lineEnd(outputText, start)).trim())}`];
 		if (info.method !== 'xml') {
-			lines.push(`Its output method is '${info.method}': only XML output is traced back to the stylesheet.`);
+			lines.push(`Its output method is '${info.method}': only XML output is traced back to the stylesheet.` +
+				(info.method === 'html' || info.method === 'xhtml' ? ' For HTML, xsl:output with method="xml" for the investigation (with the user\'s agreement), and a run again in VS Code, gives the same elements written as XML, which are traced.' : ''));
 			return { text: lines.join('\n'), isError: true };
 		}
 		const parts = await OutputOrigin.parts(name, outputText, start, end);

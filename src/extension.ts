@@ -87,6 +87,7 @@ import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, Xsl
 import { XsltNodeRules } from './xsltNodeRules';
 import { XsltEmptySteps } from './xsltEmptySteps';
 import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
+import { DebugSessionTools } from './mcp/debugSessionTools';
 import { XsltProfile, ProfileDeclaration, ProfileEntry } from './xsltProfile';
 import { XsltProfileView, XsltProfileCodeLensProvider, ProfileRow, ProfileRun, schematronLabels } from './xsltProfileView';
 import { XsltProfileTimeline } from './xsltProfileTimeline';
@@ -1419,6 +1420,8 @@ export function activate(context: vscode.ExtensionContext) {
 	XsltEmptySteps.register(context, XsltDebug.type);
 	// after a run: the template rules each input node was processed by, and the nodes each template rule processed
 	XsltNodeRules.register(context, XsltDebug.type);
+	// the XSLT debug sessions, for the MCP tools that read a paused one
+	DebugSessionTools.register(context, XsltDebug.type);
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showProcessedNodes', (uri: vscode.Uri, position: vscode.Position) =>
 		vscode.commands.executeCommand('editor.action.showReferences', uri, position, XsltNodeRules.processedLocations(uri, position.line))));
 	// the output written so far, while debugging

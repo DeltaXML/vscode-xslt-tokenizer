@@ -67,7 +67,7 @@ class AssistantRuns {
 	}
 
 	// the folder for the files the commands write: the same one for the same file, so the temporary files don't collect
-	public static outputFolder(kind: 'xspec' | 'schematron' | 'profile', file: string): string {
+	public static outputFolder(kind: 'xspec' | 'schematron' | 'profile' | 'trace', file: string): string {
 		const hash = crypto.createHash('sha1').update(file).digest('hex').substring(0, 8);
 		return path.join(os.tmpdir(), 'xslt-xpath', kind, `${path.basename(file, path.extname(file))}-${hash}`);
 	}
@@ -329,6 +329,61 @@ export class ProfileConfiguration {
 		lines.push(`The full profile is the XML file ${profile}.`);
 		lines.push('', 'Saxon times templates, functions and globals, not lines inside them, and tracing switches off some optimisations: the times are relative, not those of an untraced run. ' +
 			'The profile uses the saved files, not changes in an editor that aren\'t saved. To compare a change, profile again and read the summary again.');
+		return { text: lines.join('\n'), isError: false };
+	}
+}
+
+// The trace_configuration tool: how a stylesheet is run with logpoints, and no VS Code - its Quick Run, by the debugger's
+// TraceRun (in the extension's debugger jar), which prints each logpoint's message as the Debug Console would: by default
+// the local variables, in the debugger's notation. Nothing pauses. For an assistant to see values inside templates and
+// functions - which evaluate_xpath, with no stylesheet around it, can't
+export class TraceConfiguration {
+	public static async describe(stylesheet: string, source?: string): Promise<ConfigurationResult> {
+		if (ImportIndex.isEnabled()) {
+			await ImportIndex.instance.whenBuilt();
+		}
+		const folder = McpRoot.current();
+		const xsltPath = AssistantRuns.resolve(stylesheet);
+		const saxonJar = XSpecRunner.saxonJar(vscode.Uri.file(xsltPath));
+		if (!saxonJar) {
+			return AssistantRuns.error('Tracing: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
+		}
+		if (!fs.existsSync(saxonJar)) {
+			return AssistantRuns.error(`Tracing: the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting.`);
+		}
+		const extension = XSpecRunner.extensionUri?.fsPath ?? '';
+		const adapterJar = path.join(extension, 'xslt-resources', 'xslt-debugger', 'xslt-debugger.jar');
+		const result = path.join(AssistantRuns.outputFolder('trace', xsltPath), 'result.out');
+		const quickRun = await RunConfiguration.quickRun(xsltPath, folder, { resultPath: result, ...(source ? { xmlSource: AssistantRuns.resolve(source) } : {}) });
+		if (!quickRun.command) {
+			return AssistantRuns.error(quickRun.lines.join('\n'));
+		}
+		const { classPath, args, missing } = quickRun.command;
+		const shownXslt = AssistantRuns.shown(quickRun.xsltFsPath);
+		const lines: string[] = [];
+		lines.push(`Trace of ${shownXslt}`);
+		lines.push(await AssistantRuns.saxon(saxonJar));
+		lines.push(...quickRun.lines.slice(1).filter((line) => !/^ {2}(Classpath|Command):/.test(line) && !/^ {2}The result file is chosen/.test(line)));
+		const java = ['-cp', [adapterJar, ...classPath].join(path.delimiter), 'com.deltaxml.xslt.debug.TraceRun'];
+		lines.push('', 'This command runs the stylesheet as Quick Run does, with logpoints: at each one, as the stylesheet runs, it prints the ' +
+			'message with where it is - nothing pauses. It runs nothing here: put your logpoints in place of LOGPOINTS and run it yourself, with ' +
+			`the user's permission, from any folder. The result goes to ${path.dirname(result)}, in the temporary files, not the project:`);
+		lines.push(`  ${AssistantRuns.command(java)} LOGPOINTS -- ${args.map((arg) => AssistantRuns.quote(arg)).join(' ')}`);
+		if (missing.length > 0) {
+			lines.push(`  Add a value for ${missing.join(', ')} after -- as name=value - Quick Run asks for ${missing.length === 1 ? 'it' : 'them'}`);
+		}
+		lines.push('', 'LOGPOINTS, any number of:',
+			'  --log FILE:LINE            the local variables there - parameters and variables in scope - as {$*} gives them',
+			'  --log \'FILE:LINE=MESSAGE\'  the message: text with {expression} parts, e.g. \'order {@id}: {$total}\' - XPath evaluated there, with the context item',
+			'  --when \'FILE:LINE=CONDITION\' only when the XPath condition is true there, e.g. \'$total gt 100\'',
+			'  --max-hits N               the messages shown for each logpoint - 20 by default; the rest are counted',
+			`FILE is a stylesheet module - absolute, or relative to the folder the command runs in - e.g. ${quickRun.xsltFsPath}. LINE is an instruction's line: ` +
+			'a logpoint on a line with no instruction moves to the one that starts there, or is reported as not set. find_declaration and list_declarations give the lines of templates and functions.');
+		lines.push('', 'Each message is printed as FILE:LINE #N: then the values, in the debugger\'s notation (strings in single quotes, nodes with their paths), ' +
+			'with xsl:message output and Saxon\'s errors where they happen. At the end: each logpoint\'s number of hits, or that it was never reached - ' +
+			'a template that never ran, or a condition never true - and whether the run failed.');
+		lines.push('', 'A traced run is slower than a normal one (no optimisation, and every instruction is traced). Use --when and --max-hits for a ' +
+			'template that runs many times. It uses the saved files, not changes in an editor that aren\'t saved.');
 		return { text: lines.join('\n'), isError: false };
 	}
 }
