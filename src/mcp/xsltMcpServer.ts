@@ -16,6 +16,7 @@ import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools'
 import { RunConfiguration } from './runConfiguration';
 import { ProfileConfiguration, TestConfiguration, ValidationConfiguration } from './assistantRuns';
 import { OutputOrigin } from './outputOrigin';
+import { InputRules } from './inputRules';
 import { XPathEvaluate } from './xpathEvaluate';
 
 // The extension's MCP server, for AI assistants: tools that use its linter and its knowledge of XSLT modules (see
@@ -443,6 +444,22 @@ export class XsltMcpServer {
 			},
 			annotations: readOnly
 		}, async (args) => configuration(OutputOrigin.describe(args.output, args.line, args.text, args.occurrence)));
+		mcp.registerTool('input_rules', {
+			title: 'What processed an input file\'s elements',
+			description: 'For an element of an input XML file - or, without one, the whole file - what processed it in the user\'s last run: the template ' +
+				'rules (with their match, mode and priority), the xsl:for-each, xsl:for-each-group and xsl:iterate instructions, and the built-in rules ' +
+				'where no template matched - for the element, its attributes and its text, with how many times. For the file: how many elements each ' +
+				'rule processed, and the elements left to built-in rules, whose text was copied to the output as it is - the usual cause of stray text. ' +
+				'It reads the record of the last debug session in the user\'s VS Code window - Run and Debug, or Run Without Debugging, with SaxonJ - ' +
+				'so the user must have run the stylesheet there first. Give the element by a path like /orders/order[2] (as evaluate_xpath and ' +
+				'output_origin give them), or by the line of its start tag - in a file all on one line, use a path. It runs nothing.',
+			inputSchema: {
+				path: filePath.describe('The input XML file'),
+				line: z.number().int().min(1).optional().describe('The line of the element\'s start tag, from 1'),
+				xpath: z.string().optional().describe('The element\'s path, e.g. /orders/order[2] - optionally ending /@name or /text() for that node of it')
+			},
+			annotations: readOnly
+		}, async (args) => configuration(Promise.resolve(InputRules.describe(args.path, args.line, args.xpath))));
 		mcp.registerTool('profile_configuration', {
 			title: 'How to profile a stylesheet',
 			description: 'The commands that profile a stylesheet - to find why a transformation is slow - as the Profile Stylesheet command does: its ' +

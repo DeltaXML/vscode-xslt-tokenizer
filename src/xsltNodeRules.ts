@@ -410,6 +410,58 @@ export class XsltNodeRules {
 		return new vscode.Hover(markdown, new vscode.Range(document.positionAt(found.element.start), document.positionAt(found.element.contentStart)));
 	}
 
+	// for an assistant (the input_rules MCP tool): what the last run recorded for an input file, in the file as it is now
+	// - its elements, and for each element recorded, what processed it or its attributes, text etc. (not whitespace-only
+	// text the built-in rules did) - undefined if the run didn't record the file
+	public static recorded(file: string): {
+		session: string, schematron: boolean, text: string, all: XmlElement[],
+		elements: Map<number, { node: string, nodeText: string, label: string, path?: string, line?: number, builtIn: boolean, builtInRule?: string, count: number }[]>
+	} | undefined {
+		const input = XsltNodeRules.files.get(XsltNodeRules.key(file));
+		if (!input) {
+			return undefined;
+		}
+		const open = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'file' && XsltNodeRules.key(d.fileName) === XsltNodeRules.key(file));
+		let text: string;
+		try {
+			text = open ? open.getText() : fs.readFileSync(file, 'utf8');
+		} catch {
+			return undefined;
+		}
+		const root = parseXml(text);
+		if (!root) {
+			return undefined;
+		}
+		const all = [root, ...descendants(root)];
+		const elements = new Map<number, { node: string, nodeText: string, label: string, path?: string, line?: number, builtIn: boolean, builtInRule?: string, count: number }[]>();
+		// each rule's label once: it's read from its stylesheet
+		const labels = new Map<number, string>();
+		const labelOf = (id: number) => {
+			if (!labels.has(id)) {
+				labels.set(id, XsltNodeRules.ruleLabel(XsltNodeRules.rules[id]));
+			}
+			return labels.get(id)!;
+		};
+		for (const [ordinal, recorded] of input.elements) {
+			if (all[ordinal]?.name !== recorded.name) {
+				continue;
+			}
+			const shown = XsltNodeRules.shownNodes(recorded.processed).flatMap((p) => {
+				const rule = XsltNodeRules.rules[p.rule];
+				return rule ? [{ node: p.node, nodeText: XsltNodeRules.nodeText(p.node), label: labelOf(p.rule), path: rule.path, line: rule.line, builtIn: !!rule.builtIn, builtInRule: rule.builtIn, count: p.count }] : [];
+			});
+			if (shown.length > 0) {
+				elements.set(ordinal, shown);
+			}
+		}
+		return { session: XsltNodeRules.stylesheet, schematron: XsltNodeRules.forSchematron, text, all, elements };
+	}
+
+	// whether the last run recorded any input file
+	public static hasRecord(): boolean {
+		return XsltNodeRules.files.size > 0;
+	}
+
 	// the template rules that processed the element, or its attributes, text etc.
 	public static definition(document: vscode.TextDocument, position: vscode.Position): vscode.Location[] | undefined {
 		const found = XsltNodeRules.elementAt(document, position);

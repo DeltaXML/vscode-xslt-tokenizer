@@ -27,6 +27,7 @@ than one that looks right.
 | `test_configuration` | For an XSpec file: the commands that compile and run its tests as the Test Explorer does, and the command that summarises the result as text |
 | `validation_configuration` | For a Schematron schema and an XML file: the command that validates it as Schematron: Validate does, and the command that summarises the report |
 | `output_origin` | For a line of the output, or text in it, from the user's last run in VS Code: the instruction that wrote it, its template and mode, and the input node it was written for |
+| `input_rules` | For an input element (or a whole input file), from the user's last run in VS Code: the templates, `xsl:for-each` etc. and built-in rules that processed it and its attributes and text |
 | `profile_configuration` | For a stylesheet: the command that runs it with Saxon's timing profile (PE/EE), and the command that summarises the profile as text, ranked by net time |
 
 The tools only read. You edit files yourself, and run Saxon yourself with the commands `run_configuration`, `test_configuration`,
@@ -61,6 +62,10 @@ Find the code that wrote it instead of searching the stylesheet for the output's
 3. Check the input node with `evaluate_xpath` (its path is an XPath for the input file), then fix the instruction. A part written by the
    wrong template often means a match pattern, a mode or a priority is wrong: `find_references` on the mode shows the other templates.
 4. Only XML output is mapped. Literal text is mapped to where it is in the stylesheet, and copied nodes to the source document.
+5. **Output missing, or stray text in it?** Start from the input: `input_rules` on the input file lists the elements only built-in rules
+   processed - no template matched them, so with the default `text-only-copy` their text went to the output as it is - and, for an
+   element (by its path), every rule that processed it, its attributes and text, in which mode. An element no rule processed wasn't
+   selected by any `xsl:apply-templates` or `xsl:for-each`: look at the templates of its nearest processed ancestor, which it gives.
 
 ## Profiling a slow stylesheet
 
