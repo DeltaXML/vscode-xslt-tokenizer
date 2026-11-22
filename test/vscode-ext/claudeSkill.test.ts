@@ -35,7 +35,7 @@ suite('Claude Code skill', function () {
 
 	test('the shipped skills are skills: each with a name that is its folder\'s, and a description', () => {
 		const real = vscode.extensions.getExtension('deltaxml.xslt-xpath')!.extensionUri;
-		assert.deepEqual(ClaudeSkill.names(real), ['xslt-xpath', 'schematron', 'xspec-testing']);
+		assert.deepEqual(ClaudeSkill.names(real), ['xslt-xpath', 'schematron', 'xslt-debugging', 'xspec-testing']);
 		for (const name of ClaudeSkill.names(real)) {
 			const text = fs.readFileSync(path.join(real.fsPath, 'xslt-resources', 'skills', name, 'SKILL.md'), 'utf8');
 			assert.match(text, new RegExp(`^---\\nname: ${name}\\ndescription: .{80,}\\n---\\n`), name);

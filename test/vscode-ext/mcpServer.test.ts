@@ -765,7 +765,7 @@ suite('MCP server: the skill it serves', function () {
 		const skills = listed.message?.result?.skills;
 		assert.isArray(skills, listed.text);
 		// each skill in xslt-resources/skills: the XSLT and XPath, Schematron and XSpec ones
-		assert.deepEqual(skills.map((skill: { frontmatter: { name: string } }) => skill.frontmatter.name).sort(), ['schematron', 'xslt-xpath', 'xspec-testing'], listed.text);
+		assert.deepEqual(skills.map((skill: { frontmatter: { name: string } }) => skill.frontmatter.name).sort(), ['schematron', 'xslt-debugging', 'xslt-xpath', 'xspec-testing'], listed.text);
 		const skill = skills.find((s: { frontmatter: { name: string } }) => s.frontmatter.name === 'xslt-xpath');
 		assert.strictEqual(skill.uri, 'skill://xslt-xpath/SKILL.md');
 		assert.match(skill.frontmatter.description, /XSLT/);
