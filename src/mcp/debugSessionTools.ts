@@ -136,6 +136,14 @@ export class DebugSessionTools {
 	// an XPath expression evaluated in a frame of the paused session, as the Debug Console does - with the first items,
 	// entries or children of the result
 	public static async evaluate(expression: string, frame = 0): Promise<SessionResult> {
+		const access = DebugSessionTools.evaluateAccess();
+		if (access === 'never') {
+			return {
+				text: 'Evaluating expressions in the user\'s debug session is turned off (the XSLT.mcp.debugEvaluateExtensions setting is \'never\'). ' +
+					'debug_status still shows where it\'s paused and the values there; trace_configuration gives values by logpoints.',
+				isError: true
+			};
+		}
 		const session = DebugSessionTools.session();
 		const frames = session ? await DebugSessionTools.frames(session) : undefined;
 		if (!session || !frames) {
@@ -146,7 +154,8 @@ export class DebugSessionTools {
 		}
 		let result: { result: string, type?: string, variablesReference?: number };
 		try {
-			result = await session.customRequest('evaluate', { expression, frameId: frames[frame].id, context: 'watch' });
+			// restricted: with Saxon-HE's functions only - no Saxon-PE/EE extension functions; unrestricted: as the Debug Console
+			result = await session.customRequest('evaluate', { expression, frameId: frames[frame].id, context: 'watch', sandbox: access !== 'unrestricted' });
 		} catch (e) {
 			return { text: `${expression}\n  error: ${e instanceof Error ? e.message : String(e)}`, isError: true };
 		}
@@ -163,6 +172,12 @@ export class DebugSessionTools {
 			}
 		}
 		return { text: lines.join('\n'), isError: false };
+	}
+
+	// the user's setting - 'restricted' for a value it doesn't know
+	public static evaluateAccess(): 'never' | 'restricted' | 'unrestricted' {
+		const value = vscode.workspace.getConfiguration('XSLT.mcp').get<string>('debugEvaluateExtensions', 'restricted');
+		return value === 'never' || value === 'unrestricted' ? value : 'restricted';
 	}
 
 	private static where(frame: Frame): string {

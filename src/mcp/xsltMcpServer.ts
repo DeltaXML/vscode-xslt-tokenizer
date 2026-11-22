@@ -493,12 +493,16 @@ export class XsltMcpServer {
 			description: 'Evaluates an XPath expression in a frame of the user\'s paused XSLT debug session, as the Debug Console does - with the ' +
 				'stylesheet\'s variables, parameters, functions, keys and the frame\'s context item - and gives the value, with the first items of a ' +
 				'sequence, entries of a map, members of an array or children of an element. Go further with XPath: $m?key, $order/line[2], count(...). ' +
-				'It doesn\'t move the session on. The session must be paused: see debug_status.',
+				'It doesn\'t move the session on. The session must be paused: see debug_status. It runs in the user\'s session with Saxon-HE\'s ' +
+				'functions - the standard ones and the stylesheet\'s own - whatever edition it runs on: not Java methods, the EXPath file module or saxon: ' +
+				'functions, nor transform(), load-xquery-module() or function-lookup(), unless the user has set XSLT.mcp.debugEvaluateExtensions to ' +
+				'\'unrestricted\' - don\'t ask them to unless the task needs it. If they have set it to \'never\', it evaluates nothing.',
 			inputSchema: {
 				expression: z.string().describe('The XPath expression, e.g. $total, $order/@id, $config?lines, count($rows)'),
 				frame: z.number().int().min(0).optional().describe('The call stack frame to evaluate it in - 0, where it\'s paused, by default')
 			},
-			annotations: readOnly
+			// not read-only: an expression can call extension functions with effects (Saxon-PE/EE) - so a client may ask first
+			annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
 		}, async (args) => configuration(DebugSessionTools.evaluate(args.expression, args.frame)));
 		mcp.registerTool('profile_configuration', {
 			title: 'How to profile a stylesheet',

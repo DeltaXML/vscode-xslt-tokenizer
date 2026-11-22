@@ -91,8 +91,8 @@ instead of adding `xsl:message` and editing the stylesheet:
 When the user is debugging, or agrees to: ask them to set a breakpoint where you want to look and start a session (or run on to it),
 then `debug_status` with `waitForPauseSeconds` waits for the pause and gives the call stack and the frame's variables and context.
 `debug_evaluate` evaluates XPath there, with the stylesheet's variables, functions and keys - go into a value with XPath (`$m?key`,
-`$order/line[2]`). You can't step, continue or change breakpoints: ask the user, then call `debug_status` again. Without a session,
-use `trace_configuration`.
+`$order/line[2]`) - with Saxon-HE's functions only, unless the user has allowed Saxon-PE/EE's extension functions (or turned evaluation off). You can't step,
+continue or change breakpoints: ask the user, then call `debug_status` again. Without a session, use `trace_configuration`.
 
 ## Profiling a slow stylesheet
 

@@ -1256,6 +1256,18 @@
 					"scope": "application",
 					"markdownDescription": "The MCP server's port (see `#XSLT.mcp.enabled#`) in a window with no folder open. Each window with a workspace has a server of its own, for that workspace, at a port in the 999 after this one: the same each time the workspace is opened. So with a window for each project, an assistant started in a project's folder uses that project's window."
 				},
+				"XSLT.mcp.debugEvaluateExtensions": {
+					"type": "string",
+					"enum": ["never", "restricted", "unrestricted"],
+					"enumDescriptions": [
+						"An assistant can't evaluate expressions in your debug session (debug_status still shows where it's paused and the values there)",
+						"An assistant's expression has Saxon-HE's functions only - the standard functions and the stylesheet's own - whatever edition the session runs on; transform(), load-xquery-module() and function-lookup() aren't allowed",
+						"An assistant's expression is evaluated as your Debug Console's is - with Saxon-PE or EE, Java methods, the EXPath file module (which can change files) and saxon: functions too"
+					],
+					"default": "restricted",
+					"scope": "application",
+					"markdownDescription": "What an AI assistant's `debug_evaluate` expressions (see `#XSLT.mcp.enabled#`) can call in your paused debug session. `restricted`: Saxon-HE's functions only, whatever edition the session runs on - the stylesheet's own functions still run as they are, and files can still be read with `doc()` or `unparsed-text()`. Choose `never` if the stylesheet's functions have effects, or files the session can read mustn't be. Your own Debug Console, Watch and logpoint expressions aren't affected. A user setting only: a workspace can't change it."
+				},
 				"XSLT.xspec.legacyCompatibility": {
 					"type": "boolean",
 					"default": false,

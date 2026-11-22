@@ -65,6 +65,26 @@ suite('MCP tools debug_status and debug_evaluate: the user\'s paused debug sessi
 		assert.match(config.text, /^\$config in frame 0 \(xsl:template match="item"\)\n {2}= \{'a': 1, 'b': \[1, 2\]\}/);
 		assert.match(config.text, /\n {4}'b' = \[1, 2\]/);
 		assert.match((await DebugSessionTools.evaluate('string(@n) || "!"')).text, /= '2!'/);
+		// Saxon-HE's functions only, unless the user allows more: not the EXPath file module, nor transform()
+		const fileExists = 'Q{http://expath.org/ns/file}exists("/")';
+		assert.isTrue((await DebugSessionTools.evaluate(fileExists)).isError);
+		assert.match((await DebugSessionTools.evaluate('transform(map{})')).text, /can run other code/);
+		const settings = vscode.workspace.getConfiguration('XSLT.mcp');
+		try {
+			// unrestricted: as the Debug Console - with Saxon-PE or EE, the EXPath file module
+			if (/-(pe|ee)-/i.test(path.basename(saxonJar))) {
+				await settings.update('debugEvaluateExtensions', 'unrestricted', vscode.ConfigurationTarget.Global);
+				assert.match((await DebugSessionTools.evaluate(fileExists)).text, /= true\(\)/);
+			}
+			// never: nothing evaluated - debug_status still shows the values
+			await settings.update('debugEvaluateExtensions', 'never', vscode.ConfigurationTarget.Global);
+			const never = await DebugSessionTools.evaluate('1');
+			assert.isTrue(never.isError);
+			assert.match(never.text, /turned off .*'never'/);
+			assert.match((await DebugSessionTools.status()).text, /\$doubled = 4/);
+		} finally {
+			await settings.update('debugEvaluateExtensions', undefined, vscode.ConfigurationTarget.Global);
+		}
 		// an error, and a frame that isn't there
 		const error = await DebugSessionTools.evaluate('$nope');
 		assert.isTrue(error.isError);

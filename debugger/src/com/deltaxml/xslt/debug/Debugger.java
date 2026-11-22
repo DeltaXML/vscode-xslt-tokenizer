@@ -752,8 +752,25 @@ final class Debugger {
     }
 
     Map<String, Object> evaluate(final String expression, final int frameId, final String context) throws Exception {
+        return evaluate(expression, frameId, context, false);
+    }
+
+    // sandboxed: an assistant's expression - with Saxon-HE's function libraries only (see XPathEngine.SANDBOXED)
+    Map<String, Object> evaluate(final String expression, final int frameId, final String context, final boolean sandboxed) throws Exception {
+        if (sandboxed && XPathEngine.sandboxProblem(expression) != null) {
+            throw new IllegalArgumentException(XPathEngine.sandboxProblem(expression));
+        }
         return onTransformThread(new Callable<Map<String, Object>>() {
             public Map<String, Object> call() throws Exception {
+                XPathEngine.SANDBOXED.set(sandboxed);
+                try {
+                    return evaluateNow();
+                } finally {
+                    XPathEngine.SANDBOXED.set(false);
+                }
+            }
+
+            private Map<String, Object> evaluateNow() throws Exception {
                 Frame frame = frame(frameId < 0 ? 0 : frameId);
                 String xpath = expression.trim();
                 if ("hover".equals(context)) {

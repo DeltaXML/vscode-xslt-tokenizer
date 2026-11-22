@@ -152,6 +152,21 @@ async function testBreakpointsAndInspection(saxonJar) {
     assert.strictEqual(await watched('[(), (1, 2), "it\'s"]'), "[(), (1, 2), 'it''s']");
     assert.strictEqual(await watched('1 = 1'), 'true()');
 
+    // an assistant's expression (sandbox): Saxon-HE's functions only, whatever the edition - the standard ones and the
+    // stylesheet's own - not Saxon-PE/EE's extension functions, nor functions that run other code
+    const sandboxed = (expression) => dap.request('evaluate', { expression, frameId: 0, context: 'watch', sandbox: true });
+    assert.strictEqual((await sandboxed('count(//item) + f:square(2)')).result, '7');
+    for (const expression of ['Q{http://expath.org/ns/file}exists("/")', 'Q{java:java.lang.System}getProperty("java.version")', 'Q{http://saxon.sf.net/}line-number(.)']) {
+        await assert.rejects(sandboxed(expression), /evaluate: /, expression);
+    }
+    for (const expression of ['transform(map{})', 'fn:function-lookup(xs:QName("fn:true"), 0)', 'load-xquery-module#1']) {
+        await assert.rejects(sandboxed(expression), /isn't allowed in an assistant's expression: it can run other code/, expression);
+    }
+    // the Debug Console's own expressions: as before - with Saxon-PE or EE, the EXPath file module
+    if (/-(pe|ee)-/i.test(path.basename(saxonJar))) {
+        assert.strictEqual(await watched('Q{http://expath.org/ns/file}exists("/")'), 'true()');
+    }
+
     let result = await dap.request('evaluate', { expression: '$doubled + @n', frameId: 0, context: 'watch' });
     assert.strictEqual(result.result, '6');
     result = await dap.request('evaluate', { expression: 'doubled', frameId: 0, context: 'hover' });

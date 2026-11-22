@@ -226,8 +226,9 @@ public final class XsltDebugAdapter {
                     respond(request, Json.obj().with("variables", debugger.variables((int) Json.number(args, "variablesReference", 0))));
                     break;
                 case "evaluate":
+                    // sandbox: an assistant's expression, with Saxon-HE's functions only - see XPathEngine.SANDBOXED
                     respond(request, debugger.evaluate(Json.string(args, "expression"),
-                            (int) Json.number(args, "frameId", -1), Json.string(args, "context")));
+                            (int) Json.number(args, "frameId", -1), Json.string(args, "context"), Json.bool(args, "sandbox")));
                     break;
                 case "continue":
                     debugger.resume(Debugger.Step.NONE);
