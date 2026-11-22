@@ -415,7 +415,7 @@ suite('XSLT debugger - debug sessions', function () {
 		const { variables } = await session.customRequest('variables', { variablesReference: scopes[0].variablesReference });
 		assert.deepInclude(variables.map((v: any) => [v.name, v.value]), ['$doubled', '4']);
 		const evaluated = await session.customRequest('evaluate', { expression: 'string(@n) || "!"', frameId: stackFrames[0].id, context: 'watch' });
-		assert.strictEqual(evaluated.result, '"2!"');
+		assert.strictEqual(evaluated.result, "'2!'");
 
 		do {
 			await session.customRequest('stepIn', { threadId: 1 });

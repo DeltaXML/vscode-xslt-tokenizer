@@ -65,6 +65,8 @@ suite('Schematron: debugging - the paths checked for empty steps', () => {
 	test('a parameter\'s value is checked as the start of a path only if, put in its place as text, it still is', () => {
 		['@name', 'customer', 'order/line', 'f(a, b)', '*', 'item[@x = 1]', '(a | b)', '"a b"', 'order-line'].forEach((value) => assert.isTrue(XsltEmptySteps.isPrimary(value), value));
 		['a | b', '$x + 1', 'a, b', 'a and b', '', '(not supplied)', '-1', 'a!b'].forEach((value) => assert.isFalse(XsltEmptySteps.isPrimary(value), value));
+		// a string as the debugger shows it - an XPath literal, a ' in it doubled - or a text node, in double quotes
+		assert.deepStrictEqual(["'A1'", "'it''s'", "''", '"text"', '42', 'true()'].map((v) => XsltEmptySteps.stringValue(v)), ['A1', "it's", '', 'text', '42', 'true()']);
 	});
 
 	test('a breakpoint where there\'s no step: moved to the step it\'s in - a parameter\'s to its pattern - else removed', () => {
@@ -219,7 +221,7 @@ suite('Schematron: debugging', () => {
 		assert.include(locals, '$id');
 		assert.isFalse(locals.some((name: string) => /schxslt|severity|rule-context/.test(name)), locals.join(', '));
 		const evaluated = await stop.session.customRequest('evaluate', { expression: '@date castable as xs:date', frameId: stackFrames[0].id, context: 'watch' });
-		assert.strictEqual(evaluated.result, 'true');
+		assert.strictEqual(evaluated.result, 'true()');
 		// stepping: to the next of the schema's steps - the next assertion - not SchXslt2's own
 		await stop.session.customRequest('next', { threadId: 1 });
 		await nextStop();
@@ -251,11 +253,11 @@ suite('Schematron: debugging', () => {
 		const frame = (await first.session.customRequest('stackTrace', { threadId: 1 })).stackFrames[0];
 		assert.strictEqual(frame.line, lineOf('<rule') + 1);
 		const context = await first.session.customRequest('evaluate', { expression: 'string(@id)', frameId: frame.id, context: 'watch' });
-		assert.strictEqual(context.result, '"A1"');
+		assert.strictEqual(context.result, "'A1'");
 		await first.session.customRequest('continue', { threadId: 1 });
 		const second = await nextStop();
 		const secondFrame = (await second.session.customRequest('stackTrace', { threadId: 1 })).stackFrames[0];
-		assert.strictEqual((await second.session.customRequest('evaluate', { expression: 'string(@id)', frameId: secondFrame.id, context: 'watch' })).result, '"B2"');
+		assert.strictEqual((await second.session.customRequest('evaluate', { expression: 'string(@id)', frameId: secondFrame.id, context: 'watch' })).result, "'B2'");
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		await second.session.customRequest('continue', { threadId: 1 });
 		await finished;
@@ -479,7 +481,7 @@ suite('Schematron: debugging', () => {
 			await stop.session.customRequest('continue', { threadId: 1 });
 		}
 		await finished;
-		assert.deepEqual(evaluated, ['"date order"', '"date order"']);
+		assert.deepEqual(evaluated, ["'date order'", "'date order'"]);
 		// the rule of the abstract pattern, for each order - order-dates' copy only
 		const ruleLine = text.split('\n').findIndex((l) => l.includes('<rule context="$element">')) + 1;
 		assert.deepEqual(names, [`rule order - order-dates (is-a required) @${ruleLine}`, `rule order - order-dates (is-a required) @${ruleLine}`]);

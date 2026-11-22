@@ -71,6 +71,8 @@ final class Values {
 
     private static final int MAX_CHILDREN = 1000;
     private static final int MAX_TEXT = 200;
+    // the longest map or array written out in full in a one-line summary - a longer one is shown as its size
+    private static final int MAX_INLINE = 80;
 
     private final List<Supplier<List<Map<String, Object>>>> references = new ArrayList<Supplier<List<Map<String, Object>>>>();
 
@@ -859,9 +861,18 @@ final class Values {
             } else if (item instanceof XdmNode) {
                 return nodeSummary((XdmNode) item);
             } else if (item instanceof XdmMap) {
+                // its entries, as xdm:debug() writes them, when they fit on a line - else how many there are
+                String inline = inline(item, MAX_INLINE);
+                if (inline != null) {
+                    return inline;
+                }
                 XdmMap map = (XdmMap) item;
                 return "map{" + map.mapSize() + (map.mapSize() == 1 ? " entry}" : " entries}");
             } else if (item instanceof XdmArray) {
+                String inline = inline(item, MAX_INLINE);
+                if (inline != null) {
+                    return inline;
+                }
                 int length = ((XdmArray) item).arrayLength();
                 return "array{" + length + (length == 1 ? " member}" : " members}");
             } else if (item instanceof XdmFunctionItem) {
@@ -894,11 +905,71 @@ final class Values {
         return sb.append(')').toString();
     }
 
+    // as xdm:debug() writes it: a string as an XPath string literal, in single quotes - a ' in it doubled - and a
+    // boolean as true() or false()
     private static String atomicSummary(XdmAtomicValue value) {
         String text = value.getStringValue();
         String type = value.getPrimitiveTypeName().getLocalName();
-        boolean isString = type.equals("string") || type.equals("untypedAtomic") || type.equals("anyURI");
-        return isString ? '"' + truncate(text) + '"' : truncate(text);
+        if (type.equals("string") || type.equals("untypedAtomic") || type.equals("anyURI")) {
+            return '\'' + truncate(text).replace("'", "''") + '\'';
+        } else if (type.equals("boolean")) {
+            return text + "()";
+        }
+        return truncate(text);
+    }
+
+    // a map or array written out in full, as xdm:debug() writes it on one line - {'a': 1, 'b': [1, 2]} - or null if
+    // that's longer than max characters: it stops as soon as it is, so a large map isn't written out
+    private static String inline(XdmItem item, int max) {
+        StringBuilder sb = new StringBuilder();
+        if (item instanceof XdmMap) {
+            XdmMap map = (XdmMap) item;
+            sb.append('{');
+            for (XdmAtomicValue key : map.keySet()) {
+                sb.append(sb.length() > 1 ? ", " : "").append(atomicSummary(key)).append(": ");
+                String value = sb.length() < max ? inline(map.get(key), max - sb.length()) : null;
+                if (value == null) {
+                    return null;
+                }
+                sb.append(value);
+            }
+            sb.append('}');
+        } else {
+            sb.append('[');
+            for (XdmValue member : ((XdmArray) item).asList()) {
+                sb.append(sb.length() > 1 ? ", " : "");
+                String value = sb.length() < max ? inline(member, max - sb.length()) : null;
+                if (value == null) {
+                    return null;
+                }
+                sb.append(value);
+            }
+            sb.append(']');
+        }
+        return sb.length() <= max ? sb.toString() : null;
+    }
+
+    // a member's or entry's value, every item of it - or null if it's longer than max characters, or has a JNode
+    private static String inline(XdmValue value, int max) {
+        if (value.size() == 0) {
+            return "()";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (XdmItem item : value) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            String text = isJNode(item) ? null : item instanceof XdmMap || item instanceof XdmArray ?
+                    inline(item, max - sb.length()) : summary(item);
+            if (text == null || sb.length() + text.length() > max) {
+                return null;
+            }
+            sb.append(text);
+        }
+        if (value.size() == 1) {
+            return sb.toString();
+        }
+        return sb.length() + 2 <= max ? "(" + sb + ")" : null;
     }
 
     // an attribute or text node, after its path - e.g. '/order/@id="A-100"', '/order/line/text() "widget"'
@@ -964,7 +1035,7 @@ final class Values {
                 return sb.append(node.axisIterator(Axis.CHILD).hasNext() ? ">" : "/>").toString();
             }
             case ATTRIBUTE:
-                return node.getNodeName() + "=\"" + truncate(node.getStringValue()) + '"';
+                return "@" + node.getNodeName() + "=\"" + truncate(node.getStringValue()) + '"';
             case TEXT:
                 return '"' + truncate(node.getStringValue().replaceAll("\\s+", " ")) + '"';
             case COMMENT:

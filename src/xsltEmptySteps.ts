@@ -160,7 +160,7 @@ export class XsltEmptySteps {
 				const values: string[] = result.variablesReference > 0 ?
 					((await session.customRequest('variables', { variablesReference: result.variablesReference })).variables ?? []).map((v: { value: string }) => v.value) :
 					[result.result];
-				return values.map((v) => v.replace(/^"|"$/g, ''));
+				return values.map((v) => XsltEmptySteps.stringValue(v));
 			} catch {
 				// e.g. a variable not in scope, or a lookup on something that's not a map or array
 				return undefined;
@@ -306,6 +306,17 @@ export class XsltEmptySteps {
 			}
 		}
 		return markdown;
+	}
+
+	// a string as the debugger shows it - in single quotes, as an XPath string literal, with a ' in it doubled (a text
+	// node's value is in double quotes) - as the string itself; another value as it is
+	public static stringValue(value: string) {
+		const literal = /^'([\s\S]*)'$/.exec(value);
+		if (literal) {
+			return literal[1].replace(/''/g, '\'');
+		}
+		const text = /^"([\s\S]*)"$/.exec(value);
+		return text ? text[1] : value;
 	}
 
 	/**

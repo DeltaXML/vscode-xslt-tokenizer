@@ -9,6 +9,7 @@ import { parseXml, descendants } from './xspecXml';
 import { XSpecSourceMap } from './xspecSourceMap';
 import { SchematronSourceMap } from './schematronSourceMap';
 import { DebugSourceMap } from './debugSourceMap';
+import { XsltEmptySteps } from './xsltEmptySteps';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -1240,7 +1241,7 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			}
 			this.breakpointAt = undefined;
 			this.ownRequest('evaluate', { expression: `${outcome.role} || ' ' || ${outcome.message}`, frameId: frame.id, context: 'watch' }, (evaluated) => {
-				const text = evaluated.success ? String(evaluated.body?.result ?? '').replace(/^"|"$/g, '') : ' ';
+				const text = evaluated.success ? XsltEmptySteps.stringValue(String(evaluated.body?.result ?? '')) : ' ';
 				const space = text.indexOf(' ');
 				const role = (space < 0 ? text : text.substring(0, space)).toLowerCase() || 'error';
 				const messageText = space < 0 ? '' : text.substring(space + 1);
