@@ -330,12 +330,12 @@ export class XsltMcpServer {
 					'edition: run_configuration says which edition the user has.',
 				inputSchema: {
 					xpath: z.string().describe('The XPath expression, e.g. //order[@total > 100]/@id or count(//item)'),
-					xmlPath: filePath.describe('The XML file to evaluate it on, as the context item'),
+					path: filePath.describe('The XML file to evaluate it on, as the context item'),
 					xpathDefaultNamespace: z.string().optional().describe('The namespace URI of unprefixed element names, as the stylesheet\'s xpath-default-namespace - none, if not given'),
 					xpathVersion: z.enum(['3.1', '4.0']).optional().describe('4.0 by default - 3.1 with Saxon-HE, which can\'t evaluate XPath 4.0. Use 3.1 for an XSLT 3.0 stylesheet')
 				},
 				annotations: readOnly
-			}, async (args) => xpath.evaluate(args.xpath, args.xmlPath, args.xpathVersion, args.xpathDefaultNamespace));
+			}, async (args) => xpath.evaluate(args.xpath, args.path, args.xpathVersion, args.xpathDefaultNamespace));
 		}
 		mcp.registerTool('find_declaration', {
 			title: 'Find the declaration of an XSLT component',
