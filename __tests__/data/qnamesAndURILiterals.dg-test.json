@@ -99,7 +99,7 @@
       ]
     },
     {
-      "label": "bracedURILiteral5-PENDING",
+      "label": "bracedURILiteral5",
       "xpath": "EQ{name}",
       "problems": [
         [
