@@ -286,6 +286,23 @@ suite('MCP server', function () {
 		assert.deepEqual(response.message.result.tools.map((tool: { name: string }) => tool.name), ['lint_file', 'lint_files', 'module_imports', 'list_declarations', 'find_declaration', 'find_references', 'describe_type', 'xpath_function', 'run_configuration', 'test_configuration', 'validation_configuration', 'output_origin', 'input_rules', 'trace_configuration', 'debug_status', 'debug_evaluate', 'profile_configuration']);
 	});
 
+	test('debug_evaluate\'s annotations follow XSLT.mcp.debugEvaluateExtensions: read-only unless it\'s unrestricted', async () => {
+		const annotations = async () => {
+			const response = await post({ jsonrpc: '2.0', id: ++id, method: 'tools/list' }, { Authorization: `Bearer ${token}` });
+			return response.message.result.tools.find((tool: { name: string }) => tool.name === 'debug_evaluate').annotations;
+		};
+		const settings = vscode.workspace.getConfiguration('XSLT.mcp');
+		try {
+			assert.include(await annotations(), { readOnlyHint: true });
+			await settings.update('debugEvaluateExtensions', 'never', vscode.ConfigurationTarget.Global);
+			assert.include(await annotations(), { readOnlyHint: true });
+			await settings.update('debugEvaluateExtensions', 'unrestricted', vscode.ConfigurationTarget.Global);
+			assert.include(await annotations(), { readOnlyHint: false, destructiveHint: true });
+		} finally {
+			await settings.update('debugEvaluateExtensions', undefined, vscode.ConfigurationTarget.Global);
+		}
+	});
+
 	test('lint_file: a module that is not open, checked with its imports', async () => {
 		assert.isUndefined(vscode.workspace.textDocuments.find((d) => d.fileName === main && vscode.window.visibleTextEditors.some((e) => e.document === d)));
 		const result = text(await call('lint_file', { path: main }));

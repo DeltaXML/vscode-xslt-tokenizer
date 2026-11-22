@@ -501,8 +501,10 @@ export class XsltMcpServer {
 				expression: z.string().describe('The XPath expression, e.g. $total, $order/@id, $config?lines, count($rows)'),
 				frame: z.number().int().min(0).optional().describe('The call stack frame to evaluate it in - 0, where it\'s paused, by default')
 			},
-			// not read-only: an expression can call extension functions with effects (Saxon-PE/EE) - so a client may ask first
-			annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
+			// as the user's setting allows: restricted (Saxon-HE's functions) or never, it can do no more than the stylesheet itself -
+			// read-only, as the other tools, so a client needn't ask each time; unrestricted, extension functions can change files.
+			// A server is made for each request, so this follows the setting - a client sees it when it lists the tools again
+			annotations: DebugSessionTools.evaluateAccess() === 'unrestricted' ? { readOnlyHint: false, destructiveHint: true, openWorldHint: false } : readOnly
 		}, async (args) => configuration(DebugSessionTools.evaluate(args.expression, args.frame)));
 		mcp.registerTool('profile_configuration', {
 			title: 'How to profile a stylesheet',
