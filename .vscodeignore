@@ -25,6 +25,7 @@ debugger/**
 .vscode-test.*
 bugtest.xsl
 notes.md
+RELEASING.md
 xml-sample.xml
 *.log
 eslint.config.js
