@@ -48,6 +48,28 @@ read the summary each gives, not the exit code.
    the change, and for new logic add a scenario. Run them with `test_configuration`'s commands - XSpec has no single command here, so
    don't write your own - and read the summary. For a Schematron schema, `validation_configuration` does the same for a validation.
 
+## Profiling a slow stylesheet
+
+Only when the user asks why a transformation is slow, or asks you to speed it up - don't profile unprompted. Saxon's profiler
+(`-TP`) needs **Saxon-PE or EE**; `run_configuration` says which edition the user has. With HE, say so and stop: don't look for another way.
+
+1. Take the command from `run_configuration` and add `-TP:<file>.html` (a temporary file, outside the project) and `-repeat:10`.
+   Run it on the real input (the XML context file `run_configuration` names), not a tiny one.
+2. Read the report: one table per run, a row for each template, function and global variable - module, line, instruction, count,
+   average and total gross time, average and total net time - and the total time under it.
+3. **Ignore the first table.** The first run includes JVM start-up and warm-up (about 30 times slower than the rest on a small
+   stylesheet). Use a later table - or, if the runs differ, say which you used.
+4. **Rank by net time**, not gross. Gross includes the templates and functions a row calls, so a caller of the slow code ranks
+   high without being slow itself. Net is the time spent in the construct itself.
+5. Go to the top rows with `find_declaration` or `find_references`, and look for the usual causes: a `//` path or a
+   lookup that could use `xsl:key`, repeated per item, a large sequence built by repeated appends, a template applied many more times than the input needs
+   (check the count), a function recomputing the same value.
+6. After a change, run it again and compare. Say what you measured before and after, and that the times are relative:
+   tracing switches off some optimisations, so they don't equal the untraced run time. Keep the output the same - run the XSpec tests.
+
+Saxon only times templates, functions and globals, not lines inside them. The profile has no call tree, so when a function is
+hot, `find_references` shows who calls it.
+
 ## Reading the linter
 
 - **A warning for a name it can't find** means the module imports or includes something that isn't found or can't be resolved
