@@ -79,6 +79,33 @@ suite('Claude Code skill', function () {
 		assert.isFalse(fs.existsSync(ClaudeSkill.skillFile('xspec-testing')));
 	});
 
+	test('refreshing several: a skill new in this version is installed where the user set them up - not again once deleted, nor where they didn\'t', () => {
+		const shipSkill = (name: string, text: string) => {
+			const file = path.join(extension, 'xslt-resources', 'skills', name, 'SKILL.md');
+			fs.mkdirSync(path.dirname(file), { recursive: true });
+			fs.writeFileSync(file, text);
+		};
+		// not set up: nothing installed, nothing recorded
+		fs.rmSync(path.join(config, 'skills'), { recursive: true, force: true });
+		shipSkill('xslt-new', '---\nname: xslt-new\n---\n\nnew\n');
+		let results = ClaudeSkill.refreshAll(extensionUri, undefined);
+		assert.isTrue(results.every((r) => r.status === 'absent'));
+		assert.isUndefined(ClaudeSkill.offeredAfter(extensionUri, undefined, results));
+		// set up before there was a record: the skills shipped then were offered, so a new one is installed
+		ClaudeSkill.install(extensionUri);
+		results = ClaudeSkill.refreshAll(extensionUri, undefined);
+		assert.deepInclude(results.map((r) => [r.name, r.status]), ['xslt-new', 'installed']);
+		assert.isTrue(fs.existsSync(ClaudeSkill.skillFile('xslt-new')));
+		const offered = ClaudeSkill.offeredAfter(extensionUri, undefined, results)!;
+		assert.includeMembers(offered, ['xslt-xpath', 'xspec-testing', 'xslt-new']);
+		// deleted by the user: offered already, so not installed again
+		fs.rmSync(path.dirname(ClaudeSkill.skillFile('xslt-new')), { recursive: true, force: true });
+		results = ClaudeSkill.refreshAll(extensionUri, offered);
+		assert.deepInclude(results.map((r) => [r.name, r.status]), ['xslt-new', 'absent']);
+		assert.isFalse(fs.existsSync(ClaudeSkill.skillFile('xslt-new')));
+		fs.rmSync(path.join(extension, 'xslt-resources', 'skills', 'xslt-new'), { recursive: true, force: true });
+	});
+
 	test('installed where Claude Code looks for it, with the text as shipped', () => {
 		const result = ClaudeSkill.install(extensionUri);
 		assert.strictEqual(result.status, 'installed');

@@ -825,9 +825,13 @@ export function activate(context: vscode.ExtensionContext) {
 		mcpDefinitions.refresh();
 		// the skills that were installed by the set-up command: brought up to date with this version of the extension
 		try {
-			const updated = ClaudeSkill.refreshAll(context.extensionUri).filter((skill) => skill.status === 'updated');
+			// with any that's new in this version, where the user has set them up - see ClaudeSkill.refreshAll
+			const offered = context.globalState.get<string[]>(ClaudeSkill.offeredKey);
+			const results = ClaudeSkill.refreshAll(context.extensionUri, offered);
+			await context.globalState.update(ClaudeSkill.offeredKey, ClaudeSkill.offeredAfter(context.extensionUri, offered, results));
+			const updated = results.filter((skill) => skill.status === 'updated' || skill.status === 'installed');
 			if (updated.length > 0) {
-				XsltMcpServer.log.info(`The skills for Claude Code are updated: ${updated.map((skill) => skill.path).join(', ')}`);
+				XsltMcpServer.log.info(`The skills for Claude Code are updated: ${updated.map((skill) => `${skill.path}${skill.status === 'installed' ? ' (new)' : ''}`).join(', ')}`);
 			}
 		} catch (e: any) {
 			XsltMcpServer.log.warn(`The skills for Claude Code couldn't be updated: ${e?.message ?? e}`);
@@ -903,6 +907,7 @@ export function activate(context: vscode.ExtensionContext) {
 			let skillText = '';
 			try {
 				const skills = ClaudeSkill.installAll(context.extensionUri);
+				await context.globalState.update(ClaudeSkill.offeredKey, ClaudeSkill.offeredAfter(context.extensionUri, context.globalState.get<string[]>(ClaudeSkill.offeredKey), skills));
 				const added = skills.filter((skill) => skill.status === 'installed' || skill.status === 'updated');
 				const edited = skills.filter((skill) => skill.status === 'modified');
 				if (added.length > 0) {

@@ -25,10 +25,13 @@ export interface SkillResult {
 // The extension's skills for Claude Code (a folder each, in xslt-resources/skills, with a SKILL.md): how to use the MCP server's
 // tools well, for XSLT and XPath, XSpec tests and Schematron. They're installed in the user's Claude Code skills folder when the
 // user sets up the MCP server for Claude Code, and updated, at that time and at start-up, while each is as we installed it - the
-// file ends with a line that has a hash of the text above it, so a copy the user edited is left alone. At start-up only one that's
-// installed is updated: a new skill, or one the user deleted, is installed only by the set-up command
+// file ends with a line that has a hash of the text above it, so a copy the user edited is left alone. At start-up one that's
+// installed is updated, and - where the user has set them up - a skill the extension hasn't offered before (new in this version)
+// is installed, so the others don't point to a skill that isn't there; one the user deleted isn't installed again
 export class ClaudeSkill {
 	public static readonly mainSkill = 'xslt-xpath';
+	// the key of the record of the skills offered, in the extension's global state
+	public static readonly offeredKey = 'xslt.claudeSkillsOffered';
 	// Claude Code's folder: for testing, another
 	public static configFolder = () => process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 
@@ -103,8 +106,25 @@ export class ClaudeSkill {
 		return fs.existsSync(file) ? ClaudeSkill.install(extensionUri, name) : { name, status: 'absent', path: file };
 	}
 
-	// updates each skill that's installed
-	public static refreshAll(extensionUri: vscode.Uri): SkillResult[] {
-		return ClaudeSkill.names(extensionUri).map((name) => ClaudeSkill.refresh(extensionUri, name));
+	// the skills the extension shipped before it kept a record of those it offered (see refreshAll)
+	public static readonly offeredBeforeRecord: readonly string[] = ['xslt-xpath', 'schematron', 'xspec-testing'];
+
+	// updates each skill that's installed - and, if any of them is (the user set them up), installs each skill not offered
+	// before: offered, the skills shipped when the user last set them up or the extension last started (undefined before
+	// there was a record). A skill the user deleted has been offered, so it isn't installed again
+	public static refreshAll(extensionUri: vscode.Uri, offered?: readonly string[]): SkillResult[] {
+		const names = ClaudeSkill.names(extensionUri);
+		const known = new Set(offered ?? ClaudeSkill.offeredBeforeRecord);
+		const setUp = names.some((name) => fs.existsSync(ClaudeSkill.skillFile(name)));
+		return names.map((name) => setUp && !known.has(name) ? ClaudeSkill.install(extensionUri, name) : ClaudeSkill.refresh(extensionUri, name));
+	}
+
+	// the record of the skills offered, after refreshAll or installAll: with those shipped now - undefined if the user
+	// hasn't set any up, when there's nothing to record
+	public static offeredAfter(extensionUri: vscode.Uri, offered: readonly string[] | undefined, results: SkillResult[]): string[] | undefined {
+		if (results.every((result) => result.status === 'absent')) {
+			return offered ? [...offered] : undefined;
+		}
+		return [...new Set([...(offered ?? ClaudeSkill.offeredBeforeRecord), ...ClaudeSkill.names(extensionUri)])];
 	}
 }
