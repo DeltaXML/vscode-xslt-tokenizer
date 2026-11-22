@@ -165,8 +165,10 @@ suite('MCP server', function () {
 
 	test('run_configuration: an xsl:package is noted, with the public templates and modes it could be started from', () => {
 		const xsl = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform"';
+		// a folder of its own, outside the suite's: lint_files counts the files and problems there
+		const packageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-mcp-entry-'));
 		const write = (name: string, body: string) => {
-			const file = path.join(dir, name);
+			const file = path.join(packageDir, name);
 			fs.writeFileSync(file, body);
 			return { file, text: body };
 		};
@@ -185,6 +187,7 @@ suite('MCP server', function () {
 		assert.notInclude(note, 'notxslt');
 		assert.notInclude(note, 'm2');
 		assert.include(notes('entry-none.xsl', `<xsl:package ${xsl} version="3.0" name="urn:entry-none" package-version="1.0"/>`)[0], 'makes no named template or mode public');
+		fs.rmSync(packageDir, { recursive: true, force: true });
 	});
 
 	test('run_configuration: the Saxon jar, with its edition, version and licence - and for a stylesheet, its Quick Run\'s source and command line', async () => {
