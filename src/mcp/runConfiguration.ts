@@ -138,12 +138,21 @@ export class RunConfiguration {
 
 	// the stylesheet's Quick Run: its task, its XML context file, its parameters, and the command line
 	private static async forStylesheet(stylesheet: string, folder: string | undefined): Promise<string[]> {
+		return (await RunConfiguration.quickRun(stylesheet, folder)).lines;
+	}
+
+	// the description of the stylesheet's Quick Run - and, when it can be run, its command: the task with extra properties
+	// (e.g. for profiling) added, the classpath, Saxon's main class and its arguments, and the parameters that Quick Run asks for
+	public static async quickRun(stylesheet: string, folder: string | undefined, extra?: Record<string, unknown>): Promise<{
+		lines: string[], xsltFsPath: string,
+		command?: { task: XSLTTask, classPath: string[], mainClass: string, args: string[], missing: string[] }
+	}> {
 		const xsltFsPath = path.isAbsolute(stylesheet) || !folder ? path.resolve(stylesheet) : path.resolve(folder, stylesheet);
 		if (!/\.xslt?$/i.test(xsltFsPath)) {
-			return [`Not an XSLT stylesheet: ${xsltFsPath}`];
+			return { lines: [`Not an XSLT stylesheet: ${xsltFsPath}`], xsltFsPath };
 		}
 		if (!fs.existsSync(xsltFsPath)) {
-			return [`Stylesheet not found: ${xsltFsPath}`];
+			return { lines: [`Stylesheet not found: ${xsltFsPath}`], xsltFsPath };
 		}
 		const lines = [`For ${xsltFsPath}:`];
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xsltFsPath));
@@ -169,7 +178,7 @@ export class RunConfiguration {
 		}
 		// the command, as the task's - with Saxon's own Transform class, not the extension's terminal-output variant;
 		// paths and settings resolved, a result file chosen when it runs left out (the result goes to standard output)
-		const forCommand: XSLTTask = { ...task, messageEscaping: 'on' };
+		const forCommand: XSLTTask = { ...task, messageEscaping: 'on', ...extra };
 		for (const key of ['xsltFile', 'xmlSource', 'resultPath'] as const) {
 			const value = forCommand[key];
 			if (typeof value === 'string' && value !== '') {
@@ -193,7 +202,7 @@ export class RunConfiguration {
 		if (task.resultPath && unresolved(task.resultPath)) {
 			lines.push('  The result file is chosen when Quick Run runs - add -o:path to the command to write one');
 		}
-		return lines;
+		return { lines, xsltFsPath, command: { task, classPath: resolvedClassPath, mainClass, args, missing } };
 	}
 
 	// a path from tasks.json or a setting: ${workspaceFolder} replaced, and relative to the workspace folder

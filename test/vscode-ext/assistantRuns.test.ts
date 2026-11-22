@@ -1,6 +1,6 @@
 /**
  * Test suite for the MCP tools that say how to run XSpec tests (test_configuration) and a Schematron validation
- * (validation_configuration): the commands, with the files they write in the temporary files, and how to read the result. With
+ * (validation_configuration), and how to profile a stylesheet (profile_configuration): the commands, with the files they write in the temporary files, and how to read the result. With
  * a real Saxon jar, in XSLT_TEST_SAXON_JAR, the commands given are run, as an assistant would run them.
  */
 import * as vscode from 'vscode';
@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
-import { TestConfiguration, ValidationConfiguration } from '../../src/mcp/assistantRuns';
+import { ProfileConfiguration, TestConfiguration, ValidationConfiguration } from '../../src/mcp/assistantRuns';
 import { RunConfiguration } from '../../src/mcp/runConfiguration';
 
 suite('MCP tools: how to run XSpec tests and a Schematron validation', function () {
@@ -211,5 +211,62 @@ suite('MCP tools: how to run XSpec tests and a Schematron validation', function 
 		const output = runInShell(commandAfter(text, 'This prints the numbers of failed assertions')!);
 		assert.match(output, /^Schematron: [1-9]\d* failed assertions, \d+ successful reports - \d+ rules fired/m, output);
 		assert.match(output, /^assert \[error\] \/Q\{\}orders\[1\]\/Q\{\}order\[1\]/m, output);
+	});
+
+	test('profile_configuration: the Quick Run with Saxon\'s profile, several runs, in the temporary files - and the command that summarises it', async () => {
+		const result = await ProfileConfiguration.describe(path.join(xspecDemo, 'order-report.xsl'));
+		assert.isFalse(result.isError, result.text);
+		const text = result.text;
+		const command = /(java -cp [^\n]+)/.exec(text)![1];
+		assert.include(command, 'net.sf.saxon.Transform');
+		// the profile and the result are in the temporary files, with the extension's stylesheet making the profile XML
+		const folder = path.join(os.tmpdir(), 'xslt-xpath', 'profile', 'order-report-');
+		assert.include(command, '-TP:' + folder);
+		assert.include(command, 'profile.xml');
+		assert.include(command, '-o:' + folder);
+		assert.include(command, 'profile-xml.xsl');
+		// the setting's default of 1 run is mostly warm-up: more are asked for, and the text says so
+		assert.include(command, '-repeat:5');
+		assert.match(text, /5 times \(the XSLT\.tasks\.profileRuns setting is 1/);
+		assert.include(text, 'profile-summary.xsl');
+		assert.match(text, /-it:main/);
+		assert.match(text, /base=\S+xspec-demo\//);
+		assert.match(text, /ranked by net time/);
+		assert.isFalse(fs.existsSync(path.join(xspecDemo, 'profile.xml')));
+		assert.strictEqual((await ProfileConfiguration.describe(path.join(xspecDemo, 'order-report.xsl'))).text, text);
+	});
+
+	test('profile_configuration: not with Saxon-HE, and not a stylesheet or a file that isn\'t there', async () => {
+		const stylesheet = path.join(xspecDemo, 'order-report.xsl');
+		const he = path.join(dir, 'saxon-he-13.0.jar');
+		fs.writeFileSync(he, '');
+		const current = vscode.workspace.getConfiguration('XSLT.tasks').inspect<string>('saxonJar')?.globalValue;
+		await tasks.update('saxonJar', he, vscode.ConfigurationTarget.Global);
+		try {
+			const refused = await ProfileConfiguration.describe(stylesheet);
+			assert.isTrue(refused.isError);
+			assert.match(refused.text, /Saxon PE and EE.*Saxon-HE/);
+		} finally {
+			await tasks.update('saxonJar', current, vscode.ConfigurationTarget.Global);
+		}
+		const notXslt = await ProfileConfiguration.describe(path.join(xspecDemo, 'orders.xml'));
+		assert.isTrue(notXslt.isError);
+		assert.match(notXslt.text, /^Not an XSLT stylesheet/);
+		const missing = await ProfileConfiguration.describe(path.join(xspecDemo, 'none.xsl'));
+		assert.isTrue(missing.isError);
+		assert.match(missing.text, /^Stylesheet not found/);
+	});
+
+	test('profile_configuration: its commands run, and the summary ranks by net time - with a real Saxon jar, in XSLT_TEST_SAXON_JAR', async function () {
+		if (!realJar || process.platform === 'win32' || /-he\b/i.test(path.basename(realJar))) {
+			this.skip();
+		}
+		const text = (await ProfileConfiguration.describe(path.join(xspecDemo, 'order-report.xsl'), undefined, path.join(xspecDemo, 'orders.xml'))).text;
+		assert.include(text, '-s:' + path.join(xspecDemo, 'orders.xml'));
+		runInShell(/(java -cp [^\n]+)/.exec(text)![1]);
+		const output = runInShell(commandAfter(text, 'Then read the profile as text')!);
+		assert.match(output, /^Profile: average of runs 2-5, after a warm-up run; total [\d.,]+ ms/m, output);
+		assert.match(output, /^[\d.,]+ net +\d+% +[\d.,]+ gross +[\d,]+ calls +template .+ order-report\.xsl:\d+$/m, output);
+		assert.isFalse(fs.existsSync(path.join(xspecDemo, 'profile.xml')), 'nothing is written beside the stylesheet');
 	});
 });

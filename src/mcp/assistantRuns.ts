@@ -22,6 +22,7 @@ import { SchExpandText } from '../schExpandText';
 import { XSpecRunner } from '../xspecRunner';
 import { XSpecTaskSettings, XSpecTaskSettingsFinder } from '../xspecTaskSettings';
 import { XSpecTestNode, XSpecTests } from '../xspecTests';
+import { SaxonTaskProvider } from '../saxonTaskProvider';
 
 export interface ConfigurationResult {
 	text: string;
@@ -66,7 +67,7 @@ class AssistantRuns {
 	}
 
 	// the folder for the files the commands write: the same one for the same file, so the temporary files don't collect
-	public static outputFolder(kind: 'xspec' | 'schematron', file: string): string {
+	public static outputFolder(kind: 'xspec' | 'schematron' | 'profile', file: string): string {
 		const hash = crypto.createHash('sha1').update(file).digest('hex').substring(0, 8);
 		return path.join(os.tmpdir(), 'xslt-xpath', kind, `${path.basename(file, path.extname(file))}-${hash}`);
 	}
@@ -264,6 +265,70 @@ export class ValidationConfiguration {
 			`  ${AssistantRuns.summaryCommand(saxonJar, svrl, 'svrl-summary.xsl')}`);
 		lines.push('A location is an XPath for the XML file, with names written Q{}name: give it to the evaluate_xpath tool, with the XML file, for its line and column.');
 		lines.push('', 'The validation uses the saved files, not changes in an editor that aren\'t saved.');
+		return { text: lines.join('\n'), isError: false };
+	}
+}
+
+// The profile_configuration tool: how a stylesheet is profiled - its Quick Run, with Saxon's timing profile (-TP) written as XML
+// to the temporary files, and the command that summarises that profile as text, ranked by net time. The extension's Profile
+// Stylesheet command runs the same task the same way (its profile-xml.xsl as -TPxsl, -repeat:N from the XSLT.tasks.profileRuns
+// setting); the summary gives the numbers of its Profile view. Saxon PE or EE only
+export class ProfileConfiguration {
+	// with the setting at its default of 1 a profile is mostly the Java VM's warm-up, so an assistant gets at least this many runs
+	private static readonly minimumRuns = 5;
+
+	public static async describe(stylesheet: string, top?: number, source?: string): Promise<ConfigurationResult> {
+		if (ImportIndex.isEnabled()) {
+			await ImportIndex.instance.whenBuilt();
+		}
+		const folder = McpRoot.current();
+		const xsltPath = AssistantRuns.resolve(stylesheet);
+		const saxonJar = XSpecRunner.saxonJar(vscode.Uri.file(xsltPath));
+		if (!saxonJar) {
+			return AssistantRuns.error('Profiling: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
+		}
+		if (!fs.existsSync(saxonJar)) {
+			return AssistantRuns.error(`Profiling: the Saxon jar '${saxonJar}' doesn't exist - check the "XSLT.tasks.saxonJar" setting.`);
+		}
+		if (SaxonTaskProvider.isSaxonHE(saxonJar)) {
+			return AssistantRuns.error(`Profiling uses Saxon's timing profile, a feature of Saxon PE and EE - the user's Saxon jar is Saxon-HE (${saxonJar}). It can't be profiled with it.`);
+		}
+		const folderForFiles = AssistantRuns.outputFolder('profile', xsltPath);
+		// Saxon creates the folder of the result file but not that of the profile
+		fs.mkdirSync(folderForFiles, { recursive: true });
+		const profile = path.join(folderForFiles, 'profile.xml');
+		const result = path.join(folderForFiles, 'result.out');
+		const setting = Math.floor(vscode.workspace.getConfiguration('XSLT.tasks', vscode.Uri.file(xsltPath)).get<number>('profileRuns', 1)) || 1;
+		const runs = Math.max(ProfileConfiguration.minimumRuns, Math.min(100, setting));
+		const extension = XSpecRunner.extensionUri?.fsPath ?? '';
+		const quickRun = await RunConfiguration.quickRun(xsltPath, folder, {
+			TPfilename: profile, TPxslFilename: path.join(extension, 'xslt-resources', 'profile', 'profile-xml.xsl'),
+			profileRepeat: runs, resultPath: result,
+			...(source ? { xmlSource: AssistantRuns.resolve(source) } : {})
+		});
+		if (!quickRun.command) {
+			return AssistantRuns.error(quickRun.lines.join('\n'));
+		}
+		const { classPath, mainClass, args, missing } = quickRun.command;
+		const lines: string[] = [];
+		lines.push(`Profile of ${AssistantRuns.shown(quickRun.xsltFsPath)}`);
+		lines.push(await AssistantRuns.saxon(saxonJar));
+		// the Quick Run's own description - without its command, which is given below with the profile options
+		lines.push(...quickRun.lines.slice(1).filter((line) => !/^ {2}(Classpath|Command|The result file is chosen):/.test(line) && !/^ {2}The result file is chosen/.test(line)));
+		lines.push('', `This command runs the stylesheet as Quick Run does, with Saxon's timing profile, ${runs} times${runs > setting ? ` (the XSLT.tasks.profileRuns setting is ${setting}: a profile of one run is mostly the Java VM's start-up)` : ' (the XSLT.tasks.profileRuns setting)'}. ` +
+			`It runs nothing here: run it yourself, with the user's permission, from any folder. It writes the profile and the stylesheet's result to ${folderForFiles}, in the temporary files, not in the project:`);
+		lines.push(`  ${AssistantRuns.command(['-cp', classPath.join(path.delimiter), mainClass, ...args])}`);
+		if (missing.length > 0) {
+			lines.push(`  Add a value for ${missing.join(', ')} to the command as name=value - Quick Run asks for ${missing.length === 1 ? 'it' : 'them'}`);
+		}
+		const base = path.dirname(quickRun.xsltFsPath).replace(/\\/g, '/') + '/';
+		const summary = AssistantRuns.command(['-cp', saxonJar, 'net.sf.saxon.Transform', '-it:main',
+			'-xsl:' + path.join(extension, 'xslt-resources', 'assistant', 'profile-summary.xsl'), 'profile=' + profile, 'base=' + base, `top=${top ?? 15}`]);
+		lines.push('', 'Then read the profile as text. The first run, the Java VM\'s warm-up, is left out and the times are the average of the others. Each line is a template, function or global variable, ranked by net time - the time in it, not in what it calls (gross includes those) - with its share of the net times, its calls, and where it is declared (the line is where its start tag ends). Add top=0 for all of them:',
+			`  ${summary}`);
+		lines.push(`The full profile is the XML file ${profile}.`);
+		lines.push('', 'Saxon times templates, functions and globals, not lines inside them, and tracing switches off some optimisations: the times are relative, not those of an untraced run. ' +
+			'The profile uses the saved files, not changes in an editor that aren\'t saved. To compare a change, profile again and read the summary again.');
 		return { text: lines.join('\n'), isError: false };
 	}
 }

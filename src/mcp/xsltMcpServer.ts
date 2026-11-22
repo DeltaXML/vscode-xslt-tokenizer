@@ -14,7 +14,7 @@ import { McpServer, createMcpHandler, loadSkills, toNodeHandler, z } from './sdk
 import { McpRoot } from './mcpRoot';
 import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools';
 import { RunConfiguration } from './runConfiguration';
-import { TestConfiguration, ValidationConfiguration } from './assistantRuns';
+import { ProfileConfiguration, TestConfiguration, ValidationConfiguration } from './assistantRuns';
 import { XPathEvaluate } from './xpathEvaluate';
 
 // The extension's MCP server, for AI assistants: tools that use its linter and its knowledge of XSLT modules (see
@@ -426,6 +426,22 @@ export class XsltMcpServer {
 			},
 			annotations: readOnly
 		}, async (args) => configuration(ValidationConfiguration.describe(args.path, args.pairedWith, args.phase)));
+		mcp.registerTool('profile_configuration', {
+			title: 'How to profile a stylesheet',
+			description: 'The commands that profile a stylesheet - to find why a transformation is slow - as the Profile Stylesheet command does: its ' +
+				'Quick Run (the XML source and parameters the user runs it with), with Saxon\'s timing profile, run several times so the first ' +
+				'run, the Java VM\'s warm-up, can be left out. It needs Saxon-PE or EE, not Saxon-HE. It runs nothing: run the command yourself, ' +
+				'with the user\'s permission. It writes the profile and the result to the temporary files, not the project. The result also ' +
+				'gives the command that summarises the profile as text - the templates, functions and global variables ranked by net time (the time in ' +
+				'the construct itself, not in what it calls), each with its share, calls, gross time and where it is declared - so that you don\'t read ' +
+				'Saxon\'s own HTML or XML report. Use it only when asked about speed, and again after a change to compare.',
+			inputSchema: {
+				path: filePath.describe('The stylesheet (.xsl, .xslt) to profile: its top-level stylesheet - absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)'),
+				source: z.string().optional().describe('The XML file to profile it on, if not the stylesheet\'s XML context file - e.g. a larger input, since a small one is mostly start-up. Absolute, or relative to the project\'s folder'),
+				top: z.number().int().min(0).optional().describe('How many of the slowest constructs the summary shows - 15 by default; 0 for all')
+			},
+			annotations: readOnly
+		}, async (args) => configuration(ProfileConfiguration.describe(args.path, args.top, args.source)));
 		return mcp;
 	}
 }
