@@ -26,6 +26,7 @@ than one that looks right.
 | `run_configuration` | Get the user's Saxon jar and edition, XML context file, parameters, catalog, packages - and for a stylesheet, the exact command that runs it |
 | `test_configuration` | For an XSpec file: the commands that compile and run its tests as the Test Explorer does, and the command that summarises the result as text |
 | `validation_configuration` | For a Schematron schema and an XML file: the command that validates it as Schematron: Validate does, and the command that summarises the report |
+| `output_origin` | For a line of the output, or text in it, from the user's last run in VS Code: the instruction that wrote it, its template and mode, and the input node it was written for |
 | `profile_configuration` | For a stylesheet: the command that runs it with Saxon's timing profile (PE/EE), and the command that summarises the profile as text, ranked by net time |
 
 The tools only read. You edit files yourself, and run Saxon yourself with the commands `run_configuration`, `test_configuration`,
@@ -48,6 +49,18 @@ read the summary each gives, not the exit code.
 6. **Test it.** If there are XSpec tests, `find_references` shows the scenarios for a function or template; update them with
    the change, and for new logic add a scenario. Run them with `test_configuration`'s commands - XSpec has no single command here, so
    don't write your own - and read the summary. For a Schematron schema, `validation_configuration` does the same for a validation.
+
+## When the output is wrong
+
+Find the code that wrote it instead of searching the stylesheet for the output's text, which fails for computed output.
+
+1. `output_origin` with the wrong text (or its line): for each part, the instruction that wrote it, the template or function it's in -
+   with its `match` and `mode` - and the input node it was written for, as an XPath for the input file.
+2. It reads the output of the user's last **Run and Debug** or **Run Without Debugging** (SaxonJ) in VS Code. If there's none, or the
+   stylesheet has changed since, ask the user to run it again - you can't start that run yourself.
+3. Check the input node with `evaluate_xpath` (its path is an XPath for the input file), then fix the instruction. A part written by the
+   wrong template often means a match pattern, a mode or a priority is wrong: `find_references` on the mode shows the other templates.
+4. Only XML output is mapped. Literal text is mapped to where it is in the stylesheet, and copied nodes to the source document.
 
 ## Profiling a slow stylesheet
 

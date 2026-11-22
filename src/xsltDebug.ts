@@ -554,6 +554,28 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		return this.outputs.get(name)?.text;
 	}
 
+	// when an output was last added to, for telling an assistant how recent the outputs are
+	public updatedAt: Date | undefined;
+
+	// an output's method, whether only its first part is kept, and the URI it's written to
+	public info(name: string): { method: string; truncated: boolean; uri?: string } | undefined {
+		const output = this.outputs.get(name);
+		return output ? { method: output.method, truncated: output.truncated, uri: output.uri } : undefined;
+	}
+
+	// the offsets in the output's text from start to end where a run of text from one location starts: start, then
+	// each run's start after it - for the parts of a line written by different instructions
+	public runStarts(name: string, start: number, end: number): number[] {
+		const runs = this.outputs.get(name)?.runs ?? [];
+		const starts = [start];
+		for (let i = 0; i < runs.length; i += 2) {
+			if (runs[i] > start && runs[i] < end) {
+				starts.push(runs[i]);
+			}
+		}
+		return starts;
+	}
+
 	public names(): string[] {
 		return [...this.outputs.keys()];
 	}
@@ -564,6 +586,7 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 			this.changed.fire(XsltDebugOutputs.uri(name));
 		}
 		this.outputs.clear();
+		this.updatedAt = undefined;
 		this.current = undefined;
 		this.openedThisSession = false;
 	}
@@ -599,6 +622,7 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 			output.truncated = !!update.truncated;
 			output.uri = update.uri ?? output.uri;
 			this.outputs.set(update.name, output);
+			this.updatedAt = new Date();
 			this.changed.fire(XsltDebugOutputs.uri(update.name));
 		}
 		// the output being written to - by its URI, as in the event (a name is decoded, e.g. a space for %20)
@@ -698,6 +722,12 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 
 	// the source location for the offset in the named output's text
 	public async sourceLocationAt(name: string, offset: number): Promise<vscode.Location | undefined> {
+		return (await this.originAt(name, offset))?.location;
+	}
+
+	// the source location for the offset in the named output's text, with what's there: an instruction, a node copied from
+	// a source document, or literal text
+	public async originAt(name: string, offset: number): Promise<{ location: vscode.Location, kind?: XsltOutputLocation['kind'] } | undefined> {
 		const output = this.outputs.get(name);
 		const found = output && offset < output.text.length ? XsltDebugOutputs.locationAt(output.text, output.runs, output.locations, offset) : undefined;
 		if (!output || !found) {
@@ -711,7 +741,7 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		try {
 			const source = await vscode.workspace.openTextDocument(vscode.Uri.file(location.path!));
 			const sourceOffset = XsltDebugOutputs.sourceOffset(source.getText(), location, (line, character) => source.offsetAt(new vscode.Position(line, character)), outputText);
-			return new vscode.Location(source.uri, source.positionAt(sourceOffset));
+			return { location: new vscode.Location(source.uri, source.positionAt(sourceOffset)), kind: location.kind };
 		} catch {
 			return undefined;
 		}

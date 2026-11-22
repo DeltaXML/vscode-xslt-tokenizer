@@ -15,6 +15,7 @@ import { McpRoot } from './mcpRoot';
 import { declarationKindNames, XsltMcpTools, XsltModules } from './xsltMcpTools';
 import { RunConfiguration } from './runConfiguration';
 import { ProfileConfiguration, TestConfiguration, ValidationConfiguration } from './assistantRuns';
+import { OutputOrigin } from './outputOrigin';
 import { XPathEvaluate } from './xpathEvaluate';
 
 // The extension's MCP server, for AI assistants: tools that use its linter and its knowledge of XSLT modules (see
@@ -426,6 +427,22 @@ export class XsltMcpServer {
 			},
 			annotations: readOnly
 		}, async (args) => configuration(ValidationConfiguration.describe(args.path, args.pairedWith, args.phase)));
+		mcp.registerTool('output_origin', {
+			title: 'Where a part of a stylesheet\'s output came from',
+			description: 'For a line of a stylesheet\'s output, or some text in it: the instruction that wrote each part of it (its file, line and start ' +
+				'tag), the template or function it is in (with its match, name and mode), and the input node it was written for - as an XPath for ' +
+				'the input file, with its line. Use it to find the code behind wrong output, instead of searching the stylesheet for the output\'s ' +
+				'text, which fails for computed output. It reads the output of the last debug session in the user\'s VS Code window - Run and ' +
+				'Debug, or Run Without Debugging, with SaxonJ - so the user must have run the stylesheet there first; without a line or text, it ' +
+				'lists the outputs. Only XML output (method xml) is mapped. It runs nothing.',
+			inputSchema: {
+				output: z.string().optional().describe('The output: its name as listed, or the file it was written to - not needed if there\'s only one, or with text'),
+				line: z.number().int().min(1).optional().describe('A line of the output, from 1'),
+				text: z.string().optional().describe('Text to find in the output, instead of a line - e.g. a wrong value'),
+				occurrence: z.number().int().min(1).optional().describe('Which occurrence of the text - 1 by default')
+			},
+			annotations: readOnly
+		}, async (args) => configuration(OutputOrigin.describe(args.output, args.line, args.text, args.occurrence)));
 		mcp.registerTool('profile_configuration', {
 			title: 'How to profile a stylesheet',
 			description: 'The commands that profile a stylesheet - to find why a transformation is slow - as the Profile Stylesheet command does: its ' +

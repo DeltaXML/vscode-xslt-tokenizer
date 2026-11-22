@@ -283,7 +283,7 @@ suite('MCP server', function () {
 
 	test('the tools', async () => {
 		const response = await post({ jsonrpc: '2.0', id: ++id, method: 'tools/list' }, { Authorization: `Bearer ${token}` });
-		assert.deepEqual(response.message.result.tools.map((tool: { name: string }) => tool.name), ['lint_file', 'lint_files', 'module_imports', 'list_declarations', 'find_declaration', 'find_references', 'describe_type', 'xpath_function', 'run_configuration', 'test_configuration', 'validation_configuration', 'profile_configuration']);
+		assert.deepEqual(response.message.result.tools.map((tool: { name: string }) => tool.name), ['lint_file', 'lint_files', 'module_imports', 'list_declarations', 'find_declaration', 'find_references', 'describe_type', 'xpath_function', 'run_configuration', 'test_configuration', 'validation_configuration', 'output_origin', 'profile_configuration']);
 	});
 
 	test('lint_file: a module that is not open, checked with its imports', async () => {
