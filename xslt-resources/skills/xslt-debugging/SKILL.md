@@ -19,8 +19,11 @@ output, and adding `xsl:message` edits the user's files. For writing and checkin
 | `debug_status` / `debug_evaluate` | Read the user's paused XSLT debug session: where it's paused, the call stack, a frame's variables and context - and XPath evaluated there |
 | `profile_configuration` | For a stylesheet: the command that runs it with Saxon's timing profile (PE/EE), and the command that summarises the profile as text, ranked by net time |
 
-`output_origin` and `input_rules` read the user's last run, and `debug_status` their session: you can't start those yourself - ask
-the user. `trace_configuration` and `profile_configuration` give commands you run yourself (the user may be asked to allow them).
+`output_origin` and `input_rules` read the user's last run in VS Code. When there's none, or the stylesheet or input has changed since,
+they ask the user for one themselves - a notification in the user's window with a button that runs it - and wait for it (give
+`stylesheet` if there's been no run yet). If the user declines or doesn't answer, the tool says so: carry on by reading the code, or with
+`trace_configuration`. `debug_status` reads the user's debug session. `trace_configuration` and `profile_configuration` give commands
+you run yourself (the user may be asked to allow them).
 
 ## When the output is wrong
 
@@ -28,12 +31,13 @@ Find the code that wrote it instead of searching the stylesheet for the output's
 
 1. `output_origin` with the wrong text (or its line): for each part, the instruction that wrote it, the template or function it's in -
    with its `match` and `mode` - and the input node it was written for, as an XPath for the input file.
-2. It reads the output of the user's last **Run and Debug** or **Run Without Debugging** (SaxonJ) in VS Code. If there's none, or the
-   stylesheet has changed since, ask the user to run it again - you can't start that run yourself.
+2. It reads the output of the user's last **Run and Debug** or **Run Without Debugging** (SaxonJ) in VS Code - asking the user to run
+   it, and waiting, when there's none or the stylesheet has changed since (see above).
 3. Check the input node with `evaluate_xpath` (its path is an XPath for the input file), then fix the instruction. A part written by the
    wrong template often means a match pattern, a mode or a priority is wrong: `find_references` on the mode shows the other templates.
 4. Only XML output (`method="xml"`) is mapped - not `html`, `xhtml`, `json` or `text`. For HTML output, ask the user before changing
-   `xsl:output` to `method="xml"` for the investigation - the elements are the same, written as XML - then ask them to run it again, and
+   `xsl:output` to `method="xml"` for the investigation - the elements are the same, written as XML - then call `output_origin` again,
+   which asks them to run it, and
    change it back afterwards. Literal text is mapped to where it is in the stylesheet, and copied nodes to the source document.
 5. **Output missing, or stray text in it?** Start from the input: `input_rules` on the input file lists the elements only built-in rules
    processed - no template matched them, so with the default `text-only-copy` their text went to the output as it is - and, for an

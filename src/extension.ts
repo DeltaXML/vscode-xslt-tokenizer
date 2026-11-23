@@ -88,6 +88,7 @@ import { XsltNodeRules } from './xsltNodeRules';
 import { XsltEmptySteps } from './xsltEmptySteps';
 import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
 import { DebugSessionTools } from './mcp/debugSessionTools';
+import { RunRequest } from './mcp/runRequest';
 import { XsltProfile, ProfileDeclaration, ProfileEntry } from './xsltProfile';
 import { XsltProfileView, XsltProfileCodeLensProvider, ProfileRow, ProfileRun, schematronLabels } from './xsltProfileView';
 import { XsltProfileTimeline } from './xsltProfileTimeline';
@@ -1358,7 +1359,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// the debug configuration for the active stylesheet (or the top-level stylesheet importing it), run as Quick Run
 	// runs it with SaxonJ: with the XML context file, using the persisted quick-run 'xslt' task for the pair - created
 	// on first use - so parameters etc. added to the task also apply when debugging
-	const debugConfigurationForActiveEditor = async (): Promise<vscode.DebugConfiguration | undefined> => {
+	// xmlSource: the source to run it on, if given - else Quick Run's, which may be asked for
+	const debugConfigurationForActiveEditor = async (xmlSource?: string): Promise<vscode.DebugConfiguration | undefined> => {
 		const activeEditor = vscode.window.activeTextEditor;
 		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
 			vscode.window.showErrorMessage('Debug XSLT: open an XSLT stylesheet in the active editor first.');
@@ -1375,7 +1377,7 @@ export function activate(context: vscode.ExtensionContext) {
 				await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(xsltDocument!.uri) ?? vscode.workspace.workspaceFolders?.[0], configuration);
 			}
 		};
-		const source = xsltDocument ? await quickRunSource(xsltDocument, 'Debug XSLT', 'xslt', debugOnItself) : undefined;
+		const source = xsltDocument ? (xmlSource ? { xmlSourceFsPath: xmlSource } : await quickRunSource(xsltDocument, 'Debug XSLT', 'xslt', debugOnItself)) : undefined;
 		if (!xsltDocument || !source) {
 			return undefined;
 		}
@@ -1427,6 +1429,8 @@ export function activate(context: vscode.ExtensionContext) {
 	XsltNodeRules.register(context, XsltDebug.type);
 	// the XSLT debug sessions, for the MCP tools that read a paused one
 	DebugSessionTools.register(context, XsltDebug.type);
+	// the last run, for the MCP tools that read it - and their requests to the user for a new one
+	RunRequest.register(context, XsltDebug.type);
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showProcessedNodes', (uri: vscode.Uri, position: vscode.Position) =>
 		vscode.commands.executeCommand('editor.action.showReferences', uri, position, XsltNodeRules.processedLocations(uri, position.line))));
 	// the output written so far, while debugging

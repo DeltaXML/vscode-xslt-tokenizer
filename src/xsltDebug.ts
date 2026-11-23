@@ -331,7 +331,7 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 
 	// configurationForActiveEditor: for F5 with no launch.json, or a "quickRun" configuration - the configuration to
 	// debug the active stylesheet as Quick Run would run it, or undefined (having said why) if it can't be debugged
-	constructor(private configurationForActiveEditor: () => Promise<vscode.DebugConfiguration | undefined>) { }
+	constructor(private configurationForActiveEditor: (xmlSource?: string) => Promise<vscode.DebugConfiguration | undefined>) { }
 
 	// for 'create a launch.json file' (Initial) and the Run and Debug view's 'XSLT (Saxon)' configurations with no
 	// launch.json (Dynamic): the active stylesheet, as Quick Run runs it, and each 'xslt' task in tasks.json
@@ -352,12 +352,15 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 		XsltDebugOutputs.get().startSession();
 		XsltDebugProblems.clear();
 		if ((!config.type && !config.request && !config.name) || config.quickRun) {
-			const forActiveEditor = await this.configurationForActiveEditor();
+			// a source given with a "quickRun" configuration, e.g. by an AI assistant's request to run it (see RunRequest)
+			const forActiveEditor = await this.configurationForActiveEditor(config.quickRun && typeof config.xmlSource === 'string' ? config.xmlSource : undefined);
 			if (!forActiveEditor) {
 				return undefined;
 			}
 			// with what VS Code adds: e.g. noDebug, for Run Without Debugging
-			config = { ...forActiveEditor, ...(config.stopOnEntry !== undefined ? { stopOnEntry: config.stopOnEntry } : {}), ...(config.noDebug ? { noDebug: true } : {}) };
+			// and a source given with it, e.g. by an AI assistant's request to run the stylesheet on an input (see RunRequest)
+			config = { ...forActiveEditor, ...(config.stopOnEntry !== undefined ? { stopOnEntry: config.stopOnEntry } : {}), ...(config.noDebug ? { noDebug: true } : {}),
+				...(config.xmlSource ? { xmlSource: config.xmlSource } : {}), ...(config.name ? { name: config.name } : {}) };
 		}
 		const tasksObject = config.task !== undefined ? await SaxonJsTaskProvider.getTasksObject() : { tasks: [] };
 		const withTask = XsltDebug.withTaskProperties(config, tasksObject.tasks || []);

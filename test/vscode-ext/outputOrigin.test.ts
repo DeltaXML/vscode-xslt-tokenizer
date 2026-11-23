@@ -69,6 +69,9 @@ suite('MCP tool output_origin: where a part of the output came from', function (
 		fs.rmSync(dir, { recursive: true, force: true });
 	});
 
+	// not asking the user to run the stylesheet: tests don't wait for a notification
+	const origin = (output?: string, line?: number, text?: string, occurrence?: number) => OutputOrigin.describe(output, line, text, occurrence, undefined, 0);
+
 	// the output, as an update from the adapter: <made> and its content written for the second order (input 0)
 	const recorded = (method = 'xml') => {
 		XsltDebugOutputs.get().startSession();
@@ -79,7 +82,7 @@ suite('MCP tool output_origin: where a part of the output came from', function (
 
 	test('a line: each part - the instruction that wrote it, its template with its mode, and the input node as an XPath', async () => {
 		recorded();
-		const result = await OutputOrigin.describe(undefined, 2);
+		const result = await origin(undefined, 2);
 		assert.isFalse(result.isError, result.text);
 		const text = result.text;
 		assert.match(text, /^Output result\.xml \(.*\), line 2: <made>A1<\/made>/);
@@ -91,38 +94,38 @@ suite('MCP tool output_origin: where a part of the output came from', function (
 
 	test('text in the output: found, and its occurrence - literal text from the stylesheet', async () => {
 		recorded();
-		const result = await OutputOrigin.describe(undefined, undefined, 'second line');
+		const result = await origin(undefined, undefined, 'second line');
 		assert.isFalse(result.isError, result.text);
 		assert.match(result.text, /line 4: second line<\/literal>/);
 		assert.match(result.text, /literal text in the stylesheet: .*report\.xsl:6/);
 		// not written for an input node
 		assert.notInclude(result.text, 'input:');
-		assert.isTrue((await OutputOrigin.describe(undefined, undefined, 'line', 3)).isError);
-		assert.match((await OutputOrigin.describe(undefined, undefined, 'line', 2)).text, /line 4:/);
+		assert.isTrue((await origin(undefined, undefined, 'line', 3)).isError);
+		assert.match((await origin(undefined, undefined, 'line', 2)).text, /line 4:/);
 	});
 
 	test('the outputs listed - with no line or text; an output by its name or the file it was written to', async () => {
 		recorded();
-		const listed = await OutputOrigin.describe();
+		const listed = await origin();
 		assert.isFalse(listed.isError);
 		assert.match(listed.text, /result\.xml - xml, 5 lines - written to .*result\.xml/);
-		assert.isFalse((await OutputOrigin.describe('result.xml', 1)).isError);
-		assert.isFalse((await OutputOrigin.describe(path.join(dir, 'out', 'result.xml'), 1)).isError);
-		const unknown = await OutputOrigin.describe('other.xml', 1);
+		assert.isFalse((await origin('result.xml', 1)).isError);
+		assert.isFalse((await origin(path.join(dir, 'out', 'result.xml'), 1)).isError);
+		const unknown = await origin('other.xml', 1);
 		assert.isTrue(unknown.isError);
 		assert.match(unknown.text, /No output 'other\.xml'.*\n {2}result\.xml/);
 	});
 
 	test('errors: no outputs, a line out of range, text not found, and an output that isn\'t XML', async () => {
 		XsltDebugOutputs.get().startSession();
-		const none = await OutputOrigin.describe(undefined, 1);
+		const none = await origin(undefined, 1);
 		assert.isTrue(none.isError);
 		assert.match(none.text, /Run Without Debugging/);
 		recorded();
-		assert.match((await OutputOrigin.describe(undefined, 9)).text, /has 5 lines - no line 9/);
-		assert.isTrue((await OutputOrigin.describe(undefined, undefined, 'missing')).isError);
+		assert.match((await origin(undefined, 9)).text, /has 5 lines - no line 9/);
+		assert.isTrue((await origin(undefined, undefined, 'missing')).isError);
 		recorded('json');
-		const json = await OutputOrigin.describe(undefined, 1);
+		const json = await origin(undefined, 1);
 		assert.isTrue(json.isError);
 		assert.match(json.text, /only XML output/);
 	});
@@ -146,12 +149,12 @@ suite('MCP tool output_origin: where a part of the output came from', function (
 		assert.isTrue(await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name, noDebug: true, saxonJar,
 			xsltFile: path.join(fixtures, 'outputs.xsl'), xmlSource: path.join(fixtures, 'basic.xml'), resultPath: path.join(dir, 'run', 'result.xml') }));
 		await ended;
-		const result = await OutputOrigin.describe('result.xml', undefined, '<row n="2"');
+		const result = await origin('result.xml', undefined, '<row n="2"');
 		assert.isFalse(result.isError, result.text);
 		assert.match(result.text, /written by: .*outputs\.xsl:9 {2}<row n="\{@n\}">/);
 		assert.include(result.text, 'in: xsl:template match="/" (line 3)');
 		assert.match(result.text, /input: \/items\/item\[2\] - .*basic\.xml:3/);
 		// the XML declaration: from the serializer
-		assert.match((await OutputOrigin.describe('result.xml', 1)).text, /<\?xml version.*\n {2}the XML declaration, written by the serializer \(xsl:output\)/);
+		assert.match((await origin('result.xml', 1)).text, /<\?xml version.*\n {2}the XML declaration, written by the serializer \(xsl:output\)/);
 	});
 });

@@ -12,6 +12,7 @@ import { McpRoot } from './mcpRoot';
 import { OutputOrigin } from './outputOrigin';
 import { XsltNodeRules } from '../xsltNodeRules';
 import { XmlElement } from '../xspecXml';
+import { RunRequest, RunOutcome } from './runRequest';
 
 export interface RulesResult {
 	text: string;
@@ -28,7 +29,19 @@ export class InputRules {
 
 	// file: the input file; line: of an element's start tag, from 1; xpath: an element's path in the simple form the tools
 	// give, e.g. /orders/order[2] - optionally ending /@name or /text() for that node of it
-	public static describe(file: string, line?: number, xpath?: string): RulesResult {
+	// stylesheet: the one to ask the user to run, if there's no run of the input, or it has changed since - by default, the
+	// last run's; waitForRunSeconds: how long to wait for the user to run it - 0 not to ask
+	public static async describe(file: string, line?: number, xpath?: string, stylesheet?: string, waitForRunSeconds = RunRequest.defaultWait): Promise<RulesResult> {
+		const inputPath = InputRules.resolve(file);
+		const target = stylesheet ? InputRules.resolve(stylesheet) : RunRequest.lastRun()?.xsltFile;
+		const why = RunRequest.whyRun(XsltNodeRules.hasRecord() && !!XsltNodeRules.recorded(inputPath), target, inputPath);
+		const outcome: RunOutcome | undefined = why && target ? await RunRequest.ask(target, inputPath, why, 'which templates processed its input', waitForRunSeconds) : undefined;
+		const note = why && !target ? `Note: ${why} - give the stylesheet, to ask the user to run it.` : RunRequest.note(outcome, why);
+		const result = InputRules.describeNow(inputPath, line, xpath);
+		return note && outcome !== 'ran' ? { ...result, text: `${result.text}\n\n${note}` } : outcome === 'ran' ? { ...result, text: `${note}\n\n${result.text}` } : result;
+	}
+
+	private static describeNow(inputPath: string, line?: number, xpath?: string): RulesResult {
 		if (!XsltNodeRules.hasRecord()) {
 			return {
 				text: 'No run recorded in this window: input_rules uses the last debug session - run the stylesheet in VS Code with Run and Debug, ' +
@@ -36,7 +49,6 @@ export class InputRules {
 				isError: true
 			};
 		}
-		const inputPath = InputRules.resolve(file);
 		const recorded = XsltNodeRules.recorded(inputPath);
 		if (!recorded) {
 			return {

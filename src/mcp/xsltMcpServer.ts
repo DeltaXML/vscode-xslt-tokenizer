@@ -435,16 +435,18 @@ export class XsltMcpServer {
 				'tag), the template or function it is in (with its match, name and mode), and the input node it was written for - as an XPath for ' +
 				'the input file, with its line. Use it to find the code behind wrong output, instead of searching the stylesheet for the output\'s ' +
 				'text, which fails for computed output. It reads the output of the last debug session in the user\'s VS Code window - Run and ' +
-				'Debug, or Run Without Debugging, with SaxonJ - so the user must have run the stylesheet there first; without a line or text, it ' +
-				'lists the outputs. Only XML output (method xml) is mapped. It runs nothing.',
+				'Debug, or Run Without Debugging, with SaxonJ - and when there\'s none, or the stylesheet has changed since, it asks the user to run it - a notification in ' +
+				'their window, which they can decline - and waits. Without a line or text, it lists the outputs. Only XML output (method xml) is mapped.',
 			inputSchema: {
 				output: z.string().optional().describe('The output: its name as listed, or the file it was written to - not needed if there\'s only one, or with text'),
 				line: z.number().int().min(1).optional().describe('A line of the output, from 1'),
 				text: z.string().optional().describe('Text to find in the output, instead of a line - e.g. a wrong value'),
-				occurrence: z.number().int().min(1).optional().describe('Which occurrence of the text - 1 by default')
+				occurrence: z.number().int().min(1).optional().describe('Which occurrence of the text - 1 by default'),
+				stylesheet: z.string().optional().describe('The stylesheet whose output it is - to ask the user to run it if there\'s no run, or it has changed since. The last run\'s, by default'),
+				waitForRunSeconds: z.number().int().min(0).max(600).optional().describe('How long to wait for the user to run it, when a run is needed: a notification in their window asks them - 120 by default; 0 not to ask')
 			},
 			annotations: readOnly
-		}, async (args) => configuration(OutputOrigin.describe(args.output, args.line, args.text, args.occurrence)));
+		}, async (args) => configuration(OutputOrigin.describe(args.output, args.line, args.text, args.occurrence, args.stylesheet, args.waitForRunSeconds)));
 		mcp.registerTool('input_rules', {
 			title: 'What processed an input file\'s elements',
 			description: 'For an element of an input XML file - or, without one, the whole file - what processed it in the user\'s last run: the template ' +
@@ -452,15 +454,18 @@ export class XsltMcpServer {
 				'where no template matched - for the element, its attributes and its text, with how many times. For the file: how many elements each ' +
 				'rule processed, and the elements left to built-in rules, whose text was copied to the output as it is - the usual cause of stray text. ' +
 				'It reads the record of the last debug session in the user\'s VS Code window - Run and Debug, or Run Without Debugging, with SaxonJ - ' +
-				'so the user must have run the stylesheet there first. Give the element by a path like /orders/order[2] (as evaluate_xpath and ' +
-				'output_origin give them), or by the line of its start tag - in a file all on one line, use a path. It runs nothing.',
+				'and when there\'s none for this input, or the stylesheet or input has changed since, it asks the user to run the ' +
+				'stylesheet on it - a notification in their window, which they can decline - and waits. Give the element by a path like /orders/order[2] ' +
+				'(as evaluate_xpath and output_origin give them), or by the line of its start tag - in a file all on one line, use a path.',
 			inputSchema: {
 				path: filePath.describe('The input XML file'),
 				line: z.number().int().min(1).optional().describe('The line of the element\'s start tag, from 1'),
-				xpath: z.string().optional().describe('The element\'s path, e.g. /orders/order[2] - optionally ending /@name or /text() for that node of it')
+				xpath: z.string().optional().describe('The element\'s path, e.g. /orders/order[2] - optionally ending /@name or /text() for that node of it'),
+				stylesheet: z.string().optional().describe('The stylesheet that processes it - to ask the user to run it on this file if there\'s no run of it, or either has changed since. The last run\'s, by default'),
+				waitForRunSeconds: z.number().int().min(0).max(600).optional().describe('How long to wait for the user to run it, when a run is needed: a notification in their window asks them - 120 by default; 0 not to ask')
 			},
 			annotations: readOnly
-		}, async (args) => configuration(Promise.resolve(InputRules.describe(args.path, args.line, args.xpath))));
+		}, async (args) => configuration(InputRules.describe(args.path, args.line, args.xpath, args.stylesheet, args.waitForRunSeconds)));
 		mcp.registerTool('trace_configuration', {
 			title: 'How to run a stylesheet with logpoints',
 			description: 'The command that runs a stylesheet as Quick Run does - its XML source and parameters, or a source you give - with logpoints, and ' +

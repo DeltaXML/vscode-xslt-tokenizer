@@ -12,6 +12,7 @@ import * as path from 'path';
 import { McpRoot } from './mcpRoot';
 import { XsltDebugOutputs } from '../xsltDebug';
 import { XmlElement, descendants, localName, parseXml } from '../xspecXml';
+import { RunRequest, RunOutcome } from './runRequest';
 
 export interface OriginResult {
 	text: string;
@@ -34,7 +35,18 @@ export class OutputOrigin {
 
 	// output: an output's name, or its file name - the one output if there's one; line: 1-based; text: found in the output,
 	// its occurrence'th time (1 by default)
-	public static async describe(output?: string, line?: number, text?: string, occurrence = 1): Promise<OriginResult> {
+	// stylesheet: the one to ask the user to run, if there's no run, or it has changed since - by default, the last run's;
+	// waitForRunSeconds: how long to wait for the user to run it - 0 not to ask
+	public static async describe(output?: string, line?: number, text?: string, occurrence = 1, stylesheet?: string, waitForRunSeconds = RunRequest.defaultWait): Promise<OriginResult> {
+		const target = stylesheet ? OutputOrigin.resolve(stylesheet) : RunRequest.lastRun()?.xsltFile;
+		const why = RunRequest.whyRun(XsltDebugOutputs.get().names().some((n) => XsltDebugOutputs.get().text(n)), target);
+		const outcome: RunOutcome | undefined = why && target ? await RunRequest.ask(target, undefined, why, 'where its output came from', waitForRunSeconds) : undefined;
+		const note = why && !target ? `Note: ${why} - give the stylesheet, to ask the user to run it.` : RunRequest.note(outcome, why);
+		const result = await OutputOrigin.describeNow(output, line, text, occurrence);
+		return note && outcome !== 'ran' ? { ...result, text: `${result.text}\n\n${note}` } : outcome === 'ran' ? { ...result, text: `${note}\n\n${result.text}` } : result;
+	}
+
+	private static async describeNow(output?: string, line?: number, text?: string, occurrence = 1): Promise<OriginResult> {
 		const outputs = XsltDebugOutputs.get();
 		const names = outputs.names().filter((n) => outputs.text(n));
 		if (names.length === 0) {
