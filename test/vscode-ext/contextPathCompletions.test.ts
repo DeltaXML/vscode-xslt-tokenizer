@@ -143,8 +143,9 @@ suite('Context file: completions of a relative path from its context', function 
 
 suite('Problems of an older version of a file, in a source control diff or an AI agent\'s', function () {
 	this.timeout(60000);
-	// a source control diff's, and Claude Code's diff of an AI agent's change: the original (left) and the proposal (right)
-	['gitlens', '_claude_vscode_fs_left', '_claude_vscode_fs_right'].forEach((scheme) => test(`are not reported for a document of a diff's scheme: ${scheme}`, async () => {
+	// a source control diff's, Claude Code's diff of an AI agent's change - the original (left) and the proposal (right) - and VS
+	// Code's for Copilot's chat edits: a snapshot from before them, and the original they're compared with
+	['gitlens', '_claude_vscode_fs_left', '_claude_vscode_fs_right', 'chat-editing-snapshot-text-model', 'chat-editing-text-model'].forEach((scheme) => test(`are not reported for a document of a diff's scheme: ${scheme}`, async () => {
 		const provider = vscode.workspace.registerTextDocumentContentProvider(scheme, {
 			provideTextDocumentContent: () => '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"><xsl:template match="/"><xsl:value-of select="nosuch(1)"/></xsl:template></xsl:stylesheet>'
 		});
