@@ -140,7 +140,7 @@ suite('MCP tool input_rules: what processed an input file\'s elements', function
 			// run: the tool waits for it, then answers from it
 			RunRequest.prompt = async () => RunRequest.runChoice;
 			result = await InputRules.describe(file('node-rules.xml'), undefined, '/orders/order[1]/line', file('node-rules.xsl'), 60);
-			assert.match(result.text, /^The user ran it just now, when you asked\.\n\nInput .*node-rules\.xml: \/orders\/order\[1\]\/line/);
+			assert.match(result.text, /^It was run just now, for you, with the user's permission\.\n\nInput .*node-rules\.xml: \/orders\/order\[1\]\/line/);
 			assert.match(result.text, /match="line" priority="2"/);
 			// the last run's stylesheet is used by default - and asked about again once it has changed since
 			asked.length = 0;
@@ -152,7 +152,30 @@ suite('MCP tool input_rules: what processed an input file\'s elements', function
 			result = await InputRules.describe(file('node-rules.xml'), undefined, undefined, undefined, 30);
 			assert.match(asked[0], /node-rules\.xsl has changed since the last run/);
 			assert.match(result.text, /The user chose not to run it now \(node-rules\.xsl has changed since the last run\)/);
+			// 'Always Run for This Workspace': run - and then not asked again, until the user says to ask
+			RunRequest.prompt = async (message) => { asked.push(message); return RunRequest.alwaysChoice; };
+			asked.length = 0;
+			result = await InputRules.describe(file('node-rules.xml'), undefined, undefined, undefined, 60);
+			assert.lengthOf(asked, 1);
+			assert.match(result.text, /^It was run just now/);
+			const later2 = new Date(Date.now() + 10000);
+			fs.utimesSync(file('node-rules.xsl'), later2, later2);
+			result = await InputRules.describe(file('node-rules.xml'), undefined, undefined, undefined, 60);
+			assert.lengthOf(asked, 1, 'not asked again');
+			assert.match(result.text, /^It was run just now/);
+			await vscode.commands.executeCommand('xslt-xpath.askBeforeAssistantRuns');
+			assert.strictEqual(RunRequest.policy(), 'ask');
+			// never: not asked, and the assistant is told
+			const later3 = new Date(Date.now() + 15000);
+			fs.utimesSync(file('node-rules.xsl'), later3, later3);
+			await vscode.workspace.getConfiguration('XSLT.mcp').update('runForAssistant', 'never', vscode.ConfigurationTarget.Global);
+			asked.length = 0;
+			result = await InputRules.describe(file('node-rules.xml'), undefined, undefined, undefined, 30);
+			assert.lengthOf(asked, 0);
+			assert.match(result.text, /Runs for an assistant are turned off by the user/);
 		} finally {
+			await vscode.workspace.getConfiguration('XSLT.mcp').update('runForAssistant', undefined, vscode.ConfigurationTarget.Global);
+			await RunRequest.askAgain();
 			DocumentChangeHandler.setLastPicked(context.uri, context.isNone);
 			RunRequest.prompt = prompt;
 			await tasks.update('saxonJar', savedJar, vscode.ConfigurationTarget.Global);

@@ -19,7 +19,7 @@ export interface LastRun {
 	ended: number;
 }
 
-export type RunOutcome = 'ran' | 'declined' | 'timed out' | 'failed' | 'not asked';
+export type RunOutcome = 'ran' | 'declined' | 'timed out' | 'failed' | 'not asked' | 'off';
 
 // For the MCP tools that read the user's last run (output_origin, input_rules): when there's none for what the assistant
 // asks about - or the stylesheet or input has changed since - a notification in the user's window asks them to run it,
@@ -37,9 +37,18 @@ export class RunRequest {
 	// the notification - only replaced by tests, which can't click it
 	public static prompt = (message: string, ...items: string[]): Thenable<string | undefined> => vscode.window.showInformationMessage(message, ...items);
 	public static readonly runChoice = 'Run Without Debugging';
+	public static readonly alwaysChoice = 'Always Run for This Workspace';
+	// the workspace's choice, 'Always Run for This Workspace' - in its state, not a setting a repository could set
+	private static readonly alwaysKey = 'xslt.mcp.runForAssistant';
+	private static workspaceState: vscode.Memento | undefined;
 
 	public static register(context: vscode.ExtensionContext, debugType: string) {
 		RunRequest.debugType = debugType;
+		RunRequest.workspaceState = context.workspaceState;
+		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.askBeforeAssistantRuns', async () => {
+			await RunRequest.askAgain();
+			vscode.window.showInformationMessage('XSLT: an AI assistant\'s request to run a stylesheet will be asked about again in this workspace.');
+		}));
 		context.subscriptions.push(vscode.debug.onDidStartDebugSession((session) => {
 			if (session.type === debugType) {
 				const config = session.configuration;
@@ -91,7 +100,25 @@ export class RunRequest {
 		return RunRequest.pending;
 	}
 
+	// the user's setting - and, with 'ask', their choice for the workspace: 'always' once they chose to always run
+	public static policy(): 'ask' | 'always' | 'never' {
+		const setting = vscode.workspace.getConfiguration('XSLT.mcp').get<string>('runForAssistant', 'ask');
+		if (setting === 'never' || setting === 'always') {
+			return setting;
+		}
+		return RunRequest.workspaceState?.get<boolean>(RunRequest.alwaysKey) ? 'always' : 'ask';
+	}
+
+	// forgets 'Always Run for This Workspace'
+	public static async askAgain() {
+		await RunRequest.workspaceState?.update(RunRequest.alwaysKey, undefined);
+	}
+
 	private static async askNow(stylesheet: string, input: string | undefined, why: string, purpose: string, waitSeconds: number): Promise<RunOutcome> {
+		const policy = RunRequest.policy();
+		if (policy === 'never') {
+			return 'off';
+		}
 		const run = RunRequest.runChoice;
 		const message = `An AI assistant asks for a run of ${path.basename(stylesheet)}${input ? ` on ${path.basename(input)}` : ''}, to see ${purpose}: ${why}.`;
 		// the whole wait - for an answer, then for the run to end
@@ -103,12 +130,17 @@ export class RunRequest {
 				resolve(undefined);
 			}, waitSeconds * 1000);
 		});
-		const choice = await Promise.race([RunRequest.prompt(message, run, 'Not Now'), timedOut]);
-		if (choice !== run) {
+		// asked - unless the user has said to always run it
+		const choice = policy === 'always' ? run : await Promise.race([RunRequest.prompt(message, run, RunRequest.alwaysChoice, 'Not Now'), timedOut]);
+		if (choice === RunRequest.alwaysChoice) {
+			await RunRequest.workspaceState?.update(RunRequest.alwaysKey, true);
+		} else if (choice !== run) {
 			clearTimeout(timer);
 			// no answer in time - else 'Not Now', or the notification closed
 			return expired ? 'timed out' : 'declined';
 		}
+		// without a notification, it's still shown that it ran, and why
+		const status = policy === 'always' ? vscode.window.setStatusBarMessage(`$(play) Running ${path.basename(stylesheet)} for an AI assistant`) : undefined;
 		const name = `${path.basename(stylesheet)} (for an AI assistant)`;
 		const ended = new Promise<boolean>((resolve) => {
 			const listener = vscode.debug.onDidTerminateDebugSession((session) => {
@@ -135,21 +167,28 @@ export class RunRequest {
 			}, { noDebug: true });
 			if (!started) {
 				clearTimeout(timer);
+				status?.dispose();
 				return 'failed';
 			}
 		} catch {
 			clearTimeout(timer);
+			status?.dispose();
 			return 'failed';
 		}
 		const finished = await ended;
 		clearTimeout(timer);
+		status?.dispose();
+		if (policy === 'always' && finished) {
+			vscode.window.setStatusBarMessage(`$(check) Ran ${path.basename(stylesheet)} for an AI assistant`, 5000);
+		}
 		return finished ? 'ran' : 'timed out';
 	}
 
 	// a sentence for the tool's answer about how the run went, if a run was asked for
 	public static note(outcome: RunOutcome | undefined, why: string | undefined): string | undefined {
 		switch (outcome) {
-			case 'ran': return 'The user ran it just now, when you asked.';
+			case 'ran': return 'It was run just now, for you, with the user\'s permission.';
+			case 'off': return `Runs for an assistant are turned off by the user (${why}) - read the code, or use trace_configuration.`;
 			case 'declined': return `The user chose not to run it now (${why}).`;
 			case 'timed out': return `No run finished in time (${why}) - the user may not be there: ask them in the chat, or use trace_configuration.`;
 			case 'failed': return `The run couldn't be started (${why}) - see the user's VS Code window.`;

@@ -525,6 +525,11 @@
 				"enablement": "xslt-xpath.hasInputMapping"
 			},
 			{
+				"command": "xslt-xpath.askBeforeAssistantRuns",
+				"title": "Ask Before Running a Stylesheet for an AI Assistant",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.tabToIndentation",
 				"title": "Tab: Indent an Empty Line for Its Context",
 				"category": "XSLT"
@@ -1267,6 +1272,18 @@
 					"default": "restricted",
 					"scope": "application",
 					"markdownDescription": "What an AI assistant's `debug_evaluate` expressions (see `#XSLT.mcp.enabled#`) can call in your paused debug session. `restricted`: Saxon-HE's functions only, whatever edition the session runs on - the stylesheet's own functions still run as they are, and files can still be read with `doc()` or `unparsed-text()`. Choose `never` if the stylesheet's functions have effects, or files the session can read mustn't be. Your own Debug Console, Watch and logpoint expressions aren't affected. A user setting only: a workspace can't change it."
+				},
+				"XSLT.mcp.runForAssistant": {
+					"type": "string",
+					"enum": ["ask", "always", "never"],
+					"enumDescriptions": [
+						"Ask in a notification - Run Without Debugging, Always Run for This Workspace, or Not Now",
+						"Run it without asking, in every workspace",
+						"Don't run it, nor ask: the assistant is told runs are turned off"
+					],
+					"default": "ask",
+					"scope": "application",
+					"markdownDescription": "When an AI assistant's `output_origin` or `input_rules` (see `#XSLT.mcp.enabled#`) needs a run of a stylesheet - there's none yet, or the stylesheet or input has changed since - whether the extension runs it for the assistant: as Run Without Debugging, with your Quick Run task, which writes its result file and any `xsl:result-document` outputs. `ask`: a notification asks you, and **Always Run for This Workspace** stops it asking in that workspace (**XSLT: Ask Before Running a Stylesheet for an AI Assistant** asks again). A user setting only: a workspace can't change it."
 				},
 				"XSLT.xspec.legacyCompatibility": {
 					"type": "boolean",

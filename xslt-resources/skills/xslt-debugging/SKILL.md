@@ -20,9 +20,9 @@ output, and adding `xsl:message` edits the user's files. For writing and checkin
 | `profile_configuration` | For a stylesheet: the command that runs it with Saxon's timing profile (PE/EE), and the command that summarises the profile as text, ranked by net time |
 
 `output_origin` and `input_rules` read the user's last run in VS Code. When there's none, or the stylesheet or input has changed since,
-they ask the user for one themselves - a notification in the user's window with a button that runs it - and wait for it (give
-`stylesheet` if there's been no run yet). If the user declines or doesn't answer, the tool says so: carry on by reading the code, or with
-`trace_configuration`. `debug_status` reads the user's debug session. `trace_configuration` and `profile_configuration` give commands
+they ask the user for the extension to run it - a notification in the user's window, unless they've said to always run it - and wait
+for it (give `stylesheet` if there's been no run yet). If the user declines, doesn't answer, or has turned runs off, the tool says so:
+carry on by reading the code, or with `trace_configuration`. `debug_status` reads the user's debug session. `trace_configuration` and `profile_configuration` give commands
 you run yourself (the user may be asked to allow them).
 
 ## When the output is wrong
