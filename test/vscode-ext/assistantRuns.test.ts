@@ -182,7 +182,8 @@ suite('MCP tools: how to run XSpec tests and a Schematron validation', function 
 		}
 		const text = (await TestConfiguration.describe(path.join(xspecDemo, 'order-report.xspec'))).text;
 		const oneLine = /In one line: (java [^\n]+)/.exec(text)![1];
-		runInShell(oneLine);
+		// the one command: the steps, then the summary
+		assert.match(runInShell(oneLine), /^XSpec: \d+ passed, \d+ failed, \d+ pending - \d+ tests/m);
 		const summary = commandAfter(text, 'summarises the result|prints the numbers passed')!;
 		const output = runInShell(summary);
 		assert.match(output, /^XSpec: \d+ passed, \d+ failed, \d+ pending - \d+ tests/m, output);

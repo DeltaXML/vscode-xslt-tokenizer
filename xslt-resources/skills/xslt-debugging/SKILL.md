@@ -6,8 +6,9 @@ description: Use to find why an XSLT stylesheet's output is wrong, missing or ha
 # Debugging XSLT with the xslt-xpath MCP server
 
 Find the cause with the tools before changing the stylesheet: searching the stylesheet for the output's text fails for computed
-output, and adding `xsl:message` edits the user's files. For writing and checking the fix - linting, running, XSpec tests - use the
-`xslt-xpath` skill.
+output, and adding `xsl:message` edits the user's files. If the stylesheet has XSpec tests, run them **before** the fix -
+`test_configuration`'s **In one line** command runs them and prints the summary - to see which fail, and again after. For writing and
+checking the fix - linting, running, XSpec tests - use the `xslt-xpath` skill.
 
 ## Tools
 

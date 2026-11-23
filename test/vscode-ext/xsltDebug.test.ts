@@ -58,6 +58,10 @@ suite('XSLT debugger - configurations', () => {
 			type: XsltDebug.type, request: 'launch', name: 'Debug report', task: 'report'
 		});
 		assert.match(<string>XsltDebug.withTaskProperties({ type: XsltDebug.type, request: 'launch', name: 'x', task: 'missing' }, tasks), /no 'xslt' task labelled 'missing'/);
+		// a Quick Run task asks for its result file: a configuration's own resultPath - e.g. a run for an AI assistant - isn't asked for
+		const quickRun = [{ type: 'xslt', label: 'Quick Run', xsltFile: 'report.xsl', xmlSource: 'books.xml', resultPath: '${command:xslt-xpath.pickResultFile}' }];
+		const forAssistant = XsltDebug.withTaskProperties({ type: XsltDebug.type, request: 'launch', name: 'run', task: 'Quick Run', resultPath: '/tmp/report.out' }, quickRun) as vscode.DebugConfiguration;
+		assert.strictEqual(forAssistant.resultPath, '/tmp/report.out');
 	});
 
 	test('configurations without a launch.json: the active stylesheet, then each xslt task', () => {

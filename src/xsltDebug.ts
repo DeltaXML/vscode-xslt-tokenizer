@@ -360,7 +360,8 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 			// with what VS Code adds: e.g. noDebug, for Run Without Debugging
 			// and a source given with it, e.g. by an AI assistant's request to run the stylesheet on an input (see RunRequest)
 			config = { ...forActiveEditor, ...(config.stopOnEntry !== undefined ? { stopOnEntry: config.stopOnEntry } : {}), ...(config.noDebug ? { noDebug: true } : {}),
-				...(config.xmlSource ? { xmlSource: config.xmlSource } : {}), ...(config.name ? { name: config.name } : {}) };
+				...(config.xmlSource ? { xmlSource: config.xmlSource } : {}), ...(config.resultPath ? { resultPath: config.resultPath } : {}),
+				...(config.name ? { name: config.name } : {}) };
 		}
 		const tasksObject = config.task !== undefined ? await SaxonJsTaskProvider.getTasksObject() : { tasks: [] };
 		const withTask = XsltDebug.withTaskProperties(config, tasksObject.tasks || []);

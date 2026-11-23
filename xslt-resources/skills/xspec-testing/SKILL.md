@@ -23,8 +23,9 @@ command: `test_configuration` gives the commands, and a command that summarises 
 1. **Find what to test and what's tested.** `find_declaration` for the signature; `find_references` for existing scenarios; read the
    `.xspec` file. Add to its scenarios; don't write a second copy of one.
 2. **Write the scenarios** (below), then `lint_file` the `.xspec` file and fix what it reports.
-3. **Run them.** `test_configuration` for the file; run its commands in order, in a shell (the user may be asked to allow them); then
-   run the summary command it gives. The runs exit with 0 whether or not tests failed - read the summary, not the exit code.
+3. **Run them.** `test_configuration` for the file, then its **In one line** command, in a shell (the user may be asked to allow it):
+   the steps, then the summary. The runs exit with 0 whether or not tests failed - read the summary, not the exit code. **Before
+   fixing the stylesheet**, run the tests once to see which fail - they confirm the cause, and show the fix makes them pass.
 4. **When a test fails, decide which is wrong** - the stylesheet or the expectation - from the expected and actual values. Don't change an
    expectation just to make it pass without telling the user why. If the stylesheet is wrong, say so, and fix it only if that's the task.
 5. **Say what happened:** the numbers passed, failed and pending, each failure, and what you changed.

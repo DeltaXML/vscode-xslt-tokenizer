@@ -8,7 +8,9 @@
  *  DeltaXML Ltd.
  */
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { McpRoot } from './mcpRoot';
 
@@ -163,7 +165,8 @@ export class RunRequest {
 			await vscode.window.showTextDocument(vscode.Uri.file(stylesheet), { preview: false });
 			const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(stylesheet));
 			const started = await vscode.debug.startDebugging(folder, {
-				type: RunRequest.debugType, request: 'launch', name, quickRun: true, ...(input ? { xmlSource: input } : {})
+				type: RunRequest.debugType, request: 'launch', name, quickRun: true, ...(input ? { xmlSource: input } : {}),
+				resultPath: RunRequest.resultPath(stylesheet)
 			}, { noDebug: true });
 			if (!started) {
 				clearTimeout(timer);
@@ -182,6 +185,15 @@ export class RunRequest {
 			vscode.window.setStatusBarMessage(`$(check) Ran ${path.basename(stylesheet)} for an AI assistant`, 5000);
 		}
 		return finished ? 'ran' : 'timed out';
+	}
+
+	// where a run for an assistant writes its result: a folder for the stylesheet in the temporary files - not where the user
+	// would be asked, as for Quick Run, which would be a second prompt; and relative xsl:result-document hrefs go there too, not
+	// into the project. The debugger's output view shows the result as for any run
+	public static resultPath(stylesheet: string): string {
+		const hash = crypto.createHash('sha1').update(stylesheet).digest('hex').substring(0, 8);
+		const base = path.basename(stylesheet, path.extname(stylesheet));
+		return path.join(os.tmpdir(), 'xslt-xpath', 'assistant-run', `${base}-${hash}`, `${base}.out`);
 	}
 
 	// a sentence for the tool's answer about how the run went, if a run was asked for

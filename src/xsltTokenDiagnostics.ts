@@ -194,6 +194,8 @@ export enum DiagnosticCode {
 	prefixedFunctionNotFound,
 	// an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
 	applyTemplatesDefaultMode,
+	// a template rule's mode that no xsl:apply-templates in the stylesheet's modules applies
+	modeNotApplied,
 	// an xsl:use-package whose package isn't found - in the workspace or the XSLT.resources.xsltPackages setting
 	packageNotFound,
 	// an abstract component of a used package that isn't overridden - with the fixes in PackageScope.fixes
@@ -3693,6 +3695,7 @@ export class XsltTokenDiagnostics {
 		}
 		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 			XsltTokenDiagnostics.checkApplyTemplatesModes(document, problemTokens);
+			XsltTokenDiagnostics.checkModesApplied(document, globalInstructionData, importedInstructionData, problemTokens);
 		}
 		// duplicate literal keys in map constructors, and in the xsl:map-entry children of an xsl:map
 		const allXPathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
@@ -5968,6 +5971,12 @@ export class XsltTokenDiagnostics {
 					errCode = DiagnosticCode.applyTemplatesDefaultMode;
 					break;
 				}
+				case ErrorType.ModeNotApplied:
+					msg = `XSLT: no xsl:apply-templates in the stylesheet's modules applies the mode '${tokenValue}' - its template rules run only if it's ` +
+						`the initial mode, or a stylesheet that isn't found here applies it. Was a mode added here but not to the xsl:apply-templates meant to reach it?`;
+					severity = vscode.DiagnosticSeverity.Hint;
+					errCode = DiagnosticCode.modeNotApplied;
+					break;
 				case ErrorType.SwitchCasesMissing:
 					msg = `XSLT: xsl:switch has no xsl:when or xsl:otherwise for the enumeration values: ${tokenValue}`;
 					severity = vscode.DiagnosticSeverity.Information;
@@ -7091,6 +7100,87 @@ export class XsltTokenDiagnostics {
 			const token: BaseToken = { line: position.line, startCharacter: position.character, length: elementName.length, value: elementName, tokenType: XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.xslElementName };
 			problemTokens.push(RecordTypes.problemToken(token, ErrorType.ApplyTemplatesDefaultMode, modes.join(' ')));
 		});
+	}
+
+	// a template rule's mode that no xsl:apply-templates in the stylesheet's modules applies - by mode="..." with its name -
+	// nor a default-mode names, which makes it the mode xsl:apply-templates without a mode applies, and the initial mode: e.g.
+	// a mode added to a template rule but not to the xsl:apply-templates meant to reach it, so the built-in rules run instead.
+	// The modules: this one, those it imports or includes, and the top-level stylesheet that imports or includes it, with
+	// theirs (see XsltSymbolProvider) - a module checked alone, e.g. a library, may have its modes applied by a stylesheet
+	// that isn't found, so it's a hint. Not a mode with a template rule for the document node (match="/"), which is the
+	// initial mode a run starts in, as a rule; nor a package's public or final mode - by its xsl:mode's visibility, or the
+	// package's xsl:expose - which the stylesheets that use the package may apply (a private one is checked: only the
+	// package can apply it); nor where a _mode shadow attribute sets a mode by a static expression. Import precedence
+	// doesn't matter: it decides which rule of a mode is used, not whether the mode is applied
+	private static checkModesApplied(document: vscode.TextDocument, own: GlobalInstructionData[], imported: GlobalInstructionData[], problemTokens: BaseToken[]) {
+		const templateModes = own.filter((g) => g.type === GlobalInstructionType.ModeTemplate && !g.isDefaultMode && !g.name.startsWith('#'));
+		if (templateModes.length === 0) {
+			return;
+		}
+		const text = document.getText();
+		if (/\s_mode\s*=/.test(text)) {
+			return;
+		}
+		const bindings = XslLexerLight.prefixBindingsOf(text);
+		const expanded = (name: string) => ModulePrefixes.expandedName(name, bindings);
+		const applied = new Set<string>();
+		for (const g of own.concat(imported)) {
+			if (g.type === GlobalInstructionType.Mode || (g.type === GlobalInstructionType.ModeTemplate && g.isDefaultMode)) {
+				g.name.trim().split(/\s+/).forEach((name) => applied.add(expanded(name)));
+			}
+		}
+		// an xsl:package: also the modes its xsl:expose elements make public or final, as Saxon applies the visibility rules
+		const pkg = ImportIndex.packageDeclaration(text);
+		if (pkg && document.uri.scheme === 'file') {
+			try {
+				PackageScope.entryPoints(document.uri.fsPath, pkg.name, pkg.version).modes.forEach((name) => applied.add(expanded(name)));
+			} catch {
+				// as if none were public: the hint is only a hint
+			}
+		}
+		if (templateModes.every((g) => applied.has(expanded(g.name)))) {
+			return;
+		}
+		// a mode with a template rule for the document node is the initial mode a run starts in, as a rule - in any of the
+		// modules: this one's text, and the others' files - and so is a mode a package makes public or final (below)
+		const texts = [text];
+		for (const href of new Set(imported.map((g) => (g as { href?: string }).href).filter((h): h is string => !!h))) {
+			try {
+				texts.push(fs.readFileSync(href, 'utf8'));
+			} catch {
+				// not readable: its modes count as not applied
+			}
+		}
+		const initial = new Set<string>();
+		for (const moduleText of texts) {
+			const moduleBindings = moduleText === text ? bindings : XslLexerLight.prefixBindingsOf(moduleText);
+			const markup = RecordTypes.blankMarkup(moduleText);
+			const templateRgx = RecordTypes.xsltPattern(/<xsl:template(?=[\s/>])/g, moduleText);
+			for (let m = templateRgx.exec(markup); m; m = templateRgx.exec(markup)) {
+				const match = RecordTypes.attributeOfElementAt(moduleText, m.index + 1, 'match');
+				const mode = RecordTypes.attributeOfElementAt(moduleText, m.index + 1, 'mode');
+				if (match !== undefined && mode !== undefined && match.split('|').some((p) => p.trim() === '/' || /^document-node\s*\(/.test(p.trim()))) {
+					// by expanded name, as this module would write it: another module may use another prefix
+					mode.trim().split(/\s+/).forEach((name) => initial.add(ModulePrefixes.expandedName(name, moduleBindings)));
+				}
+			}
+			// a package's public or final mode, by its xsl:mode's visibility: the stylesheets that use the package may apply it -
+			// a private one only the package itself, so it's checked
+			const modeRgx = RecordTypes.xsltPattern(/<xsl:mode(?=[\s/>])/g, moduleText);
+			for (let m = modeRgx.exec(markup); m; m = modeRgx.exec(markup)) {
+				const name = RecordTypes.attributeOfElementAt(moduleText, m.index + 1, 'name');
+				const visibility = RecordTypes.attributeOfElementAt(moduleText, m.index + 1, 'visibility')?.trim();
+				if (name !== undefined && (visibility === 'public' || visibility === 'final')) {
+					initial.add(ModulePrefixes.expandedName(name.trim(), moduleBindings));
+				}
+			}
+		}
+		for (const g of templateModes) {
+			const name = expanded(g.name);
+			if (!applied.has(name) && !initial.has(name)) {
+				problemTokens.push(RecordTypes.problemToken(g.token, ErrorType.ModeNotApplied, g.name));
+			}
+		}
 	}
 
 	// XSLT 4.0: for each xsl:switch whose select has an enumeration type, the declared type, by the offset of its start tag

@@ -408,7 +408,8 @@ export class XsltMcpServer {
 				'user\'s permission. XSpec has no single command here - the tests are compiled to a test runner, then it is run, with more ' +
 				'steps for a Schematron - so don\'t write your own. The files they write go to a folder in the temporary files, not the ' +
 				'project. The run exits with 0 even when tests fail: it also gives the command that summarises the result as text - the ' +
-				'numbers passed, failed and pending, and each failure with what was expected and what the test gave - and lists the ' +
+				'numbers passed, failed and pending, and each failure with what was expected and what the test gave - and one command that runs ' +
+				'the steps then the summary. It lists the ' +
 				'file\'s scenarios. Use it after changing a stylesheet or its XSpec file.',
 			inputSchema: { path: filePath.describe('The XSpec file (.xspec): absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)') },
 			annotations: readOnly

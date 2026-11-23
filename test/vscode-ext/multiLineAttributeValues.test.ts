@@ -18,7 +18,7 @@ async function lint(body: string, rootAttributes = '') {
 	lexer.provideCharLevelState = true;
 	const tokens = lexer.analyse(xslt);
 	return XsltTokenDiagnostics.calculateDiagnostics(XSLTConfiguration.configuration, DocumentTypes.XSLT, document, tokens, lexer.globalInstructionData, [], [])
-		.filter((d) => d.message !== 'variable is unused')
+		.filter((d) => d.message !== 'variable is unused' && !d.message.includes('no xsl:apply-templates in the stylesheet\'s modules applies'))
 		.map((d) => `${d.range.start.line}: ${d.message}`);
 }
 

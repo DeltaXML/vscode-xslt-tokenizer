@@ -21,7 +21,8 @@ async function problems(version: string, body: string) {
 	const is40 = version === '4.0';
 	const config = { ...XSLTConfiguration.configuration, isVersion4: is40 };
 	const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(config, is40 ? DocumentTypes.XSLT40 : DocumentTypes.XSLT, document, allTokens, xslLexer.globalInstructionData, [], []);
-	return diagnostics.map((d) => [d.message, document.getText(d.range)]);
+	// not the hint on a mode nothing applies - see modeNotApplied.test.ts
+	return diagnostics.filter((d) => !d.message.includes('no xsl:apply-templates in the stylesheet\'s modules applies')).map((d) => [d.message, document.getText(d.range)]);
 }
 
 const modeName = 'XSLT: An xsl:mode with enclosed xsl:template elements must have a name attribute';

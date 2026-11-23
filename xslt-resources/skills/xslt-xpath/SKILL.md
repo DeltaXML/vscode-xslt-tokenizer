@@ -47,8 +47,8 @@ read the summary each gives, not the exit code.
 5. **Run it.** Get the command from `run_configuration` for the stylesheet and run it, rather than writing your own Saxon
    command - the options (`--allowSyntaxExtensions:on` for 4.0, `-catalog`, `-lib` for packages) matter.
 6. **Test it.** If there are XSpec tests, `find_references` shows the scenarios for a function or template; update them with
-   the change, and for new logic add a scenario. Run them with `test_configuration`'s commands - XSpec has no single command here, so
-   don't write your own - and read the summary. For a Schematron schema, `validation_configuration` does the same for a validation.
+   the change, and for new logic add a scenario. Run them with `test_configuration`'s **In one line** command - the steps, then the
+   summary; XSpec has no single command of its own, so don't write your own - and read the summary. For a Schematron schema, `validation_configuration` does the same for a validation.
 
 ## Reading the linter
 

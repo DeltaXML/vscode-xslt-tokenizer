@@ -142,6 +142,9 @@ suite('MCP tool input_rules: what processed an input file\'s elements', function
 			result = await InputRules.describe(file('node-rules.xml'), undefined, '/orders/order[1]/line', file('node-rules.xsl'), 60);
 			assert.match(result.text, /^It was run just now, for you, with the user's permission\.\n\nInput .*node-rules\.xml: \/orders\/order\[1\]\/line/);
 			assert.match(result.text, /match="line" priority="2"/);
+			// the result in the temporary files - not asked for, as Quick Run would - and nothing written beside the stylesheet
+			assert.isTrue(fs.existsSync(RunRequest.resultPath(file('node-rules.xsl'))), RunRequest.resultPath(file('node-rules.xsl')));
+			assert.include(RunRequest.resultPath(file('node-rules.xsl')), path.join(os.tmpdir(), 'xslt-xpath', 'assistant-run'));
 			// the last run's stylesheet is used by default - and asked about again once it has changed since
 			asked.length = 0;
 			RunRequest.prompt = async (message) => { asked.push(message); return 'Not Now'; };

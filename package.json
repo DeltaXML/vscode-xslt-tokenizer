@@ -1283,7 +1283,7 @@
 					],
 					"default": "ask",
 					"scope": "application",
-					"markdownDescription": "When an AI assistant's `output_origin` or `input_rules` (see `#XSLT.mcp.enabled#`) needs a run of a stylesheet - there's none yet, or the stylesheet or input has changed since - whether the extension runs it for the assistant: as Run Without Debugging, with your Quick Run task, which writes its result file and any `xsl:result-document` outputs. `ask`: a notification asks you, and **Always Run for This Workspace** stops it asking in that workspace (**XSLT: Ask Before Running a Stylesheet for an AI Assistant** asks again). A user setting only: a workspace can't change it."
+					"markdownDescription": "When an AI assistant's `output_origin` or `input_rules` (see `#XSLT.mcp.enabled#`) needs a run of a stylesheet - there's none yet, or the stylesheet or input has changed since - whether the extension runs it for the assistant: as Run Without Debugging, with your Quick Run task - its result written to the temporary files, not asked for, and relative `xsl:result-document` outputs with it. `ask`: a notification asks you, and **Always Run for This Workspace** stops it asking in that workspace (**XSLT: Ask Before Running a Stylesheet for an AI Assistant** asks again). A user setting only: a workspace can't change it."
 				},
 				"XSLT.xspec.legacyCompatibility": {
 					"type": "boolean",

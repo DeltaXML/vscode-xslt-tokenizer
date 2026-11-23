@@ -146,9 +146,11 @@ export class TestConfiguration {
 		}
 		lines.push('', `These commands run nothing here. Run them in order, from any folder - they write only to ${path.dirname(files.compiled)}, a folder for this XSpec file in the temporary files, not in the project:`);
 		steps.forEach((step, index) => lines.push(`  ${index + 1}. ${step.title}:`, `     ${step.command}`));
-		lines.push('', `In one line: ${steps.map((step) => step.command).join(' && ')}`);
+		const summary = AssistantRuns.summaryCommand(saxonJar, files.result, 'xspec-summary.xsl');
 		lines.push('', 'Then read the result. The run exits with 0 whether or not tests failed - don\'t use the exit code. This prints the numbers passed, failed and pending, and each failure with what was expected and what the test gave:',
-			`  ${AssistantRuns.summaryCommand(saxonJar, files.result, 'xspec-summary.xsl')}`);
+			`  ${summary}`);
+		// all of it as one command - a step that fails, e.g. the tests not compiling, stops it with Saxon's error
+		lines.push('', 'Or all of it - the steps, then the summary - as one command:', `In one line: ${[...steps.map((step) => step.command), summary].join(' && ')}`);
 		lines.push(`The full result is the XML file ${files.result}.`);
 		if (XSpecRunner.canMeasureTime(uri)) {
 			lines.push('To time each scenario (Saxon-PE and EE), add ?measure-time=true() to the compile step; the times are in the result file.');
