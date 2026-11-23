@@ -141,14 +141,15 @@ suite('Context file: completions of a relative path from its context', function 
 	});
 });
 
-suite('Problems of an older version of a file, in a source control diff', function () {
+suite('Problems of an older version of a file, in a source control diff or an AI agent\'s', function () {
 	this.timeout(60000);
-	test('are not reported for a document of a source control scheme', async () => {
-		const provider = vscode.workspace.registerTextDocumentContentProvider('gitlens', {
+	// a source control diff's, and Claude Code's diff of an AI agent's change: the original (left) and the proposal (right)
+	['gitlens', '_claude_vscode_fs_left', '_claude_vscode_fs_right'].forEach((scheme) => test(`are not reported for a document of a diff's scheme: ${scheme}`, async () => {
+		const provider = vscode.workspace.registerTextDocumentContentProvider(scheme, {
 			provideTextDocumentContent: () => '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"><xsl:template match="/"><xsl:value-of select="nosuch(1)"/></xsl:template></xsl:stylesheet>'
 		});
 		try {
-			const uri = vscode.Uri.parse('gitlens:/old/invoicing.xsl');
+			const uri = vscode.Uri.parse(`${scheme}:/old/invoicing.xsl`);
 			const document = await vscode.workspace.openTextDocument(uri);
 			await vscode.languages.setTextDocumentLanguage(document, 'xslt');
 			await vscode.window.showTextDocument(document);
@@ -156,8 +157,9 @@ suite('Problems of an older version of a file, in a source control diff', functi
 			assert.equal(vscode.languages.getDiagnostics(uri).length, 0);
 		} finally {
 			provider.dispose();
+			await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
 		}
-	});
+	}));
 });
 
 suite('Problems of the files of a folder removed from the workspace', () => {

@@ -92,7 +92,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static instanceForXSLT: XsltSymbolProvider|null = null;
 	private readonly xslLexer: XslLexer;
 	public readonly collection: vscode.DiagnosticCollection | null;
-	private static readonly historySchemes = ['git', 'gitlens', 'git-graph', 'svn', 'review', 'pr'];
+	// documents that aren't the file to fix: an earlier version of it, in a source control diff - and an AI agent's diff, Claude
+	// Code's: the original (left), the proposed change (right) and a read-only view - whose problems would otherwise stay in the
+	// Problems view, and reopen the old version when clicked
+	private static readonly historySchemes = ['git', 'gitlens', 'git-graph', 'svn', 'review', 'pr',
+		'_claude_vscode_fs_left', '_claude_vscode_fs_right', '_claude_vscode_fs_readonly'];
 	private internalDiagnostics: vscode.Diagnostic[];
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
