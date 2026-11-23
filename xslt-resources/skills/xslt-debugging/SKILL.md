@@ -23,7 +23,7 @@ checking the fix - linting, running, XSpec tests - use the `xslt-xpath` skill.
 `output_origin` and `input_rules` read the user's last run in VS Code. When there's none, or the stylesheet or input has changed since,
 they ask the user for the extension to run it - a notification in the user's window, unless they've said to always run it - and wait
 for it (give `stylesheet` if there's been no run yet). If the user declines, doesn't answer, or has turned runs off, the tool says so:
-carry on by reading the code, or with `trace_configuration`. `debug_status` reads the user's debug session. `trace_configuration` and `profile_configuration` give commands
+carry on with `trace_configuration`'s command and `--rules` - the same summary of what processed the input, from a run of your own. `debug_status` reads the user's debug session. `trace_configuration` and `profile_configuration` give commands
 you run yourself (the user may be asked to allow them).
 
 ## When the output is wrong
@@ -40,7 +40,8 @@ Find the code that wrote it instead of searching the stylesheet for the output's
    `xsl:output` to `method="xml"` for the investigation - the elements are the same, written as XML - then call `output_origin` again,
    which asks them to run it, and
    change it back afterwards. Literal text is mapped to where it is in the stylesheet, and copied nodes to the source document.
-5. **Output missing, or stray text in it?** Start from the input: `input_rules` on the input file lists the elements only built-in rules
+5. **Output missing, or stray text in it?** Start from the input: `input_rules` on the input file (or `trace_configuration`'s command with
+   `--rules`, when there's no run of the user's) lists the elements only built-in rules
    processed - no template matched them, so with the default `text-only-copy` their text went to the output as it is - and, for an
    element (by its path), every rule that processed it, its attributes and text, in which mode. An element no rule processed wasn't
    selected by any `xsl:apply-templates` or `xsl:for-each`: look at the templates of its nearest processed ancestor, which it gives.

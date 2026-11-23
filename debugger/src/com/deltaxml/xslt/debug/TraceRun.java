@@ -32,6 +32,8 @@ import java.util.regex.Pattern;
  *   --log FILE:LINE[=MESSAGE]  a logpoint at the line; MESSAGE as a logpoint's, with {expression} parts - {$*} by default
  *   --when FILE:LINE=CONDITION  only log at the line when the XPath condition is true
  *   --max-hits N               the most messages printed for each logpoint (20 by default) - the rest are counted
+ *   --rules                    at the end, for each input file: the rules that processed its elements, and the elements only
+ *                              built-in rules did - no template matched them - as the extension's input_rules tool gives them
  */
 public final class TraceRun {
 
@@ -63,6 +65,7 @@ public final class TraceRun {
         final Map<String, Logpoint> logpoints = new LinkedHashMap<String, Logpoint>();
         final List<String> saxonArgs = new ArrayList<String>();
         int maxHitsArg = 20;
+        boolean rulesArg = false;
         try {
             for (int i = 0; i < args.length; i++) {
                 String arg = args[i];
@@ -89,6 +92,8 @@ public final class TraceRun {
                     } else {
                         logpoint.condition = m.group(3);
                     }
+                } else if (arg.equals("--rules")) {
+                    rulesArg = true;
                 } else if (arg.equals("--max-hits")) {
                     maxHitsArg = Integer.parseInt(value(args, ++i, arg));
                 } else {
@@ -107,11 +112,14 @@ public final class TraceRun {
         } catch (IllegalArgumentException e) {
             out.println("TraceRun: " + e.getMessage());
             out.println("Usage: java -cp xslt-debugger.jar:saxon.jar " + TraceRun.class.getName() +
-                    " [--log FILE:LINE[=MESSAGE]]... [--when FILE:LINE=CONDITION]... [--max-hits N] -- saxon-options");
+                    " [--log FILE:LINE[=MESSAGE]]... [--when FILE:LINE=CONDITION]... [--max-hits N] [--rules] -- saxon-options");
             System.exit(2);
             return;
         }
         final int maxHits = maxHitsArg;
+        final boolean rules = rulesArg;
+        // the rules each input node was processed by, sent when the run ends
+        final List<Map<String, Object>> nodeRules = new ArrayList<Map<String, Object>>();
         final CountDownLatch done = new CountDownLatch(1);
         final AtomicInteger exitCode = new AtomicInteger(0);
         final Path cwd = Paths.get("").toAbsolutePath();
@@ -159,6 +167,9 @@ public final class TraceRun {
                     // nothing should pause a trace - but if something does, go on
                     new Thread(() -> adapter[0].handle(request("continue", Json.obj().with("threadId", XsltDebugAdapter.THREAD_ID)))).start();
                     break;
+                case "xsltNodeRules":
+                    nodeRules.add(body);
+                    break;
                 case "exited":
                     exitCode.set((int) Json.number(body, "exitCode", 0));
                     break;
@@ -171,8 +182,8 @@ public final class TraceRun {
         });
         adapter[0].redirectSystemStreams();
         adapter[0].handle(request("initialize", Json.obj()));
-        // without the input mapping, which only VS Code shows
-        adapter[0].handle(request("launch", Json.obj().with("saxonArgs", saxonArgs).with("mapInputs", false)));
+        // with the input mapping only for --rules: it's what the rules are recorded with
+        adapter[0].handle(request("launch", Json.obj().with("saxonArgs", saxonArgs).with("mapInputs", rules)));
         // each file's logpoints - and where the adapter set them
         Map<String, List<Logpoint>> byFile = new LinkedHashMap<String, List<Logpoint>>();
         for (Logpoint logpoint : logpoints.values()) {
@@ -211,6 +222,14 @@ public final class TraceRun {
             String at = shown(cwd, logpoint.path) + ':' + logpoint.actualLine;
             out.println(at + ": " + (logpoint.hits == 0 ? "never reached" + (logpoint.condition != null ? ", or its condition was never true" : "") :
                     logpoint.hits + (logpoint.hits == 1 ? " hit" : " hits") + (logpoint.hits > maxHits ? " - the first " + maxHits + " shown (--max-hits)" : "")));
+        }
+        if (rules) {
+            if (nodeRules.isEmpty()) {
+                out.println();
+                out.println("--- Input rules: none recorded - no node of an input file was processed by a rule (e.g. a run from a named template that reads no file)");
+            } else {
+                InputRulesSummary.print(out, cwd, nodeRules.get(0));
+            }
         }
         out.flush();
         System.exit(exitCode.get());

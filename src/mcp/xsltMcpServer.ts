@@ -473,7 +473,8 @@ export class XsltMcpServer {
 				'no VS Code: at each logpoint, as it runs, it prints the local variables there (or a message with {XPath} parts), each time it\'s ' +
 				'reached, with xsl:message output and errors in between - then how many times each was reached. Nothing pauses. Use it to see values ' +
 				'inside templates and functions - variables, parameters, the context item - which evaluate_xpath, with no stylesheet around it, ' +
-				'can\'t; and to find whether a template or branch runs at all. It runs nothing: put the logpoints in the command and run it yourself, ' +
+				'can\'t; and to find whether a template or branch runs at all. With --rules, it also gives what processed each input file\'s elements, ' +
+				'and those only built-in rules did, as input_rules does from the user\'s run. It runs nothing: put the logpoints in the command and run it yourself, ' +
 				'with the user\'s permission. The result goes to the temporary files, not the project.',
 			inputSchema: {
 				path: filePath.describe('The stylesheet (.xsl, .xslt) to run: its top-level stylesheet - absolute, or relative to the project\'s folder'),

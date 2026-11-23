@@ -67,6 +67,19 @@ suite('MCP tool input_rules: what processed an input file\'s elements', function
 		assert.match((await rules(file('node-rules.xml'), 5)).text, /Only built-in rules processed it: .* its text is copied to the output as it is/);
 	});
 
+	test('built-in rules: an element listed with its descendants they processed too - not past an element a template processed', async () => {
+		// as Saxon names the default built-in rule: text-only. /orders and its first order's id, line and note by it; the
+		// first order by a template - so its line is listed on its own; the second order by it, with its line
+		XsltNodeRules.update({
+			rules: [{ path: file('node-rules.xsl'), line: 3, column: 3, label: 'xsl:template match="order"' }, { builtIn: 'text-only', mode: '#default' }],
+			names: ['element:orders', 'element:order', 'element:line'],
+			files: { [file('node-rules.xml')]: [2, 9, 1, 0, 1, 1, 4, 28, 1, 1, 0, 1, 5, 38, 1, 2, 1, 1, 8, 18, 1, 1, 1, 1, 8, 39, 1, 2, 1, 1] }
+		}, 'node rules');
+		const text = (await rules(file('node-rules.xml'))).text;
+		assert.match(text, /\n {2}\/orders \(line 2\): built-in rule \(text-only\) - no template matched - its text is copied to the output as it is - and its 2 descendants\n/);
+		assert.match(text, /\n {2}\/orders\/order\[1\]\/line \(line 5\): .* its text is copied to the output as it is\n/);
+	});
+
 	test('an element nothing selected: said so, with its nearest ancestor a rule processed', async () => {
 		recorded();
 		const note = (await rules(file('node-rules.xml'), undefined, '/orders/order[1]/note')).text;

@@ -299,4 +299,25 @@ suite('MCP tools: how to run XSpec tests and a Schematron validation', function 
 		assert.match(output, /--- The run ended\n.*order-report\.xsl:25: 2 hits/);
 		assert.isFalse(fs.existsSync(path.join(xspecDemo, 'result.out')));
 	});
+
+	test('trace_configuration: --rules - what processed the input, and the elements only built-in rules did - with a real Saxon jar, in XSLT_TEST_SAXON_JAR', async function () {
+		if (!realJar || process.platform === 'win32') {
+			this.skip();
+		}
+		// the trial's bug: a mode on the template rule, not on the xsl:apply-templates meant to reach it
+		const xsl = path.join(dir, 'rules.xsl');
+		const xml = path.join(dir, 'rules.xml');
+		fs.writeFileSync(xsl, `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:template match="/"><report><xsl:apply-templates select="orders/order"/></report></xsl:template>
+  <xsl:template match="order"><o><xsl:apply-templates select="shipping"/></o></xsl:template>
+  <xsl:template match="shipping" mode="detail"><s/></xsl:template>
+</xsl:stylesheet>`);
+		fs.writeFileSync(xml, '<orders>\n  <order>\n    <shipping><to>London</to></shipping>\n  </order>\n</orders>');
+		const text = (await TraceConfiguration.describe(xsl, xml)).text;
+		assert.include(text, '--rules');
+		const output = runInShell(/(java -cp [^\n]+)/.exec(text)![1].replace('LOGPOINTS', '--rules'));
+		assert.match(output, /--- Input rules for .*rules\.xml: 4 elements - 1 processed by/, output);
+		assert.match(output, /\n {2}xsl:template match="order" - .*rules\.xsl:3: 1 element\n/, output);
+		assert.match(output, /\n {2}\/orders\/order\/shipping \(line 3\): built-in rule \(text-only\) - its text is copied to the output as it is - and its 1 descendant\n/, output);
+	});
 });

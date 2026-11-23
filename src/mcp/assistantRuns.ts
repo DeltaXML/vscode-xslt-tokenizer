@@ -374,11 +374,14 @@ export class TraceConfiguration {
 		if (missing.length > 0) {
 			lines.push(`  Add a value for ${missing.join(', ')} after -- as name=value - Quick Run asks for ${missing.length === 1 ? 'it' : 'them'}`);
 		}
-		lines.push('', 'LOGPOINTS, any number of:',
+		lines.push('', 'LOGPOINTS, any number of (or none, with --rules):',
 			'  --log FILE:LINE            the local variables there - parameters and variables in scope - as {$*} gives them',
 			'  --log \'FILE:LINE=MESSAGE\'  the message: text with {expression} parts, e.g. \'order {@id}: {$total}\' - XPath evaluated there, with the context item',
 			'  --when \'FILE:LINE=CONDITION\' only when the XPath condition is true there, e.g. \'$total gt 100\'',
 			'  --max-hits N               the messages shown for each logpoint - 20 by default; the rest are counted',
+			'  --rules                    at the end, for each input file: the rules that processed its elements, and the elements only built-in',
+			'                             rules did - no template matched them - as input_rules gives them from the user\'s run. On its own, with no',
+			'                             logpoints, when there\'s no run of the user\'s to ask for: output missing, or stray text in it',
 			`FILE is a stylesheet module - absolute, or relative to the folder the command runs in - e.g. ${quickRun.xsltFsPath}. LINE is an instruction's line: ` +
 			'a logpoint on a line with no instruction moves to the one that starts there, or is reported as not set. find_declaration and list_declarations give the lines of templates and functions.');
 		lines.push('', 'Each message is printed as FILE:LINE #N: then the values, in the debugger\'s notation (strings in single quotes, nodes with their paths), ' +

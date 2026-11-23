@@ -164,16 +164,33 @@ export class InputRules {
 			}
 		}
 		if (builtInOnly.length > 0) {
+			// the topmost: an element's descendants that only built-in rules processed too are counted with it - the built-in
+			// rule went on to them, so the element is where to look
+			// - only through a parent that only built-in rules processed: an element a template processed breaks the chain
+			const topmost: { ordinal: number, path: string, descendants: number }[] = [];
+			const chainOf = new Map<XmlElement, { ordinal: number, path: string, descendants: number }>();
+			for (const ordinal of [...builtInOnly].sort((a, b) => a - b)) {
+				const element = recorded.all[ordinal];
+				const chain = element.parent ? chainOf.get(element.parent) : undefined;
+				if (chain) {
+					chain.descendants++;
+					chainOf.set(element, chain);
+				} else {
+					const entry = { ordinal, path: OutputOrigin.path(element), descendants: 0 };
+					topmost.push(entry);
+					chainOf.set(element, entry);
+				}
+			}
 			lines.push('', 'Only built-in rules - no template matched them:');
-			builtInOnly.slice(0, InputRules.maxListed).forEach((ordinal) => {
+			topmost.slice(0, InputRules.maxListed).forEach(({ ordinal, path, descendants }) => {
 				const element = recorded.all[ordinal];
 				const processed = recorded.elements.get(ordinal)!;
 				const modes = [...new Set(processed.map((p) => p.label))];
 				const effects = [...new Set(processed.map((p) => InputRules.effect(p.builtInRule)))];
-				lines.push(`  ${OutputOrigin.path(element)} (line ${lineOf(element.start)}): ${modes.join(', ')} - ${effects.join('; ')}`);
+				lines.push(`  ${path} (line ${lineOf(element.start)}): ${modes.join(', ')} - ${effects.join('; ')}${descendants > 0 ? ` - and its ${descendants} ${descendants === 1 ? 'descendant' : 'descendants'}` : ''}`);
 			});
-			if (builtInOnly.length > InputRules.maxListed) {
-				lines.push(`  ... ${builtInOnly.length - InputRules.maxListed} more`);
+			if (topmost.length > InputRules.maxListed) {
+				lines.push(`  ... ${topmost.length - InputRules.maxListed} more`);
 			}
 		}
 		lines.push('', 'Give a line or a path (e.g. /orders/order[2], as evaluate_xpath and output_origin give them) for what processed an element and its attributes and text.');
@@ -183,6 +200,8 @@ export class InputRules {
 	// what a built-in rule does with an element (XSLT 3.0's on-no-match values)
 	private static effect(builtInRule: string | undefined): string {
 		switch (builtInRule) {
+			// as Saxon names it, and as XSLT's on-no-match does
+			case 'text-only':
 			case 'text-only-copy': return 'its text is copied to the output as it is';
 			case 'shallow-copy': return 'it is copied to the output, and its content processed';
 			case 'deep-copy': return 'it is copied to the output with its content';
