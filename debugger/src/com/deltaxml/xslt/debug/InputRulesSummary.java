@@ -120,7 +120,7 @@ final class InputRulesSummary {
         out.println("--- Input rules for " + shown(cwd, file) + ": " + total + " elements - " + byRules + " processed by a template rule or an instruction " +
                 "(or their attributes or text were), " + builtInOnly.size() + " only by built-in rules, " + Math.max(0, total - byRules - builtInOnly.size()) + " not selected by any");
         if (!byRule.isEmpty()) {
-            out.println("Rules that processed its nodes:");
+            out.println("Template rules and instructions that processed its nodes:");
             List<Map.Entry<String, int[]>> sorted = new ArrayList<Map.Entry<String, int[]>>(byRule.entrySet());
             sorted.sort((a, b) -> b.getValue()[0] - a.getValue()[0]);
             for (Map.Entry<String, int[]> entry : sorted.subList(0, Math.min(MAX_LISTED, sorted.size()))) {

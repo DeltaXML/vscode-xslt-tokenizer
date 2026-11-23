@@ -156,7 +156,7 @@ export class InputRules {
 		const lines = [`Input ${InputRules.shown(inputPath)}, ${run}: ${total} elements - ${byRules} processed by a template rule or an instruction ` +
 			`(or their attributes or text were), ${builtInOnly.length} only by built-in rules, ${total - byRules - builtInOnly.length} not selected by any.`];
 		if (byRule.size > 0) {
-			lines.push('', 'Rules that processed its nodes:');
+			lines.push('', 'Template rules and instructions that processed its nodes:');
 			[...byRule.values()].sort((a, b) => b.elements - a.elements).slice(0, InputRules.maxListed)
 				.forEach((r) => lines.push(`  ${r.label}: ${r.elements} element${r.elements === 1 ? '' : 's'}${r.times > r.elements ? ` (${r.times} times)` : ''}`));
 			if (byRule.size > InputRules.maxListed) {
