@@ -16,8 +16,9 @@ than one that looks right.
 ## If the tools aren't there
 
 This skill's tools come from the `xslt-xpath` MCP server, which the user's VS Code runs for the project open in its window. If none of
-them is available - e.g. `lint_file` can't be found - **stop and tell the user** before working without them: the server isn't
-connected for this project. To connect it:
+them is available - e.g. `lint_file` can't be found - the server isn't connected for this project. You may read the files and diagnose,
+but **don't edit them, or run Saxon or XSpec commands of your own**, until the user has connected it or said to go on without it - and
+tell them how to connect it:
 
 1. In VS Code, turn on the setting **XSLT.mcp.enabled** (a user setting), with this project's folder open in the window.
 2. In that window, run **XSLT: Set Up MCP Server for Claude Code**, for this project or all projects.
