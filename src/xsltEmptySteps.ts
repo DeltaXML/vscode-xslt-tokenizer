@@ -67,6 +67,10 @@ export class XsltEmptySteps {
 	// the decorations at the pause, and the document they're for: shown again when it's shown again in an editor - VS
 	// Code makes a new editor for it, e.g. after switching to another file's editor and back
 	private static shown: { uri: string; decorations: vscode.DecorationOptions[] } | undefined;
+	// a clear put off while the program runs: a step ends with a new pause soon after, and the fades are then replaced
+	// in one go - clearing them at once would show them unfaded until the new ones are ready, a flicker at each step
+	private static pendingClear: ReturnType<typeof setTimeout> | undefined;
+	private static readonly runningClearDelay = 500;
 
 	public static register(context: vscode.ExtensionContext, debugType: string) {
 		XsltEmptySteps.decoration = vscode.window.createTextEditorDecorationType({ opacity: '0.5' });
@@ -84,6 +88,7 @@ export class XsltEmptySteps {
 	}
 
 	private static clear() {
+		XsltEmptySteps.cancelPendingClear();
 		XsltEmptySteps.generation++;
 		XsltEmptySteps.decorated.forEach((editor) => {
 			try {
@@ -95,6 +100,30 @@ export class XsltEmptySteps {
 		XsltEmptySteps.decorated = [];
 		XsltEmptySteps.lastFaded = [];
 		XsltEmptySteps.shown = undefined;
+	}
+
+	private static cancelPendingClear() {
+		if (XsltEmptySteps.pendingClear !== undefined) {
+			clearTimeout(XsltEmptySteps.pendingClear);
+			XsltEmptySteps.pendingClear = undefined;
+		}
+	}
+
+	// the new pause's fades in place of the last pause's, in one go
+	private static show(editor: vscode.TextEditor, decorations: vscode.DecorationOptions[]) {
+		XsltEmptySteps.cancelPendingClear();
+		const document = editor.document;
+		XsltEmptySteps.decorated.filter((e) => e !== editor).forEach((e) => {
+			try {
+				e.setDecorations(XsltEmptySteps.decoration!, []);
+			} catch {
+				// an editor VS Code has closed since
+			}
+		});
+		editor.setDecorations(XsltEmptySteps.decoration!, decorations);
+		XsltEmptySteps.decorated = [editor];
+		XsltEmptySteps.shown = { uri: document.uri.toString(), decorations };
+		XsltEmptySteps.lastFaded = decorations.map((d) => ({ line: d.range.start.line, text: document.getText(d.range), hover: (d.hoverMessage as vscode.MarkdownString).value }));
 	}
 
 	private static showAgain(editors: readonly vscode.TextEditor[]) {
@@ -111,11 +140,33 @@ export class XsltEmptySteps {
 	}
 
 	private static async update(item: vscode.DebugThread | vscode.DebugStackFrame | undefined, debugType: string) {
-		XsltEmptySteps.clear();
-		const generation = XsltEmptySteps.generation;
+		// the last pause's fades stay until this one's are ready (or it's found there are none)
+		const generation = ++XsltEmptySteps.generation;
 		if (!(item instanceof vscode.DebugStackFrame) || item.session.type !== debugType) {
+			// running, or another session's frame: a step soon pauses again, so not at once
+			XsltEmptySteps.cancelPendingClear();
+			XsltEmptySteps.pendingClear = setTimeout(() => {
+				XsltEmptySteps.pendingClear = undefined;
+				if (generation === XsltEmptySteps.generation) {
+					XsltEmptySteps.clear();
+				}
+			}, XsltEmptySteps.runningClearDelay);
 			return;
 		}
+		XsltEmptySteps.cancelPendingClear();
+		try {
+			await XsltEmptySteps.fadeAt(item, generation);
+		} finally {
+			// none to show, e.g. no paths on the line, or the evaluation failed
+			if (generation === XsltEmptySteps.generation && XsltEmptySteps.decorated.length > 0 && XsltEmptySteps.shownGeneration !== generation) {
+				XsltEmptySteps.clear();
+			}
+		}
+	}
+
+	private static shownGeneration = 0;
+
+	private static async fadeAt(item: vscode.DebugStackFrame, generation: number) {
 		const session = item.session;
 		// only the frame selected (the adapter's frame ids are their positions) - the stack may be deep, e.g. in recursion
 		const { stackFrames } = await session.customRequest('stackTrace', { threadId: item.threadId, startFrame: item.frameId, levels: 1 });
@@ -197,10 +248,8 @@ export class XsltEmptySteps {
 			}
 		}
 		if (generation === XsltEmptySteps.generation && decorations.length > 0) {
-			editor.setDecorations(XsltEmptySteps.decoration!, decorations);
-			XsltEmptySteps.decorated.push(editor);
-			XsltEmptySteps.shown = { uri: document.uri.toString(), decorations };
-			XsltEmptySteps.lastFaded = decorations.map((d) => ({ line: d.range.start.line, text: document.getText(d.range), hover: (d.hoverMessage as vscode.MarkdownString).value }));
+			XsltEmptySteps.show(editor, decorations);
+			XsltEmptySteps.shownGeneration = generation;
 		}
 	}
 
