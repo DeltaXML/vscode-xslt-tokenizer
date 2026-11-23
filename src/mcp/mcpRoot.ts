@@ -54,7 +54,9 @@ export class McpRoot {
 	public static readonly workflow = 'Before changing an XSLT (.xsl, .xslt), XSpec (.xspec) or Schematron (.sch) file - however small the ' +
 		'change, e.g. removing an instruction - load the skill for it: xslt-xpath, xspec-testing or schematron (xslt-debugging to find why ' +
 		'output is wrong). After each change, check the file with lint_file: the user\'s editor shows the same problems, and a change can leave ' +
-		'others behind, e.g. a prefix or an xsl:include no longer used.';
+		'others behind, e.g. a prefix or an xsl:include no longer used. Before changing an XSLT task in .vscode/tasks.json - how a stylesheet ' +
+		'is run: its source, parameters, initial template or mode, catalog - call run_configuration with tasks: true, for the properties a task ' +
+		'has and its problems; check it again after the change.';
 
 	// the server's URL for a project's folder
 	public static urlFor(url: string, folder: string) {

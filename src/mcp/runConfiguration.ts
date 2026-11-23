@@ -22,6 +22,7 @@ import { McpRoot } from './mcpRoot';
 import { XSpecRunner } from '../xspecRunner';
 import { DocumentChangeHandler } from '../documentChangeHandler';
 import { unquotedPath } from '../settingPaths';
+import { TaskConfiguration } from './taskConfiguration';
 
 // The run_configuration tool: how the user runs stylesheets - so that an assistant running one itself, e.g. in a
 // terminal, uses the same Saxon, options and input. The workspace's: the Saxon jar - with its edition, version and
@@ -31,7 +32,8 @@ import { unquotedPath } from '../settingPaths';
 export class RunConfiguration {
 
 	// the workspace's settings - and, for a stylesheet given, what Quick Run would run
-	public static async describe(stylesheet: string | undefined): Promise<string> {
+	// tasks: with the XSLT tasks in tasks.json - the stylesheet's, or all - their problems, and the properties a task has
+	public static async describe(stylesheet: string | undefined, withTasks = false): Promise<string> {
 		// the packages in the workspace are those the index finds: wait for it, as the other tools do - else none are known
 		// until something else has built it, and the command for a stylesheet that uses one has no -lib
 		if (ImportIndex.isEnabled()) {
@@ -80,6 +82,10 @@ export class RunConfiguration {
 			`XSLT packages (passed with -lib to stylesheets that use them):\n${packages.map((p) => `  ${p.name}${p.version ? ' ' + p.version : ''} -> ${shown(p.path)}`).join('\n')}`);
 		if (stylesheet !== undefined) {
 			lines.push('', ...await RunConfiguration.forStylesheet(stylesheet, folder));
+		}
+		if (withTasks) {
+			const xsltFsPath = stylesheet === undefined ? undefined : path.isAbsolute(stylesheet) || !folder ? path.resolve(stylesheet) : path.resolve(folder, stylesheet);
+			lines.push('', ...TaskConfiguration.describe(vscode.extensions.getExtension('deltaxml.xslt-xpath')?.packageJSON, folder, xsltFsPath));
 		}
 		return lines.join('\n');
 	}

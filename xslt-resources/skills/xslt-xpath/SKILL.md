@@ -60,6 +60,9 @@ read the summary each gives, not the exit code.
    `topLevelStylesheet` for another). Use `lint_files` after a change that touches several modules.
 5. **Run it.** Get the command from `run_configuration` for the stylesheet and run it, rather than writing your own Saxon
    command - the options (`--allowSyntaxExtensions:on` for 4.0, `-catalog`, `-lib` for packages) matter.
+   To change how the user runs it - its source, parameters, initial template or mode, catalog - edit its task in `.vscode/tasks.json`:
+   `run_configuration` with `tasks: true` first gives the properties a task has (their names are easy to guess wrong) and the task's
+   problems, e.g. a file that isn't there or an undefined `${input:...}`; call it again after the change.
 6. **Test it.** If there are XSpec tests, `find_references` shows the scenarios for a function or template; update them with
    the change, and for new logic add a scenario. Run them with `test_configuration`'s **In one line** command - the steps, then the
    summary; XSpec has no single command of its own, so don't write your own - and read the summary. For a Schematron schema, `validation_configuration` does the same for a validation.

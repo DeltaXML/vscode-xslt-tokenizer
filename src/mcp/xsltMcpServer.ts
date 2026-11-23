@@ -392,10 +392,14 @@ export class XsltMcpServer {
 				'licence), the XML catalog, the XSpec installation and the XSLT packages. With a stylesheet, also its Quick Run: the XML source ' +
 				'(its XML context file), its parameters, the classpath and the exact java command line - with the options the extension adds, ' +
 				'e.g. --allowSyntaxExtensions:on, -catalog and -lib. Call it before running Saxon yourself, and use that command, so that the ' +
-				'result is the same as the user\'s.',
-			inputSchema: { path: filePath.optional().describe('A stylesheet (.xsl, .xslt) to describe the Quick Run of: absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)') },
+				'result is the same as the user\'s. With tasks, also the XSLT tasks in tasks.json, their problems, and the properties a task has - before changing one.',
+			inputSchema: {
+				path: filePath.optional().describe('A stylesheet (.xsl, .xslt) to describe the Quick Run of: absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)'),
+				tasks: z.boolean().optional().describe('Also the XSLT tasks in .vscode/tasks.json - the stylesheet\'s, or all - with any problems (a file that isn\'t there, ' +
+					'a property a task doesn\'t have, an undefined ${input:...}), and the properties a task has, with what each does: use it before changing a task')
+			},
 			annotations: readOnly
-		}, async (args) => ({ content: [{ type: 'text' as const, text: await RunConfiguration.describe(args.path) }] }));
+		}, async (args) => ({ content: [{ type: 'text' as const, text: await RunConfiguration.describe(args.path, args.tasks) }] }));
 		const configuration = async (run: Promise<{ text: string, isError: boolean }>) => {
 			const { text, isError } = await run;
 			return { content: [{ type: 'text' as const, text }], isError };
