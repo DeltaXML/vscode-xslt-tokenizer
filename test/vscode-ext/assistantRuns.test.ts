@@ -189,6 +189,8 @@ suite('MCP tools: how to run XSpec tests and a Schematron validation', function 
 		assert.match(output, /^XSpec: \d+ passed, \d+ failed, \d+ pending - \d+ tests/m, output);
 		// the demo has one test that fails, and one that is pending
 		assert.match(output, /FAILED +o:repeatParasSection > the result/);
+		// what was expected and what the test gave, written out - not left empty for XML
+		assert.match(output, /FAILED +o:repeatParasSection > the result\n {2}expected: \S.*\n {2}actual: +\S/, output);
 		assert.match(output, /PENDING /);
 		assert.isFalse(fs.existsSync(path.join(xspecDemo, 'xspec')), 'nothing is written beside the XSpec file');
 	});
@@ -315,9 +317,13 @@ suite('MCP tools: how to run XSpec tests and a Schematron validation', function 
 		fs.writeFileSync(xml, '<orders>\n  <order>\n    <shipping><to>London</to></shipping>\n  </order>\n</orders>');
 		const text = (await TraceConfiguration.describe(xsl, xml)).text;
 		assert.include(text, '--rules');
+		// the source given, not the Quick Run task's
+		assert.include(text, `XML source: ${xml} - the one given, for this command`);
 		const output = runInShell(/(java -cp [^\n]+)/.exec(text)![1].replace('LOGPOINTS', '--rules'));
 		assert.match(output, /--- Input rules for .*rules\.xml: 4 elements - 1 processed by/, output);
 		assert.match(output, /\n {2}xsl:template match="order" - .*rules\.xsl:3: 1 element\n/, output);
 		assert.match(output, /\n {2}\/orders\/order\/shipping \(line 3\): built-in rule \(text-only\) - its text is copied to the output as it is - and its 1 descendant\n/, output);
+		// the root element: the rule for / matches the document node, and selects orders/order - not orders itself
+		assert.match(output, /\nNot selected by any - no xsl:apply-templates or instruction reached them .*\n {2}\/orders \(line 1\)\n/, output);
 	});
 });

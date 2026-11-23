@@ -18,6 +18,27 @@
     <xsl:sequence select="if (string-length($text) gt $limit) then substring($text, 1, $limit) || '...' else $text"/>
   </xsl:function>
 
+  <!-- an expected or actual value, as XSpec's result has it: XML in a content-wrap element - written out, so that an element
+       with attributes alone isn't shown as nothing, its string value - else an XPath value in its select attribute -->
+  <xsl:function name="x:value" as="xs:string">
+    <xsl:param name="value" as="element()?"/>
+    <xsl:variable name="wrap" as="element()?" select="$value/*:content-wrap"/>
+    <xsl:variable name="text" as="xs:string" select="
+      if (exists($wrap)) then normalize-space(string-join($wrap/node() ! x:serialized(.), ''))
+      else if ($value/@select) then string($value/@select)
+      else normalize-space(string($value))"/>
+    <xsl:sequence select="if (string-length($text) gt $limit) then substring($text, 1, $limit) || '...' else $text"/>
+  </xsl:function>
+
+  <!-- a node as XML, without the namespace declarations XSpec's result has on it that it doesn't use -->
+  <xsl:function name="x:serialized" as="xs:string">
+    <xsl:param name="node" as="node()"/>
+    <xsl:variable name="copy" as="document-node()">
+      <xsl:document><xsl:copy-of select="$node" copy-namespaces="no"/></xsl:document>
+    </xsl:variable>
+    <xsl:sequence select="serialize($copy, map { 'method': 'xml', 'omit-xml-declaration': true() })"/>
+  </xsl:function>
+
   <!-- a test's scenarios and its label: the outermost first -->
   <xsl:function name="x:path" as="xs:string">
     <xsl:param name="test" as="element(x:test)"/>
@@ -32,8 +53,10 @@
     <xsl:value-of select="'XSpec: ' || count($passed) || ' passed, ' || count($failed) || ' failed, ' || count($pending) || ' pending - ' || count($tests) || ' tests&#10;'"/>
     <xsl:for-each select="$failed">
       <xsl:value-of select="'FAILED  ' || x:path(.) || '&#10;'"/>
-      <xsl:value-of select="'  expected: ' || x:short(x:expect) || '&#10;'"/>
-      <xsl:value-of select="'  actual:   ' || x:short(preceding-sibling::x:result[1]) || '&#10;'"/>
+      <!-- an expectation with a test: the condition that was false - else the value expected -->
+      <xsl:variable name="condition" as="attribute()?" select="*:expect-test-wrap/x:expect/@test"/>
+      <xsl:value-of select="(if ($condition) then '  expected: ' || normalize-space($condition) || ' (a condition, false)' else '  expected: ' || x:value(x:expect)) || '&#10;'"/>
+      <xsl:value-of select="'  actual:   ' || x:value(preceding-sibling::x:result[1]) || '&#10;'"/>
     </xsl:for-each>
     <xsl:for-each select="$pending">
       <xsl:value-of select="'PENDING ' || x:path(.) || ' - ' || @pending || '&#10;'"/>

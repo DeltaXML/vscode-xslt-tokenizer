@@ -49,6 +49,8 @@ suite('MCP tool input_rules: what processed an input file\'s elements', function
 		assert.match(result.text, /^Input .*node-rules\.xml, in the last run \(node rules\): 6 elements - 2 processed by .*, 1 only by built-in rules, 3 not selected by any\./);
 		assert.match(result.text, /\n {2}match="order" - .*node-rules\.xsl:3: 2 elements/);
 		assert.match(result.text, /\n {2}\/orders\/order\[1\]\/line \(line 5\): built-in rule \(text-only-copy\) - no template matched - its text is copied to the output as it is/);
+		// the elements nothing selected - each where the chain starts: the root, and those whose parent a template processed
+		assert.match(result.text, /\nNot selected by any - .*\n {2}\/orders \(line 2\)\n {2}\/orders\/order\[1\]\/note \(line 6\)\n {2}\/orders\/order\[2\]\/line \(line 8\)\n/);
 	});
 
 	test('an element, by its path or its line: what processed it and its attributes - or one of them', async () => {

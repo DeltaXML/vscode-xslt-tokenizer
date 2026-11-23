@@ -164,8 +164,12 @@ export class RunConfiguration {
 		const contextFile = context.uri?.fsPath;
 		const task = (persisted ?? SaxonTaskProvider.createQuickRunTaskDefinition('xslt', 'Quick Run', xsltFsPath, context.isNone ? undefined : contextFile ?? '')) as XSLTTask;
 		lines.push(persisted ? `  Quick Run task: '${persisted.label}' in .vscode/tasks.json` : '  Quick Run task: none yet in .vscode/tasks.json - this is the one Quick Run would create');
-		lines.push(`  XML source: ${task.xmlSource ? RunConfiguration.resolved(task.xmlSource, folder) : task.initialTemplate !== undefined ? 'none - it starts from its initial template (-it)' : 'none chosen yet - Quick Run asks for one'}`);
-		if (!persisted && context.fromLastPicked && task.xmlSource) {
+		// a source given for this command (e.g. trace_configuration's source) - not the task's
+		const givenSource = typeof extra?.xmlSource === 'string' ? extra.xmlSource : undefined;
+		lines.push(`  XML source: ${givenSource ? `${givenSource} - the one given, for this command` : task.xmlSource ? RunConfiguration.resolved(task.xmlSource, folder) : task.initialTemplate !== undefined ? 'none - it starts from its initial template (-it)' : 'none chosen yet - Quick Run asks for one'}`);
+		if (givenSource) {
+			// the notes below are about the task's source
+		} else if (!persisted && context.fromLastPicked && task.xmlSource) {
 			lines.push('  Note: that XML file was only the last one picked in the editor, not chosen for this stylesheet - check it suits this stylesheet, or run it on another file');
 		} else if (!persisted && context.fromLastPicked && task.initialTemplate === undefined) {
 			lines.push('  Note: no XML file is known for this stylesheet - give Saxon one with -s:path');

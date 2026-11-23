@@ -193,6 +193,32 @@ export class InputRules {
 				lines.push(`  ... ${topmost.length - InputRules.maxListed} more`);
 			}
 		}
+		// the elements no rule or instruction selected - each with its descendants that weren't either: the topmost is where the
+		// stylesheet stopped applying templates, e.g. a rule that doesn't apply them to its children
+		const notSelected: { element: XmlElement, descendants: number }[] = [];
+		const notSelectedChain = new Map<XmlElement, { element: XmlElement, descendants: number }>();
+		recorded.all.forEach((element, ordinal) => {
+			if (recorded.elements.has(ordinal)) {
+				return;
+			}
+			const chain = element.parent ? notSelectedChain.get(element.parent) : undefined;
+			if (chain) {
+				chain.descendants++;
+				notSelectedChain.set(element, chain);
+			} else {
+				const entry = { element, descendants: 0 };
+				notSelected.push(entry);
+				notSelectedChain.set(element, entry);
+			}
+		});
+		if (notSelected.length > 0) {
+			lines.push('', 'Not selected by any - no xsl:apply-templates or instruction reached them (an XPath expression may still have read them):');
+			notSelected.slice(0, InputRules.maxListed).forEach(({ element, descendants }) =>
+				lines.push(`  ${OutputOrigin.path(element)} (line ${lineOf(element.start)})${descendants > 0 ? ` - and its ${descendants} ${descendants === 1 ? 'descendant' : 'descendants'}` : ''}`));
+			if (notSelected.length > InputRules.maxListed) {
+				lines.push(`  ... ${notSelected.length - InputRules.maxListed} more`);
+			}
+		}
 		lines.push('', 'Give a line or a path (e.g. /orders/order[2], as evaluate_xpath and output_origin give them) for what processed an element and its attributes and text.');
 		return lines.join('\n');
 	}

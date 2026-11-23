@@ -56,6 +56,9 @@ final class InputRulesSummary {
     private static void printFile(PrintStream out, Path cwd, String file, List<Object> flat, List<Object> rules, List<Object> names, Map<Integer, String> labels) {
         // each element's path, by the position where its start tag ends - as the event has it
         Map<Long, String> paths = new HashMap<Long, String>();
+        // the elements in document order, by position - and each one's parent's, for the elements not selected (below)
+        List<Long> order = new ArrayList<Long>();
+        Map<Long, Long> parentOf = new HashMap<Long, Long>();
         int total = 0;
         try {
             DocumentBuilder builder = new Processor(false).newDocumentBuilder();
@@ -64,7 +67,13 @@ final class InputRulesSummary {
             for (XdmNode element : document.select(net.sf.saxon.s9api.streams.Steps.descendant()).asListOfNodes()) {
                 if (element.getNodeKind() == XdmNodeKind.ELEMENT) {
                     total++;
-                    paths.put(((long) element.getLineNumber() << 32) | (element.getColumnNumber() & 0xffffffffL), Values.nodePath(element));
+                    long position = ((long) element.getLineNumber() << 32) | (element.getColumnNumber() & 0xffffffffL);
+                    paths.put(position, Values.nodePath(element));
+                    order.add(position);
+                    XdmNode parent = element.getParent();
+                    if (parent != null && parent.getNodeKind() == XdmNodeKind.ELEMENT) {
+                        parentOf.put(position, ((long) parent.getLineNumber() << 32) | (parent.getColumnNumber() & 0xffffffffL));
+                    }
                 }
             }
         } catch (Exception e) {
@@ -77,6 +86,7 @@ final class InputRulesSummary {
         // by position: the path and what the built-in rules did - in document order, below
         java.util.TreeMap<Long, String[]> builtInOnly = new java.util.TreeMap<Long, String[]>();
         int byRules = 0;
+        Set<Long> selected = new java.util.HashSet<Long>();
         for (int i = 0; i < flat.size();) {
             int line = number(flat.get(i));
             int column = number(flat.get(i + 1));
@@ -105,6 +115,9 @@ final class InputRulesSummary {
             }
             long position = ((long) line << 32) | (column & 0xffffffffL);
             String path = paths.getOrDefault(position, "line " + line);
+            if (!elementRules.isEmpty() || !builtIns.isEmpty()) {
+                selected.add(position);
+            }
             if (!elementRules.isEmpty()) {
                 byRules++;
                 for (String label : elementRules) {
@@ -131,6 +144,25 @@ final class InputRulesSummary {
             if (sorted.size() > MAX_LISTED) {
                 out.println("  ... " + (sorted.size() - MAX_LISTED) + " more");
             }
+        }
+        // the elements no rule or instruction selected - each with its descendants that weren't either: the topmost is where
+        // the stylesheet stopped applying templates, e.g. a rule that doesn't apply them to its children
+        List<String> notSelected = new ArrayList<String>();
+        List<Integer> notSelectedBelow = new ArrayList<Integer>();
+        Map<Long, Integer> notSelectedChain = new HashMap<Long, Integer>();
+        for (long position : order) {
+            if (selected.contains(position)) {
+                continue;
+            }
+            Integer chain = parentOf.containsKey(position) ? notSelectedChain.get(parentOf.get(position)) : null;
+            if (chain != null) {
+                notSelectedBelow.set(chain, notSelectedBelow.get(chain) + 1);
+            } else {
+                chain = notSelected.size();
+                notSelected.add(paths.get(position) + " (line " + (int) (position >>> 32) + ")");
+                notSelectedBelow.add(0);
+            }
+            notSelectedChain.put(position, chain);
         }
         if (!builtInOnly.isEmpty()) {
             // the topmost: an element's descendants that only built-in rules processed too are counted with it - the built-in
@@ -160,6 +192,16 @@ final class InputRulesSummary {
             }
             if (topmost.size() > MAX_LISTED) {
                 out.println("  ... " + (topmost.size() - MAX_LISTED) + " more");
+            }
+        }
+        if (!notSelected.isEmpty()) {
+            out.println("Not selected by any - no xsl:apply-templates or instruction reached them (an XPath expression may still have read them):");
+            for (int k = 0; k < Math.min(MAX_LISTED, notSelected.size()); k++) {
+                int d = notSelectedBelow.get(k);
+                out.println("  " + notSelected.get(k) + (d > 0 ? " - and its " + d + (d == 1 ? " descendant" : " descendants") : ""));
+            }
+            if (notSelected.size() > MAX_LISTED) {
+                out.println("  ... " + (notSelected.size() - MAX_LISTED) + " more");
             }
         }
     }

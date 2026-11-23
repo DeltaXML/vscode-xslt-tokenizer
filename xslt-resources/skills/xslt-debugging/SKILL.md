@@ -34,11 +34,17 @@ run commands - rather than guessing those commands.
 | `debug_status` / `debug_evaluate` | Read the user's paused XSLT debug session: where it's paused, the call stack, a frame's variables and context - and XPath evaluated there |
 | `profile_configuration` | For a stylesheet: the command that runs it with Saxon's timing profile (PE/EE), and the command that summarises the profile as text, ranked by net time |
 
-`output_origin` and `input_rules` read the user's last run in VS Code. When there's none, or the stylesheet or input has changed since,
-they ask the user for the extension to run it - a notification in the user's window, unless they've said to always run it - and wait
-for it (give `stylesheet` if there's been no run yet). If the user declines, doesn't answer, or has turned runs off, the tool says so:
-carry on with `trace_configuration`'s command and `--rules` - the same summary of what processed the input, from a run of your own. `debug_status` reads the user's debug session. `trace_configuration` and `profile_configuration` give commands
-you run yourself (the user may be asked to allow them).
+**Which to use - without interrupting the user where you can:**
+
+- **What processed the input** - which template rules, or only built-in rules, or nothing: `trace_configuration`'s command with
+  `--rules` (no logpoints needed). It's a run of your own, so it needs nothing from the user.
+- **The instruction behind a particular piece of output** - which a trace doesn't give: `output_origin`.
+- `output_origin` and `input_rules` read the user's last run in VS Code. With a recent run they answer at once; with none, or the
+  stylesheet or input changed since, they ask the user for the extension to run it - a notification in the user's window, unless the
+  user has said to always run it - and wait (give `stylesheet` if there's been no run yet). If the user declines or doesn't answer, the
+  tool says so. So use `input_rules` when the user has just run the stylesheet; otherwise prefer `--rules`.
+- `debug_status` reads the user's debug session. `trace_configuration` and `profile_configuration` give commands you run yourself
+  (the user may be asked to allow them).
 
 ## When the output is wrong
 
@@ -54,11 +60,11 @@ Find the code that wrote it instead of searching the stylesheet for the output's
    `xsl:output` to `method="xml"` for the investigation - the elements are the same, written as XML - then call `output_origin` again,
    which asks them to run it, and
    change it back afterwards. Literal text is mapped to where it is in the stylesheet, and copied nodes to the source document.
-5. **Output missing, or stray text in it?** Start from the input: `input_rules` on the input file (or `trace_configuration`'s command with
-   `--rules`, when there's no run of the user's) lists the elements only built-in rules
-   processed - no template matched them, so with the default `text-only-copy` their text went to the output as it is - and, for an
-   element (by its path), every rule that processed it, its attributes and text, in which mode. An element no rule processed wasn't
-   selected by any `xsl:apply-templates` or `xsl:for-each`: look at the templates of its nearest processed ancestor, which it gives.
+5. **Output missing, or stray text in it?** Start from the input: `trace_configuration`'s command with `--rules` (or `input_rules`, after a
+   run of the user's) lists the elements only built-in rules processed - no template matched them, so with the default `text-only-copy`
+   their text went to the output as it is - and the elements nothing selected: no `xsl:apply-templates` or `xsl:for-each` reached them,
+   so look at the rule that processed their parent. `input_rules` also gives, for one element (by its path), every rule that processed
+   it, its attributes and text, in which mode.
 
 ## Seeing values inside the stylesheet
 
