@@ -333,7 +333,7 @@ suite('MCP server', function () {
 		}
 	});
 
-	test('several workspace folders: the assistant is told them, with the root first - none for one folder', async () => {
+	test('instructions: several workspace folders, with the root first - and for any folder, to load a skill and lint after each change', async () => {
 		const allowed = McpRoot.allowed;
 		const sub = path.join(dir, 'sub');
 		const initialize = async (root?: string) => (await post({ jsonrpc: '2.0', id: ++id, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } } },
@@ -347,8 +347,10 @@ suite('MCP server', function () {
 			const configuration = text(await post({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name: 'run_configuration', arguments: {} } },
 				{ Authorization: `Bearer ${token}` }, `/mcp?root=${encodeURIComponent(sub)}`));
 			assert.include(configuration, `Other workspace folders (relative paths start in the first): ${dir}`);
+			// after the folders, and alone for one folder: the checks to make on any change, however small
+			assert.include(instructions ?? '', McpRoot.workflow);
 			McpRoot.allowed = () => [dir];
-			assert.isUndefined(await initialize(dir));
+			assert.strictEqual(await initialize(dir), McpRoot.workflow);
 		} finally {
 			McpRoot.allowed = allowed;
 		}

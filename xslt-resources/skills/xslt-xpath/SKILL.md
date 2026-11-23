@@ -1,6 +1,6 @@
 ---
 name: xslt-xpath
-description: Use for any task that writes, edits, refactors or explains XSLT (.xsl, .xslt), XSpec (.xspec) or XPath - including XSLT 3.0 and 4.0 - in a project where the "xslt-xpath" MCP server (the XSLT/XPath VS Code extension) is connected. Gives the workflow and the tools to check work with the same linter and Saxon setup the user has. For finding why a stylesheet's output is wrong or a run is slow, use the xslt-debugging skill.
+description: Use for any task that writes, edits, refactors or explains XSLT (.xsl, .xslt), XSpec (.xspec) or XPath - including XSLT 3.0 and 4.0, and however small the change, e.g. removing or adding one instruction - in a project where the "xslt-xpath" MCP server (the XSLT/XPath VS Code extension) is connected. Gives the workflow and the tools to check work with the same linter and Saxon setup the user has. For finding why a stylesheet's output is wrong or a run is slow, use the xslt-debugging skill.
 ---
 
 # XSLT and XPath with the xslt-xpath MCP server
