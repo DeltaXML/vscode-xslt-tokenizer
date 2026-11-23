@@ -135,6 +135,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// problems go too, not left to link to a document that's no longer shown
 		if (collection) {
 			vscode.workspace.onDidCloseTextDocument((closed) => XsltSymbolProvider.clearClosed(collection, closed.uri));
+			// and as soon as its last tab is closed
+			vscode.window.tabGroups.onDidChangeTabs((e) => XsltSymbolProvider.clearClosedTabs(collection, e.closed));
 			// a folder removed from the workspace: the problems of its files that aren't open in an editor go too
 			vscode.workspace.onDidChangeWorkspaceFolders((e) => XsltSymbolProvider.clearRemovedFolders(collection, e.removed.map((folder) => folder.uri)));
 		}
@@ -196,6 +198,48 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	// whether the document is open in an editor tab, shown or not - not one only loaded, e.g. an XML context file read
 	// for completions - so its problems are reported, also after it's changed by an AI agent while another file is active
+	// whether a document's problems are reported: a file to fix - a file, a new untitled document, or a document of a file system
+	// that can be written to, e.g. a remote one (SSH, WSL, a container, a GitHub repository) - not a read-only copy of one,
+	// whatever shows it: an earlier version in a source control diff, or an AI agent's diff, from a content provider or a read-only
+	// file system - so an agent we don't know about is covered too. Not the schemes known to be copies, even if writable; nor the
+	// debugger's view of the output written so far (incomplete while the stylesheet runs, so not well-formed), nor a failed test's
+	// expected or actual result in the Test Results view's diff
+	public static isFileToFix(uri: vscode.Uri): boolean {
+		if (XsltSymbolProvider.historySchemes.includes(uri.scheme) || uri.scheme === XsltDebugOutputs.scheme || uri.scheme === 'vscode-test-data') {
+			return false;
+		}
+		if (uri.scheme === 'file' || uri.scheme === 'untitled') {
+			return true;
+		}
+		try {
+			return vscode.workspace.fs.isWritableFileSystem(uri.scheme) === true;
+		} catch {
+			return false;
+		}
+	}
+
+	// the documents a tab shows: a text editor's, or both sides of a diff's
+	private static tabUris(tab: vscode.Tab): vscode.Uri[] {
+		const input = tab.input;
+		if (input instanceof vscode.TabInputText) {
+			return [input.uri];
+		} else if (input instanceof vscode.TabInputTextDiff) {
+			return [input.original, input.modified];
+		}
+		return [];
+	}
+
+	// a closed tab's documents that aren't files - e.g. a diff's original - and no other tab shows: their problems go now, not when
+	// VS Code closes the document, which can be minutes later - in the meantime clicking one would show the old version again
+	public static clearClosedTabs(collection: vscode.DiagnosticCollection, closed: readonly vscode.Tab[]) {
+		const shown = new Set(vscode.window.tabGroups.all.flatMap((group) => group.tabs).flatMap((tab) => XsltSymbolProvider.tabUris(tab)).map((uri) => uri.toString()));
+		for (const uri of closed.flatMap((tab) => XsltSymbolProvider.tabUris(tab))) {
+			if (uri.scheme !== 'file' && uri.scheme !== 'untitled' && !shown.has(uri.toString())) {
+				collection.delete(uri);
+			}
+		}
+	}
+
 	public static isOpenInEditor(document: vscode.TextDocument) {
 		const uri = document.uri.toString();
 		return vscode.window.visibleTextEditors.some((editor) => editor.document === document) ||
@@ -357,15 +401,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 			} else {
 				if (this.collection) {
-					// not the debugger's view of the output written so far, e.g. [xslt out] result.xml: it's incomplete
-					// while the stylesheet runs, so not well-formed, and it isn't a file to fix
-					const isDebugOutput = document.uri.scheme === XsltDebugOutputs.scheme;
-					// nor a failed test's expected or actual result, in the Test Results view's diff: XML with perhaps no
-					// root element
-					const isTestData = document.uri.scheme === 'vscode-test-data';
-					// nor an earlier version of a file, in a source control diff: not the file to fix
-					const isHistory = XsltSymbolProvider.historySchemes.includes(document.uri.scheme);
-					if (allDiagnostics.length > 0 && this.showDiagnostics() && !isDebugOutput && !isTestData && !isHistory) {
+					// only for a file to fix - not a read-only copy of one, e.g. in a diff (see isFileToFix)
+					if (allDiagnostics.length > 0 && this.showDiagnostics() && XsltSymbolProvider.isFileToFix(document.uri)) {
 						this.collection.set(document.uri, allDiagnostics);
 					} else {
 						// only this document's problems - not those of other documents

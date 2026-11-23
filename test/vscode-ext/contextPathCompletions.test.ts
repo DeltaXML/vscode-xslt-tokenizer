@@ -163,6 +163,71 @@ suite('Problems of an older version of a file, in a source control diff or an AI
 	}));
 });
 
+suite('Problems only for a file to fix - not a read-only copy, whatever shows it', function () {
+	this.timeout(60000);
+	const xslt = '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"><xsl:template match="/"><xsl:value-of select="nosuch(1)"/></xsl:template></xsl:stylesheet>';
+	// an in-memory file system, as a remote one is - registered as writable, or read-only
+	const fileSystem = (): vscode.FileSystemProvider => ({
+		onDidChangeFile: new vscode.EventEmitter<vscode.FileChangeEvent[]>().event,
+		watch: () => new vscode.Disposable(() => undefined),
+		stat: () => ({ type: vscode.FileType.File, ctime: 0, mtime: 0, size: xslt.length }),
+		readDirectory: () => [],
+		createDirectory: () => undefined,
+		readFile: () => new TextEncoder().encode(xslt),
+		writeFile: () => undefined,
+		delete: () => undefined,
+		rename: () => undefined
+	});
+	const problemsOf = async (uri: vscode.Uri) => {
+		const document = await vscode.workspace.openTextDocument(uri);
+		await vscode.languages.setTextDocumentLanguage(document, 'xslt');
+		await vscode.window.showTextDocument(document);
+		await new Promise((resolve) => setTimeout(resolve, 2500));
+		const count = vscode.languages.getDiagnostics(uri).length;
+		await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+		return count;
+	};
+
+	test('an agent\'s copy we don\'t know of, from a content provider: none', async () => {
+		const provider = vscode.workspace.registerTextDocumentContentProvider('some-agent-original', { provideTextDocumentContent: () => xslt });
+		try {
+			assert.equal(await problemsOf(vscode.Uri.parse('some-agent-original:/old/report.xsl')), 0);
+		} finally {
+			provider.dispose();
+		}
+	});
+
+	test('a writable file system, e.g. a remote one: reported - a read-only one: none', async () => {
+		const writable = vscode.workspace.registerFileSystemProvider('xslt-test-writable', fileSystem(), { isReadonly: false });
+		const readonly = vscode.workspace.registerFileSystemProvider('xslt-test-readonly', fileSystem(), { isReadonly: true });
+		try {
+			assert.isAbove(await problemsOf(vscode.Uri.parse('xslt-test-writable:/project/report.xsl')), 0);
+			assert.equal(await problemsOf(vscode.Uri.parse('xslt-test-readonly:/project/report.xsl')), 0);
+		} finally {
+			writable.dispose();
+			readonly.dispose();
+		}
+	});
+
+	test('a closed tab\'s read-only copy: its problems go as the tab closes - not a file\'s', () => {
+		const collection = vscode.languages.createDiagnosticCollection('closed-tabs-test');
+		const problem = [new vscode.Diagnostic(new vscode.Range(0, 0, 0, 1), 'a problem')];
+		const copy = vscode.Uri.parse('some-agent-original:/old/report.xsl');
+		const file = vscode.Uri.file(path.join(os.tmpdir(), 'report.xsl'));
+		collection.set(copy, problem);
+		collection.set(file, problem);
+		try {
+			// a diff tab, with the copy on the left and the file on the right
+			const tab = { input: new vscode.TabInputTextDiff(copy, file) } as unknown as vscode.Tab;
+			XsltSymbolProvider.clearClosedTabs(collection, [tab]);
+			assert.isFalse(collection.has(copy));
+			assert.isTrue(collection.has(file));
+		} finally {
+			collection.dispose();
+		}
+	});
+});
+
 suite('Problems of the files of a folder removed from the workspace', () => {
 	test('are cleared, except for a file that is open in an editor - and not those of other folders', async function () {
 		// 66 ms alone, but it waits for VS Code to register the editor - slow when the machine is busy, e.g. swapping
