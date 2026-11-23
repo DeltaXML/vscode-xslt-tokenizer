@@ -10,6 +10,19 @@ output, and adding `xsl:message` edits the user's files. If the stylesheet has X
 `test_configuration`'s **In one line** command runs them and prints the summary - to see which fail, and again after. For writing and
 checking the fix - linting, running, XSpec tests - use the `xslt-xpath` skill.
 
+## If the tools aren't there
+
+This skill's tools come from the `xslt-xpath` MCP server, which the user's VS Code runs for the project open in its window. If none of
+them is available - e.g. `lint_file` can't be found - **stop and tell the user** before working without them: the server isn't
+connected for this project. To connect it:
+
+1. In VS Code, turn on the setting **XSLT.mcp.enabled** (a user setting), with this project's folder open in the window.
+2. In that window, run **XSLT: Set Up MCP Server for Claude Code**, for this project or all projects.
+3. Start a new Claude Code session here: its tools are loaded when a session starts (`/mcp` lists the servers connected).
+
+If the user wants you to go on without them, say what you can't check - the linter, the user's Saxon set-up, the extension's test and
+run commands - rather than guessing those commands.
+
 ## Tools
 
 | Tool | Use it to |
