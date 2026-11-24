@@ -225,6 +225,15 @@ export class DocumentChangeHandler {
 			triggerSuggest = !!noteTag && !textBefore.substring(noteStart + noteTag[0].length).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '').includes('<');
 		}
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<' || activeChange.text.endsWith('::')) {
+			// suggestions opened as a character is typed - VS Code's setting for that, for the document's language, e.g.
+			// "[xml]": { "editor.suggestOnTriggerCharacters": false } - Ctrl+Space still shows them
+			if (!vscode.workspace.getConfiguration('editor', e.document).get<boolean>('suggestOnTriggerCharacters', true)) {
+				skipTrigger = true;
+			}
+			// not '<' in an XML file: with no schema, only general element snippets follow it - Ctrl+Space still shows them
+			if (activeChange.text === '<' && !triggerSuggest && e.document.languageId === 'xml') {
+				skipTrigger = true;
+			}
 			let isCloseTagFeature = false;
 			if (activeChange.text === '/') {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);

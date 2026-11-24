@@ -137,6 +137,8 @@ suite('Schematron: XSpec tests from the XML context file', () => {
 		if (!saxonJar) {
 			this.skip();
 		}
+		// Java, SchXslt2 compiling the schema, then XSpec: ~13s on a busy machine
+		this.timeout(60000);
 		await SchematronContext.setContextFile(file('books.sch'), file('library.xml'));
 		await withSaxon(async () => {
 			await generated();
