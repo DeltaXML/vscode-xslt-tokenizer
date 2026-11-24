@@ -1,0 +1,82 @@
+{
+	"name": "xslt-xpath-demo-runner",
+	"displayName": "XSLT/XPath demo runner (development only)",
+	"description": "Plays scripted demos of the XSLT/XPath extension, for recording videos. Not published: load it with the 'Demo: Record Videos' launch configuration.",
+	"publisher": "deltaxml",
+	"version": "0.0.1",
+	"private": true,
+	"engines": {
+		"vscode": "^1.90.0"
+	},
+	"activationEvents": [],
+	"main": "./demo.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "xsltDemo.startCaptions",
+				"title": "Start Captions...",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.playVideo1",
+				"title": "Play Video 1: Run and Debug a Stylesheet",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.stepVideo1",
+				"title": "Start Video 1 in Step Mode: Run and Debug a Stylesheet",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.nextStep",
+				"title": "Next Step",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.previousStep",
+				"title": "Previous Step",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.stop",
+				"title": "Stop",
+				"category": "Demo"
+			},
+			{
+				"command": "xsltDemo.reset",
+				"title": "Reset for a Retake",
+				"category": "Demo"
+			}
+		],
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "xsltDemo",
+					"title": "Demo",
+					"icon": "captions.svg"
+				}
+			]
+		},
+		"views": {
+			"xsltDemo": [
+				{
+					"type": "webview",
+					"id": "xsltDemo.captions",
+					"name": "Captions"
+				}
+			]
+		},
+		"keybindings": [
+			{
+				"command": "xsltDemo.nextStep",
+				"key": "ctrl+alt+n",
+				"mac": "ctrl+alt+n"
+			},
+			{
+				"command": "xsltDemo.previousStep",
+				"key": "ctrl+alt+b",
+				"mac": "ctrl+alt+b"
+			}
+		]
+	}
+}

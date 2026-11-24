@@ -21,6 +21,7 @@ interface TimelineItem {
 	iconPath?: vscode.ThemeIcon;
 	description?: string;
 	tooltip?: string | vscode.MarkdownString;
+	contextValue?: string;
 }
 interface TimelineOptions { readonly cursor?: string; readonly limit?: number }
 interface Timeline { readonly items: readonly TimelineItem[]; readonly cursor?: string }
@@ -45,6 +46,9 @@ export interface XSpecRunFile {
 	stopped?: string;
 	// the label paths of the expectations that failed - the first maxFailedLabels
 	failedLabels?: string[];
+	// the milliseconds the tests took to run - not starting Java, compiling or reporting - with XSpec's measure-time
+	// (Saxon-PE/EE, and not when debugging)
+	testTime?: number;
 }
 
 // a run, as kept in the workspace state
@@ -85,8 +89,10 @@ export class XSpecTimeline {
 			api.registerTimelineProvider(XSpecTimeline.id, XSpecTimeline.label, 'file', {
 				onDidChangeTimeline: timeline.changed.event,
 				provideTimeline: (uri, options) => {
+					// an empty timeline, not undefined: in VS Code 1.145, when the last provider to answer returns
+					// undefined, the Timeline view can keep showing 'Loading...'
 					if (!uri.fsPath.endsWith('.xspec')) {
-						return undefined;
+						return { items: [] };
 					}
 					const items = timeline.runs().flatMap((run) => {
 						const file = run.files.find((f) => f.file === uri.fsPath);
@@ -115,6 +121,46 @@ export class XSpecTimeline {
 		return XSpecTimeline.instance?.runs();
 	}
 
+	// removes the XSpec file's outcomes from the runs - or with no file, all the runs. A run that had only that file is
+	// removed; one with others is kept for them. The number of the file's outcomes, or runs, removed
+	public static async clear(file?: vscode.Uri): Promise<number> {
+		return XSpecTimeline.remove(() => true, file?.fsPath);
+	}
+
+	// removes one entry: in the workspace timeline, a run - and in an XSpec file's, the file's outcome in the run
+	public static async deleteEntry(id: string, file?: vscode.Uri): Promise<number> {
+		return XSpecTimeline.remove((run) => String(run.start) === id, file?.fsPath);
+	}
+
+	// removes the runs chosen - or with a file, its outcome in them
+	private static async remove(removing: (run: XSpecRunRecord) => boolean, file?: string): Promise<number> {
+		const timeline = XSpecTimeline.instance;
+		if (!timeline) {
+			return 0;
+		}
+		let count = 0;
+		const changedFiles = new Set<string>();
+		const runs = timeline.runs().flatMap((run) => {
+			if (!removing(run)) {
+				return [run];
+			}
+			const files = run.files.filter((f) => file !== undefined && f.file !== file);
+			if (files.length === run.files.length) {
+				return [run];
+			}
+			count++;
+			run.files.filter((f) => !files.includes(f)).forEach((f) => changedFiles.add(f.file));
+			return files.length > 0 ? [{ ...run, files }] : [];
+		});
+		if (count === 0) {
+			return 0;
+		}
+		await timeline.state.update(XSpecTimeline.stateKey, runs);
+		timeline.workspaceChanged.fire();
+		timeline.changed.fire([...changedFiles].map((f) => vscode.Uri.file(f)));
+		return count;
+	}
+
 	// newest first
 	private runs(): XSpecRunRecord[] {
 		return this.state.get<XSpecRunRecord[]>(XSpecTimeline.stateKey, []);
@@ -141,19 +187,30 @@ export class XSpecTimeline {
 		return `${((run.end - run.start) / 1000).toFixed(1)}s`;
 	}
 
+	// e.g. 'tests 36.7 ms', or 'tests 2.41s' - the time the file's tests took to run, if it's known
+	public static testTimeText(file: XSpecRunFile): string | undefined {
+		const t = file.testTime;
+		if (t === undefined) {
+			return undefined;
+		}
+		return 'tests ' + (t >= 1000 ? `${(t / 1000).toFixed(2)}s` : t >= 10 ? `${t.toFixed(1)} ms` : `${t.toFixed(2)} ms`);
+	}
+
 	private runItem(run: XSpecRunRecord): TimelineItem {
 		const total = (key: 'passed' | 'failed' | 'pending') => run.files.reduce((sum, f) => sum + f[key], 0);
 		const totals = { passed: total('passed'), failed: total('failed'), pending: total('pending') };
 		const stopped = run.files.filter((f) => f.stopped !== undefined);
 		const item = new this.itemClass(`XSpec ${run.kind.toLowerCase()}: ` + XSpecTimeline.counts(totals) + (stopped.length > 0 ? `, ${stopped.length} stopped` : ''), run.start);
 		item.id = String(run.start);
+		item.contextValue = 'xspecRun';
 		item.iconPath = XSpecTimeline.icon(totals.failed > 0, stopped.length > 0 || run.cancelled);
 		const files = run.files.length === 1 ? vscode.workspace.asRelativePath(run.files[0].file) : `${run.files.length} files`;
 		item.description = [files, XSpecTimeline.seconds(run), ...(run.cancelled ? ['cancelled'] : [])].join(' · ');
 		const tooltip = new vscode.MarkdownString();
 		tooltip.appendMarkdown(`**XSpec ${run.kind}** - ${new Date(run.start).toLocaleString()} - ${XSpecTimeline.seconds(run)}${run.cancelled ? ' - cancelled' : ''}\n\n`);
 		for (const f of run.files) {
-			tooltip.appendMarkdown(`- `).appendText(`${vscode.workspace.asRelativePath(f.file)}: ${f.stopped !== undefined ? `stopped - ${XSpecTimeline.short(f.stopped)}` : XSpecTimeline.counts(f)}`).appendMarkdown('\n');
+			const testTime = XSpecTimeline.testTimeText(f);
+			tooltip.appendMarkdown(`- `).appendText(`${vscode.workspace.asRelativePath(f.file)}: ${f.stopped !== undefined ? `stopped - ${XSpecTimeline.short(f.stopped)}` : XSpecTimeline.counts(f)}${testTime ? ` - ${testTime}` : ''}`).appendMarkdown('\n');
 			XSpecTimeline.failedLines(f).forEach((line) => tooltip.appendMarkdown('    - ').appendText(line).appendMarkdown('\n'));
 		}
 		item.tooltip = tooltip;
@@ -163,10 +220,13 @@ export class XSpecTimeline {
 	private fileItem(run: XSpecRunRecord, file: XSpecRunFile): TimelineItem {
 		const item = new this.itemClass(`XSpec ${run.kind.toLowerCase()}: ` + (file.stopped !== undefined ? 'stopped' : XSpecTimeline.counts(file)), run.start);
 		item.id = String(run.start);
+		item.contextValue = 'xspecRunFile';
 		item.iconPath = XSpecTimeline.icon(file.failed > 0, file.stopped !== undefined);
-		item.description = run.files.length > 1 ? `in a run of ${run.files.length} files` : '';
+		const testTime = XSpecTimeline.testTimeText(file);
+		item.description = [...(testTime ? [testTime] : []), ...(run.files.length > 1 ? [`in a run of ${run.files.length} files`] : [])].join(' · ');
 		const failed = XSpecTimeline.failedLines(file);
 		item.tooltip = `XSpec ${run.kind} - ${new Date(run.start).toLocaleString()}${file.stopped !== undefined ? `\nstopped - ${XSpecTimeline.short(file.stopped)}` : ''}` +
+			(testTime ? `\n${testTime.replace(/^tests/, 'The tests took')} - not starting Java, compiling or reporting` : '') +
 			(failed.length > 0 ? `\n\nFailed:\n${failed.map((line) => `  ${line}`).join('\n')}` : '');
 		return item;
 	}

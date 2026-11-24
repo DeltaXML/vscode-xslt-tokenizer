@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, LanguageConfiguration, DocumentTypes } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, XPathLexer, ExitCondition, LexPosition } from './xpLexer';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { RecordTypes } from './recordTypes';
 
 enum HasCharacteristic {
 	unknown,
@@ -146,7 +147,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 	private formatRange(document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions): vscode.TextEdit[] {
 		// the end tag of an xsl:note, with the document's prefix for XSLT, e.g. </xslt:note
-		const noteEndTag = `</${XsltTokenDiagnostics.xsltPrefixOf(document)}:note`;
+		const noteEndTag = `</${RecordTypes.xsltQName(XsltTokenDiagnostics.xsltPrefixOf(document), 'note')}`;
 		let result: vscode.TextEdit[] = [];
 		// on-type formatting stops once the new line is formatted - the line before it may be formatted first. After Enter,
 		// that's after the new line's first token, even when its indentation is right already, e.g. from VS Code's own
@@ -209,7 +210,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
 		let withinCDATA = false;
-		let complexStateStack: [number, number[], boolean][] = [];
+		// for the XPath at the top level of an attribute, then each open bracket: the nesting level before it, the levels of its open
+		// if-then and for/let/some/every keywords, whether it is in an else branch, the levels of its open for, let, some and every
+		// clauses - before their return or satisfies - and the level of its content
+		let complexStateStack: [number, number[], boolean, number[], number][] = [];
 		let elseLineNumber = -1;
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
@@ -249,7 +253,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let templateBraceDepths: number[] = [];
 
 		if (this.docType === DocumentTypes.XPath) {
-			complexStateStack = [[0, [], false]];
+			complexStateStack = [[0, [], false, [], 0]];
 			this.xpLexer.reset();
 		}
 
@@ -287,14 +291,14 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
-						complexStateStack = [[0, [], false]];
+						complexStateStack = [[0, [], false, [], 0]];
 						emptyStackIsElseBlock = false;
 						isXSLTStartTag = true;
 						elementName = XsltTokenDiagnostics.xsltElementName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 						isPreserveSpaceElement = elementName === 'xsl:text';
 						break;
 					case XSLTokenLevelState.elementName:
-						complexStateStack = [[0, [], false]];
+						complexStateStack = [[0, [], false, [], 0]];
 						emptyStackIsElseBlock = false;
 						isXSLTStartTag = false;
 						elementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
@@ -360,7 +364,16 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								// outdent, by the number of elements the close tag closes - one, unless its name is still
 								// being typed:
 								closedElementCount = 1;
-								const endTagName = /^[^\s/>]+/.exec(document.lineAt(lineNumber).text.substring(token.startCharacter + 2))?.[0];
+								const writtenEndTagName = /^[^\s/>]+/.exec(document.lineAt(lineNumber).text.substring(token.startCharacter + 2))?.[0];
+								// with the native prefix, compared as the start tag's name is: e.g. </x:template> as
+								// xsl:template, where the module's prefix for XSLT is x (and an XSpec file's t:scenario as x:scenario)
+								// - and with none, e.g. a Schematron file's </rule> as sch:rule
+								const nativePrefix = this.xslLexer.nativePrefix;
+								// and an XSLT element's within a Schematron schema, e.g. </xsl:function>
+								const xsltWithin = this.xslLexer.xsltPrefixWithin;
+								const isNativeEndTag = !!writtenEndTagName && ((nativePrefix ? writtenEndTagName.startsWith(nativePrefix + ':') : !writtenEndTagName.includes(':')) ||
+									(!!xsltWithin && writtenEndTagName.startsWith(xsltWithin + ':')));
+								const endTagName = isNativeEndTag ? XsltTokenDiagnostics.xsltElementName(writtenEndTagName!, document) : writtenEndTagName;
 								if (endTagName && openElementNames.length > 0) {
 									const matchIndex = openElementNames.lastIndexOf(endTagName);
 									closedElementCount = matchIndex > -1 ? openElementNames.length - matchIndex : 0;
@@ -481,10 +494,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				let currentStateLevel: [number, number[], boolean] = complexStateStack.length > 0 ? complexStateStack[complexStateStack.length - 1] : [0, [], emptyStackIsElseBlock];
+				let currentStateLevel: [number, number[], boolean, number[], number] = complexStateStack.length > 0 ? complexStateStack[complexStateStack.length - 1] : [0, [], emptyStackIsElseBlock, [], 0];
 				let bracketNesting: number = currentStateLevel[0];
 				let ifElseStack: number[] = currentStateLevel[1];
 				let isElseBlock: boolean = currentStateLevel[2];
+				const clauseLevels: number[] = currentStateLevel[3];
+				const contentLevel: number = currentStateLevel[4];
 
 				let ifElseStackLength = ifElseStack.length;
 
@@ -509,6 +524,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								preThen = false;
 								xpathNestingLevel++;
 								ifElseStack.push(xpathNestingLevel);
+								if (valueText !== 'then') {
+									// a for, let, some or every clause: a ',' in it before its return or satisfies, e.g. between
+									// its variables, comes back to its level
+									clauseLevels.push(xpathNestingLevel);
+								}
 								break;
 							case 'else':
 								isElseBlock = true;
@@ -519,6 +539,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								}
 							case 'return':
 							case 'satisfies':
+								if (valueText !== 'else') {
+									clauseLevels.pop();
+								}
 								elseLineNumber = lineNumber;
 								xpathNestingLevel = ifElseStackLength > 0 ? ifElseStack[ifElseStackLength - 1] : 0;
 								if (ifElseStack.length > 0) {
@@ -533,7 +556,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:
-								complexStateStack.push([xpathNestingLevel, [], false]);
+								complexStateStack.push([xpathNestingLevel, [], false, [], xpathNestingLevel + 1]);
 								xpathNestingLevel++;
 								indent = -1;
 								break;
@@ -555,8 +578,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								break;
 							case CharLevelState.sep:
 								if (token.value === ',') {
+									// the comma ends the else, return and satisfies branches before it - however many, e.g. for
+									// let $v := 1 return $v, or if (a) then 1 else if (b) then 2 else 3 - so the next item is at the
+									// level of the innermost open for, let, some or every clause, or else of the bracket's content
+									xpathNestingLevel = clauseLevels.length > 0 ? clauseLevels[clauseLevels.length - 1] : contentLevel;
 									if (isElseBlock) {
-										xpathNestingLevel--;
 										if (complexStateStack.length === 0) {
 											emptyStackIsElseBlock = false;
 										} else {

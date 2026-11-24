@@ -7,7 +7,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
 import * as vscode from 'vscode';
+import { XsltNodeRules } from '../../src/xsltNodeRules';
 import { XSpecTestController } from '../../src/xspecTestController';
+import { XSpecRunner } from '../../src/xspecRunner';
 import { XSpecTests } from '../../src/xspecTests';
 import { XSpecTimeline } from '../../src/xspecTimeline';
 import { XsltPackages } from '../../src/xsltPackages';
@@ -15,9 +17,15 @@ import { XsltPackages } from '../../src/xsltPackages';
 const saxonJar = process.env.XSPEC_SAXON_JAR;
 
 // a test run that records the outcome of each item, by its label
-function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscode.TestMessage[]>, coverages: vscode.FileCoverage[] = [], output: string[] = []): vscode.TestRun {
-	const record = (status: string) => (item: vscode.TestItem, message?: vscode.TestMessage | readonly vscode.TestMessage[]) => {
+function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscode.TestMessage[]>, coverages: vscode.FileCoverage[] = [], output: string[] = [], durations = new Map<string, number>()): vscode.TestRun {
+	const record = (status: string) => (item: vscode.TestItem, messageOrDuration?: vscode.TestMessage | readonly vscode.TestMessage[] | number, duration?: number) => {
 		outcomes.set(item.label, status);
+		// passed(item, duration) and failed(item, message, duration)
+		const time = typeof messageOrDuration === 'number' ? messageOrDuration : duration;
+		if (time !== undefined) {
+			durations.set(item.label, time);
+		}
+		const message = typeof messageOrDuration === 'number' ? undefined : messageOrDuration;
 		if (message) {
 			messages.set(item.label, Array.isArray(message) ? [...message] : [message as vscode.TestMessage]);
 		}
@@ -63,11 +71,12 @@ suite('XSpec: running tests', function () {
 		const fileItem = xspec.testController.items.get(document.uri.toString())!;
 		const outcomes = new Map<string, string>();
 		const messages = new Map<string, vscode.TestMessage[]>();
-		xspec.createRun = () => recordingRun(outcomes, messages);
+		const durations = new Map<string, number>();
+		xspec.createRun = () => recordingRun(outcomes, messages, [], [], durations);
 		const profile = debug ? xspec.debugProfile : xspec.runProfile;
 		await profile.runHandler(new vscode.TestRunRequest(include(fileItem)), new vscode.CancellationTokenSource().token);
 		xspec.createRun = undefined;
-		return { outcomes, messages, fileItem };
+		return { outcomes, messages, fileItem, durations };
 	};
 	const child = (item: vscode.TestItem, label: string) => {
 		let found: vscode.TestItem | undefined;
@@ -97,6 +106,20 @@ suite('XSpec: running tests', function () {
 		assert.isTrue(fs.existsSync(html), 'the HTML report');
 	});
 
+	test('durations: each expectation has its scenario\'s time, with XSpec\'s measure-time - not with Saxon-HE, or when debugging', async () => {
+		const { durations } = await runItems((file) => [file]);
+		if (XSpecRunner.canMeasureTime(vscode.Uri.file(xspecPath))) {
+			assert.isAbove(durations.get('is four') ?? -1, 0, JSON.stringify([...durations]));
+			assert.isAbove(durations.get('is five') ?? -1, 0, 'a failed expectation too');
+			// pending: not run, so no time
+			assert.isUndefined(durations.get('is two'));
+		} else {
+			assert.strictEqual(durations.size, 0, 'Saxon-HE has no saxon:timestamp()');
+		}
+		const debugged = await runItems((file) => [child(file, 'a paragraph')], true);
+		assert.strictEqual(debugged.durations.size, 0, 'paused at breakpoints, a time would mean nothing');
+	});
+
 	test('the run\'s history in the Timeline view: recorded with VS Code 1.145\'s Timeline API - and without it, e.g. in 1.138, not registered and the run unaffected', async () => {
 		const hasApi = typeof (vscode.workspace as unknown as { registerWorkspaceTimelineProvider?: unknown }).registerWorkspaceTimelineProvider === 'function';
 		const before = Date.now();
@@ -110,7 +133,16 @@ suite('XSpec: running tests', function () {
 		const run = history![0];
 		assert.isAtLeast(run.start, before);
 		assert.strictEqual(run.kind, 'Run');
-		assert.deepEqual(run.files, [{ file: xspecPath, passed: 2, failed: 1, pending: 1, failedLabels: ['doubling › three › is five'] }]);
+		const [{ testTime, ...file }] = run.files;
+		assert.deepEqual(file, { file: xspecPath, passed: 2, failed: 1, pending: 1, failedLabels: ['doubling › three › is five'] });
+		// the time the tests took, from the report's measure-time timestamps - not with Saxon-HE
+		if (XSpecRunner.canMeasureTime(vscode.Uri.file(xspecPath))) {
+			assert.isAbove(testTime ?? -1, 0);
+			assert.isBelow(testTime!, run.end - run.start, 'only running the tests, not Java starting, compiling or reporting');
+			assert.match(XSpecTimeline.testTimeText(run.files[0]) ?? '', /^tests \d+(\.\d+)?( ms|s)$/);
+		} else {
+			assert.isUndefined(testTime);
+		}
 	});
 
 	test('run one scenario, with XSpec\'s force-focus: the others aren\'t run', async () => {
@@ -164,6 +196,46 @@ suite('XSpec: running tests', function () {
 		}
 	});
 
+	test('debug a scenario: the stylesheet\'s xsl:message is in the Debug Console - not the test runner\'s, e.g. PENDING for each scenario not run', async () => {
+		fs.writeFileSync(path.join(dir, 'messages.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0">
+  <xsl:function name="f:half"><xsl:param name="n"/><xsl:message select="'halving ' || $n"/><xsl:sequence select="$n div 2"/></xsl:function>
+</xsl:stylesheet>`);
+		const messagesXspec = path.join(dir, 'messages.xspec');
+		fs.writeFileSync(messagesXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="messages.xsl">
+  <x:scenario label="four"><x:call function="f:half"><x:param select="4"/></x:call><x:expect label="is two" select="2"/></x:scenario>
+  <x:scenario label="six"><x:call function="f:half"><x:param select="6"/></x:call><x:expect label="is three" select="3"/></x:scenario>
+  <x:scenario label="eight"><x:call function="f:half"><x:param select="8"/></x:call><x:expect label="is four" select="4"/></x:scenario>
+</x:description>`);
+		const output: string[] = [];
+		const tracker = vscode.debug.registerDebugAdapterTrackerFactory('xslt-saxon', {
+			createDebugAdapterTracker: () => ({
+				onDidSendMessage: (message: { type: string, event?: string, body?: { output?: string } }) => {
+					if (message.type === 'event' && message.event === 'output' && message.body?.output) {
+						output.push(message.body.output);
+					}
+				}
+			})
+		});
+		try {
+			const xspec = XSpecTestController.instance!;
+			const uri = vscode.Uri.file(messagesXspec);
+			await vscode.workspace.openTextDocument(uri);
+			const fileItem = xspec.testController.items.get(uri.toString())!;
+			const outcomes = new Map<string, string>();
+			xspec.createRun = () => recordingRun(outcomes, new Map());
+			// one scenario: the others are pending, with force-focus
+			await xspec.debugProfile.runHandler(new vscode.TestRunRequest([child(fileItem, 'six')]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			assert.strictEqual(outcomes.get('is three'), 'passed', JSON.stringify([...outcomes]));
+			const text = output.join('');
+			assert.include(text, 'halving 6');
+			assert.notInclude(text, 'PENDING', text);
+			assert.notInclude(text, 'four', 'nor the runner\'s message for a scenario not run');
+		} finally {
+			tracker.dispose();
+		}
+	});
+
 	// XSpec's focus bug (4.1.2, reported): an outer scenario's x:variable using $x:context gives XPST0008 in the runner
 	// when an inner scenario is focused - by force-focus, which runs one scenario, or a focus attribute in the file
 	test('XSpec\'s focus bug: each scenario, and the whole file, run without the focus that XSpec can\'t run', async () => {
@@ -213,6 +285,49 @@ suite('XSpec: running tests', function () {
 		const debugged = await run(focused, (file) => file, true);
 		assert.deepEqual(debugged.outcomes, passed, debugged.output);
 		assert.include(debugged.output, 'the file\'s focused scenarios couldn\'t be run');
+	});
+
+	test('the XSpec tests of xslt-resources/schematron/expand-text.xsl - in test/xspec - pass', async () => {
+		const xspecFile = path.resolve(__dirname, '../../../test/xspec/expand-text.xspec');
+		const xspec = XSpecTestController.instance!;
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecFile));
+		const fileItem = xspec.testController.items.get(document.uri.toString())!;
+		const outcomes = new Map<string, string>();
+		xspec.createRun = () => recordingRun(outcomes, new Map());
+		await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		const failed = [...outcomes].filter(([, outcome]) => outcome !== 'passed');
+		assert.deepEqual(failed, []);
+		assert.strictEqual(outcomes.size, 14, JSON.stringify([...outcomes]));
+	});
+
+	test('a Schematron\'s XSpec: text value templates in messages, with xsl:expand-text - rewritten as sch:value-of, with the XSLT.schematron.allowExpandText setting', async () => {
+		fs.writeFileSync(path.join(dir, 'tvt.sch'), `<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" queryBinding="xslt3" xsl:expand-text="yes">
+  <sch:pattern><sch:rule context="doc"><sch:assert id="has-title" test="title">the {name()} has no title</sch:assert></sch:rule></sch:pattern>
+</sch:schema>`);
+		const schXspec = path.join(dir, 'tvt.xspec');
+		fs.writeFileSync(schXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" schematron="tvt.sch">
+  <x:scenario label="untitled"><x:context><doc/></x:context><x:expect-assert id="has-title" label="message">the doc has no title</x:expect-assert></x:scenario>
+</x:description>`);
+		const xspec = XSpecTestController.instance!;
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(schXspec));
+		const fileItem = xspec.testController.items.get(document.uri.toString())!;
+		const run = async () => {
+			const outcomes = new Map<string, string>();
+			xspec.createRun = () => recordingRun(outcomes, new Map());
+			await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			return outcomes.get('message assert has-title text: the doc has no title');
+		};
+		// without the setting, the message is as written: {name()}
+		assert.strictEqual(await run(), 'failed');
+		const setting = vscode.workspace.getConfiguration('XSLT.schematron');
+		try {
+			await setting.update('allowExpandText', true, vscode.ConfigurationTarget.Global);
+			assert.strictEqual(await run(), 'passed');
+		} finally {
+			await setting.update('allowExpandText', undefined, vscode.ConfigurationTarget.Global);
+		}
 	});
 
 	test('a Schematron\'s XSpec: compiled with SchXslt2, and its expectations, labelled as XSpec labels them', async () => {
@@ -566,6 +681,44 @@ suite('XSpec: running tests', function () {
 		xspec.createRun = undefined;
 		assert.strictEqual(outcomes.get('is nine'), 'passed', JSON.stringify([...outcomes]));
 		assert.strictEqual(outcomes.get('a box'), 'passed');
+	});
+
+	test('coverage (or debugging): the template rules each node of a context file was processed by - not an inline context\'s', async () => {
+		fs.writeFileSync(path.join(dir, 'nr.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:template match="item"><done/></xsl:template>
+</xsl:stylesheet>`);
+		fs.writeFileSync(path.join(dir, 'nr-data.xml'), `<items>\n  <item n="1"/>\n</items>`);
+		const nrXspec = path.join(dir, 'nr.xspec');
+		fs.writeFileSync(nrXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="nr.xsl">
+  <x:scenario label="from file"><x:context href="nr-data.xml" select="/items/item"/><x:expect label="done from file"><done/></x:expect></x:scenario>
+  <x:scenario label="inline"><x:context><item n="2"/></x:context><x:expect label="done inline"><done/></x:expect></x:scenario>
+</x:description>`);
+		XsltNodeRules.clear();
+		const received = new Promise<void>((resolve) => {
+			const listener = vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
+				if (event.event === 'xsltNodeRules') {
+					listener.dispose();
+					setTimeout(resolve, 100);
+				}
+			});
+		});
+		const xspec = XSpecTestController.instance!;
+		const uri = vscode.Uri.file(nrXspec);
+		await vscode.workspace.openTextDocument(uri);
+		const outcomes = new Map<string, string>();
+		xspec.createRun = () => recordingRun(outcomes, new Map(), []);
+		await xspec.coverageProfile.runHandler(new vscode.TestRunRequest([xspec.testController.items.get(uri.toString())!]), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		await received;
+		assert.strictEqual(outcomes.get('done from file'), 'passed', JSON.stringify([...outcomes]));
+		const data = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'nr-data.xml')));
+		const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', data.uri, data.positionAt(data.getText().indexOf('<item ') + 1));
+		assert.include(hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n'), 'match="item"');
+		// the inline context, and the result, are constructed - so have the location of the instructions that did: not shown
+		const stylesheet = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'nr.xsl')));
+		const lenses = await vscode.commands.executeCommand<vscode.CodeLens[]>('vscode.executeCodeLensProvider', stylesheet.uri);
+		assert.deepEqual(lenses.filter((l) => l.command?.command === 'xslt-xpath.showProcessedNodes').map((l) => l.command!.title), ['processed 1 node in nr-data.xml']);
+		XsltNodeRules.clear();
 	});
 
 	test('coverage: the lines of the stylesheet tested that the tests ran, and its functions and templates', async () => {

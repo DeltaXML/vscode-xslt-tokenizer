@@ -42,6 +42,7 @@ export interface XSpecDeclaration {
 
 export class XSpecScenario {
 	public static readonly command = 'xslt-xpath.createXSpecScenario';
+	private static readonly xsNamespace = 'http://www.w3.org/2001/XMLSchema';
 	public static readonly fileCommand = 'xslt-xpath.createXSpecFile';
 
 	// the cursor is in the start tag of the stylesheet's or package's outermost element
@@ -171,7 +172,8 @@ export class XSpecScenario {
 		}
 		const beside = vscode.Uri.file(path.join(path.dirname(stylesheetPath), path.basename(stylesheetPath, path.extname(stylesheetPath)) + '.xspec'));
 		if (!fs.existsSync(beside.fsPath)) {
-			fs.writeFileSync(beside.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n<x:description xmlns:x="${XSpecTests.namespace}"\n               stylesheet="${path.basename(stylesheetPath)}">\n</x:description>\n`);
+			// with xs, as test values are often typed
+			fs.writeFileSync(beside.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n<x:description xmlns:x="${XSpecTests.namespace}"\n               xmlns:xs="${XSpecScenario.xsNamespace}"\n               stylesheet="${path.basename(stylesheetPath)}">\n</x:description>\n`);
 		}
 		return beside;
 	}
@@ -341,7 +343,9 @@ export class XSpecScenario {
 				}
 				packageForm = picked.form;
 			}
-			const xmlns = [...used].map(([p, uri]) => `\n               xmlns:${p}="${uri}"`).join('');
+			// with xs, as test values are often typed - first, unless the declarations use it already
+			const withXs = used.has('xs') ? used : new Map([['xs', XSpecScenario.xsNamespace], ...used]);
+			const xmlns = [...withXs].map(([p, uri]) => `\n               xmlns:${p}="${uri}"`).join('');
 			const attribute = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 			let content: string;
 			if (packageDeclaration && packageForm === 'helper') {
@@ -416,6 +420,13 @@ export class XSpecScenario {
 
 	// the name of an x:param, at the offset, of an x:call of a template it inherits from an enclosing scenario's x:call
 	public static inheritedParamAt(text: string, offset: number, prefix: string): { template: string, param: string } | undefined {
+		const param = XSpecScenario.templateParamAt(text, offset, prefix);
+		return param?.inherited ? { template: param.template, param: param.param } : undefined;
+	}
+
+	// the name of an x:param, at the offset, of an x:call of a template - its own, or one it inherits from an enclosing
+	// scenario's x:call - with the offset of the name
+	public static templateParamAt(text: string, offset: number, prefix: string): { template: string, param: string, inherited: boolean, nameStart: number } | undefined {
 		const x = prefix ? prefix + ':' : '';
 		const tagStart = text.lastIndexOf('<', offset);
 		if (tagStart < 0 || !text.startsWith(`<${x}param`, tagStart) || !/[\s/>]/.test(text.charAt(tagStart + x.length + 6))) {
@@ -428,7 +439,7 @@ export class XSpecScenario {
 		}
 		const parent = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart).pop();
 		const target = parent?.name === `${x}call` ? XSpecScenario.callTarget(text, parent.offset, prefix) : undefined;
-		return target?.kind === 'template' && target.from !== undefined ? { template: target.name, param: name.trim() } : undefined;
+		return target?.kind === 'template' ? { template: target.name, param: name.trim(), inherited: target.from !== undefined, nameStart: nameStart + name.indexOf(name.trim()) } : undefined;
 	}
 
 	// in an XSpec file with no outermost element yet, after '<': x:description, with the XSpec and XML Schema namespaces,

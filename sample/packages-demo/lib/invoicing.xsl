@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    An XSLT 3.0 package, used by invoice-report.xsl and starter.xsl. They find it by its name and version, not its
-    path: the extension finds every xsl:package in the workspace, and passes the ones a stylesheet uses to Saxon.
+     An XSLT 3.0 package, used by invoice-report.xsl and starter.xsl. They find it by its name and version, not its
+     path: the extension finds every xsl:package in the workspace, and passes the ones a stylesheet uses to Saxon.
 
-    Things to try:
-    - code lenses (editor.codeLens): inv:tax-rate, inv:header and inv:format-amount are overridden in invoice-report.xsl
-    - on the name of inv:tax-rate, Go to Implementations (Cmd+F12) - or Find All References - for its overrides
-    - delete the xsl:mode for inv:render: in a package, each mode used must be declared (XTSE3085), with quick fixes
-    - change the visibility of inv:format-amount to "final": invoice-report.xsl can't override it now (XTSE3060)
+     Things to try:
+     - code lenses (editor.codeLens): inv:tax-rate, inv:header and inv:format-amount are overridden in invoice-report.xsl
+     - on the name of inv:tax-rate, Go to Implementations (Cmd+F12) - or Find All References - for its overrides
+     - delete the xsl:mode for inv:render: in a package, each mode used must be declared (XTSE3085), with quick fixes
+     - change the visibility of inv:format-amount to "final": invoice-report.xsl can't override it now (XTSE3060)
 -->
 <xsl:package name="http://example.com/invoicing" package-version="1.2" version="3.0"
-    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-    xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    xmlns:inv="http://example.com/invoicing"
-    exclude-result-prefixes="#all" expand-text="yes">
+             xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+             xmlns:xs="http://www.w3.org/2001/XMLSchema"
+             xmlns:f="namespace-uri"
+             xmlns:inv="http://example.com/invoicing"
+             exclude-result-prefixes="#all" expand-text="yes">
 
     <xsl:note use-when="false()" format="xdoc-md">
         Renders invoices as HTML tables, with their totals and tax.
@@ -102,6 +103,6 @@
 
     <xsl:template match="line" mode="inv:render">
         <tr><td>{@description}</td><td>{@quantity}</td><td>{inv:format-amount(inv:line-total(.))}</td></tr>
-    </xsl:template>
+    </xsl:template> 
 
 </xsl:package>

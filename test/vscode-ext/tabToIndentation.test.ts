@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { assert } from 'chai';
 
 const head = '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">';
@@ -51,6 +52,25 @@ suite('Tab: an empty line indented for its context', () => {
 		assert.deepEqual(await tab(['<items>', '    <item n="1">', '        <name/>', '|', '    </item>', '</items>'], 'xml', 4), { line: '"        "', cursor: 8 });
 	});
 
+	test('Schematron: an empty line in a rule - and format on type is on for Schematron and DCP files, as for XSLT, XML and XSpec', async () => {
+		const sch = '<schema xmlns="http://purl.oclc.org/dsdl/schematron">';
+		assert.deepEqual(await tab([sch, '  <pattern>', '    <rule context="a">', '|', '    </rule>', '  </pattern>', '</schema>'], 'sch'), { line: '"      "', cursor: 6 });
+		['xslt', 'xml', 'xspec', 'sch', 'dcp'].forEach((languageId) =>
+			assert.isTrue(vscode.workspace.getConfiguration('editor', { languageId }).get('formatOnType'), languageId));
+		// Enter in a Schematron file: the new line indented by the extension's formatter
+		// a file, not an untitled document: one left open, unsaved, would get a Save As dialog when Schematron saves its files
+		const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tab-sch-'));
+		const file = path.join(folder, 'rules.sch');
+		fs.writeFileSync(file, [sch, '  <pattern>', '    <rule context="a">', '', '    </rule>', '  </pattern>', '</schema>'].join('\n'));
+		try {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+			const edits = await vscode.commands.executeCommand<vscode.TextEdit[]>('vscode.executeFormatOnTypeProvider', document.uri, new vscode.Position(3, 0), '\n', { tabSize: 2, insertSpaces: true });
+			assert.deepEqual(edits?.map((e) => e.newText), ['      ']);
+		} finally {
+			fs.rmSync(folder, { recursive: true, force: true });
+		}
+	});
+
 	test('one undo step', async () => {
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
 		const document = await vscode.workspace.openTextDocument({ content: [head, '  <xsl:template match="/">', '', '  </xsl:template>', '</xsl:stylesheet>'].join('\n'), language: 'xslt' });
@@ -69,7 +89,7 @@ suite('Tab: an empty line indented for its context', () => {
 		const contributes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8')).contributes;
 		const binding = contributes.keybindings.find((k: { command: string }) => k.command === 'xslt-xpath.tabToIndentation');
 		assert.strictEqual(binding?.key, 'tab');
-		['!suggestWidgetVisible', '!inSnippetMode', '!inlineSuggestionVisible', '!editorHasSelection', '!editorTabMovesFocus', '!editorReadonly', 'editorLangId =~ /^(xslt|xml|xspec|bpmn)$/']
+		['!suggestWidgetVisible', '!inSnippetMode', '!inlineSuggestionVisible', '!editorHasSelection', '!editorTabMovesFocus', '!editorReadonly', 'editorLangId =~ /^(xslt|xml|xspec|sch|dcp|bpmn)$/']
 			.forEach((condition) => assert.include(binding.when, condition));
 	});
 });

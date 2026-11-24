@@ -1,7 +1,8 @@
 import { XSpecReferences } from './xspecReferences';
 import * as vscode from 'vscode';
 import { XSLTnamespaces, FunctionData } from './functionData';
-import { XSLTConfiguration } from './languageConfigurations';
+import { XSLTConfiguration, SchConfiguration, DCPConfiguration } from './languageConfigurations';
+import { SchIncludes } from './schIncludes';
 import { XslLexerLight } from './xslLexerLight';
 import { SchemaQuery } from './schemaQuery';
 import { LexPosition, BaseToken, CharLevelState, Data, ErrorType, TokenLevelState, XPathLexer } from './xpLexer';
@@ -21,6 +22,7 @@ import { ImportIndex } from './importIndex';
 import { XdocReferences } from './xdocReferences';
 import { PackageScope } from './packageScope';
 import { PackageNavigationProvider } from './packageNavigation';
+import { DcpParameters } from './dcpParameters';
 
 // an xsl:function or named xsl:template, for a rename of it or of one of its parameters - with, for a function, the
 // numbers of arguments it can be called with
@@ -208,7 +210,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			return enumValue.literals.map((literal) => literal.location);
 		}
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
-		const langConfig = XSLTConfiguration.configuration;
+		// a DCP file: its parameters, referred to by parameterRef, if and unless, and as $name in its XPath
+		const isDCP = document.languageId === 'dcp';
+		const langConfig = isDCP ? DCPConfiguration.configuration : XSLTConfiguration.configuration;
 		// TODO: first check if position is on a definition already
 		const dProvider = new XsltDefinitionProvider(langConfig);
 		this.definitionData = await dProvider.seekDefinition(document, position, token);
@@ -219,7 +223,12 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			if (instruction && eid) {
 				// find all references to this instruction
 				let refTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, document, eid.allTokens, eid.globalInstructionData, eid.allImportedGlobals);
-				const refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
+				let refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
+				if (isDCP) {
+					// not a $name in an XPath evaluated on the input documents, where it isn't the parameter (see DcpParameters)
+					const text = document.getText();
+					refLocations = refLocations.filter((location) => !DcpParameters.isInInputXPath(text, document.offsetAt(location.range.start)));
+				}
 				locations = refLocations;
 				locations.push(this.definition);
 				// XSLT 4.0: references in documentation notes, e.g. @see my:area#2
@@ -240,7 +249,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				// for a function or named template: its calls in the other stylesheets that use it
 				const otherModules = declaration && declarationDocument && !declaration.isParam ?
 					(await XSLTReferenceProvider.usingModules(declarationDocument, declaration)).filter((file) => !eid.accumulatedHrefs.includes(file)) : [];
-				const searchedModules = eid.accumulatedHrefs.concat(otherModules);
+				// not, for a DCP file, the XSLT filters it loads: its parameters aren't theirs
+				const searchedModules = isDCP ? [] : eid.accumulatedHrefs.concat(otherModules);
 				// a parameter of a template, e.g. f:width, isn't a global with the bindings of its module: they're found for
 				// it, as for a global, so that a prefixed name is found with another prefix, e.g. in an xsl:with-param
 				const seekInstruction = instruction.prefixBindings || !instruction.name.includes(':') ? instruction :
@@ -273,12 +283,50 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					const kind = declaration.elementName === 'xsl:function' ? 'function' : 'template';
 					locations = locations.concat(await XSpecReferences.find(kind, declaration.expandedName, modules));
 				}
+				// for a function: its calls in the Schematron files that use its module - the schemas that include or import
+				// it, or declare it, and the files they bring in, with the prefixes in scope where they're included
+				if (declaration && declarationDocument && !declaration.isParam && declaration.elementName === 'xsl:function') {
+					const modules = XSpecReferences.modulesOf(declaration.file, await ImportIndex.moduleTrees(declarationDocument));
+					const schLocations = await XSLTReferenceProvider.schematronReferences(seekInstruction, modules);
+					locations = locations.concat(schLocations.filter((x) => !locations.some((l) => l.uri.toString() === x.uri.toString() && l.range.isEqual(x.range))));
+				}
+				// for a mode: its uses in the XSpec files that test it, e.g. x:context mode="m:index"
+				const isMode = [GlobalInstructionType.Mode, GlobalInstructionType.ModeInstruction, GlobalInstructionType.ModeTemplate].includes(instruction.type);
+				if (isMode && !instruction.name.startsWith('#') && this.definition.uri.scheme === 'file') {
+					const modeDocument = await vscode.workspace.openTextDocument(this.definition.uri);
+					const modules = XSpecReferences.modulesOf(modeDocument.fileName, await ImportIndex.moduleTrees(modeDocument));
+					const expandedName = ModulePrefixes.expandedName(instruction.name, XslLexerLight.prefixBindingsOf(modeDocument.getText()));
+					const xspecLocations = await XSpecReferences.find('mode', expandedName, modules);
+					locations = locations.concat(xspecLocations.filter((x) => !locations.some((l) => l.uri.toString() === x.uri.toString() && l.range.isEqual(x.range))));
+				}
 			}
 		}
 		return new Promise(resolve => {
 			this.refLocations = locations;
 			resolve(locations);
 		});
+	}
+
+	// the references to the declaration in the Schematron files that use one of the modules (see SchIncludes.usersOf):
+	// each lexed as Schematron, with its sch:ns prefixes - and those of the schemas that include it
+	private static async schematronReferences(instruction: GlobalInstructionData, modules: string[]): Promise<vscode.Location[]> {
+		await SchIncludes.instance.whenBuilt();
+		const locations: vscode.Location[] = [];
+		for (const file of SchIncludes.instance.usersOf(modules)) {
+			try {
+				const schDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+				const lexer = new XslLexer(SchConfiguration.configuration);
+				const tokens = lexer.analyse(schDocument.getText());
+				const bindings = SchIncludes.withContext(schDocument, lexer.prefixBindings);
+				const [inSchema] = ModulePrefixes.inModule([instruction], bindings);
+				const globals = ModulePrefixes.inModule(lexer.globalInstructionData, bindings);
+				locations.push(...XSLTReferenceProvider.calculateReferences(inSchema, SchConfiguration.configuration, DocumentTypes.SCH, schDocument, tokens, globals, [])
+					.map((token) => XsltTokenDefinitions.createLocationFromToken(token, schDocument)));
+			} catch (error) {
+				console.error(error);
+			}
+		}
+		return locations;
 	}
 
 	// XSLT 4.0: the references in the documentation notes of a module (noteDocument) to the declaration at the definition,
@@ -370,6 +418,13 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						}
 					});
 				}
+			}
+			// the x:param names in the XSpec files that call the template, e.g. <x:call template="t"><x:param name="p"/>
+			if (declarationName !== undefined && definition.uri.scheme === 'file') {
+				const modules = XSpecReferences.modulesOf(declarationDocument.fileName, await ImportIndex.moduleTrees(declarationDocument));
+				const xspecLocations = await XSpecReferences.findTemplateParams(ModulePrefixes.expandedName(declarationName.trim(), declarationBindings),
+					ModulePrefixes.expandedName(paramName, declarationBindings), modules);
+				locations.push(...xspecLocations);
 			}
 			return locations;
 		}
@@ -907,6 +962,11 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								if (unResolvedToken !== null) {
 									unresolvedXsltVariableReferences.push(unResolvedToken);
 								}
+								// DCP: parameterRef, if and unless name a parameter - each is global
+								if (docType === DocumentTypes.DCP && (seekInstruction.type === GlobalInstructionType.Variable || seekInstruction.type === GlobalInstructionType.Parameter) &&
+									seekInstruction.name === variableName.trim()) {
+									referenceTokens.push(token);
+								}
 								break;
 							case AttributeType.InstructionName:
 								tagIdentifierName = variableName;
@@ -1114,6 +1174,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 										}
 									}
 									if (deleteCount > 0) {
+										// the branches it ends, e.g. the 'return' in if (1) then let $v := 1 return $v else $v: the
+										// variables in scope are those before the outermost
+										inScopeXPathVariablesList = xpathStack[xpathStack.length - deleteCount].variables;
 										xpathStack.splice(xpathStack.length - deleteCount);
 									}
 								}
@@ -1147,8 +1210,14 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						const sv = stackItem?.token.value;
 						const tokenIsComma = tv === ',';
 						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies');
-						if (popStackLaterForComma && xpathStack.length > 1) {
-							stackItem = xpathStack[xpathStack.length - 2];
+						if (popStackLaterForComma) {
+							// the item below the 'return', 'else' and 'satisfies' items the comma ends (see the ',' below), e.g.
+							// a map constructor whose next key follows
+							let below = xpathStack.length - 1;
+							while (below > -1 && ['return', 'else', 'satisfies'].includes(xpathStack[below].token.value)) {
+								below--;
+							}
+							stackItem = below > -1 ? xpathStack[below] : undefined;
 						}
 						if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
 							if (tokenIsComma) {
@@ -1287,6 +1356,25 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								break;
 							case CharLevelState.sep:
 								if (token.value === ',') {
+									// the comma ends each 'return', 'else' and 'satisfies' it follows - several, for a cascade, e.g.
+									// let $v := 1 return if ($v) then 1 else 2, $v - so the variables in scope are those before the
+									// outermost, where the last $v is another variable
+									while (xpathStack.length > 0) {
+										const sv = xpathStack[xpathStack.length - 1].token.value;
+										if (!(sv === 'return' || sv === 'else' || sv === 'satisfies')) {
+											break;
+										}
+										const poppedData = xpathStack.pop()!;
+										inScopeXPathVariablesList = poppedData.variables;
+										if (sv === 'else') {
+											preXPathVariable = poppedData.preXPathVariable;
+										} else {
+											// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c.
+											preXPathVariable = false;
+										}
+									}
+									// then the item it's in: a function call's next argument, e.g. f(let $v := 1 return $v, 2), or the
+									// next variable of a for or let clause
 									if (xpathStack.length > 0) {
 										let xp = xpathStack[xpathStack.length - 1];
 										if (xp.functionArity !== undefined) {
@@ -1294,30 +1382,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 										}
 										if (xp.isRangeVar) {
 											preXPathVariable = xp.preXPathVariable;
-										}
-										let nonBracketedThen = -1;
-										for (let i = xpathStack.length - 1; i > -1; i--) {
-											const xpathItem = xpathStack[i].token;
-											const val = xpathItem.value;
-											if (!(val === 'return' || val === 'else' || val === 'satisfies' || val === 'then')) {
-												break;
-											} else if (val === 'then') {
-												nonBracketedThen = i;
-											}
-										}
-										const sv = xp.token.value;
-										if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
-											let poppedData = xpathStack.pop();
-											if (poppedData) {
-												inScopeXPathVariablesList = poppedData.variables;
-												if (sv === 'else') {
-													preXPathVariable = poppedData.preXPathVariable;
-												} else {
-													// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c.
-													preXPathVariable = false;
-												}
-												xpathVariableCurrentlyBeingDefined = false;
-											}
 										}
 									}
 									xpathVariableCurrentlyBeingDefined = false;

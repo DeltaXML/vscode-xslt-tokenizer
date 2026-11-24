@@ -9,6 +9,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ImportIndex } from './importIndex';
+import { XsltSymbolProvider } from './xsltSymbolProvider';
+import { DiskTextDocument } from './mcp/diskTextDocument';
 import { ConversionAnalysis, ConversionItem, ConversionSection, PackageConversion, Place } from './packageConversion';
 
 /**
@@ -97,7 +99,30 @@ export class PackageAnalysisView {
 			vscode.window.showInformationMessage(`${path.basename(file)}: ${analysis}`);
 			return undefined;
 		}
+		// the modules it reads - in every workspace folder - are checked first: errors in them are blockers
+		const errors = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Checking the modules of ${path.basename(file)} for errors`, cancellable: true }, async (progress, token) => {
+			let last = 0;
+			return PackageConversion.baseline(analysis, PackageAnalysisView.errorsOf, (checked, total) => {
+				progress.report({ increment: total > 0 ? 100 * (checked - last) / total : 0, message: `${checked} of ${total}` });
+				last = checked;
+			}, () => token.isCancellationRequested);
+		});
+		if (!errors) {
+			return undefined;
+		}
+		analysis.items.push(...errors);
+		analysis.plan.preventing.push(...errors);
 		return analysis;
+	}
+
+	// a module's errors, as the linter has them now - the file as it is on disk, unless there are unsaved edits
+	private static async errorsOf(file: string): Promise<{ line: number, message: string }[]> {
+		const provider = XsltSymbolProvider.instanceForXSLT;
+		if (!provider || !fs.existsSync(file)) {
+			return [];
+		}
+		const document = await DiskTextDocument.current(vscode.Uri.file(file));
+		return (await provider.diagnosticsFor(document)).filter((d) => d.severity === vscode.DiagnosticSeverity.Error).map((d) => ({ line: d.range.start.line, message: d.message }));
 	}
 
 	private static async showReport(analysis: ConversionAnalysis) {
@@ -119,11 +144,14 @@ export class PackageAnalysisView {
 
 	private static readonly sections: [ConversionSection, string, string][] = [
 		['blockers', 'To rework first', 'These would fail in a package, so they must be changed before converting.'],
-		['visibility', 'Made public', 'A package\'s components are private unless made public, e.g. with xsl:expose.'],
+		['library', 'What is converted', 'The module is a part of a larger library.'],
+		['visibility', 'Made public', 'A package\'s components are private unless made public, e.g. with xsl:expose. These are made public because a stylesheet in the workspace uses them - after converting, narrow any that shouldn\'t be part of the package\'s API: a use that then fails is reported as private in the package, with a fix that makes it public again.'],
 		['override', 'Overrides', 'A stylesheet\'s declaration with the name of the library\'s must be in xsl:override.'],
 		['abstract', 'Abstract components', 'The library uses these, but only the stylesheets declare them.'],
+		['included', 'Modules included in the package', 'The library uses what these shared modules declare, so the package includes them, rather than each stylesheet having a copy.'],
 		['modes', 'Modes and template rules', ''],
-		['not-shared', 'Not exposed by a package', 'These apply only to a package\'s own code, so the stylesheets need their own.']
+		['not-shared', 'Not exposed by a package', 'These apply only to a package\'s own code, so the stylesheets need their own.'],
+		['tests', 'XSpec tests', 'XSpec imports the stylesheet it tests into its test runner, which a package, or a stylesheet that uses one, can\'t be - so these tests need changes after converting.']
 	];
 
 	// the report: a summary, then the items by section - each with a link to its first place, and its other places in a
@@ -152,6 +180,7 @@ export class PackageAnalysisView {
 			`- **Package**: \`${analysis.packageName}\`, version ${analysis.packageVersion}`,
 			`- **Library**: ${files(analysis.libraryModules)}`,
 			`- **Stylesheets using it**: ${files(analysis.topLevels)}`, '',
+			`Only the stylesheets in the workspace are converted. Any other stylesheet that imports or includes the library - e.g. in another repository - must be changed to use the package with \`xsl:use-package\`: once the library is an \`xsl:package\`, importing or including it is an error (XTSE0165).`, '',
 			verdict, ''
 		];
 		if (analysis.plan.preventing.length === 0) {

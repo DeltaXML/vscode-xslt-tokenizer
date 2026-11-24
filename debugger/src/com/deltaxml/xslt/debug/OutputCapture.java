@@ -69,9 +69,24 @@ final class OutputCapture {
         // how many runs and locations have been sent
         int sentRuns;
         int sentLocations;
+        // the input each part was written for - the context item, if it was a node (see Debugger): runs of [offset, input
+        // id], -1 for none, and the context items, by id. Each input is sent as [file, line, column, node], the file and
+        // node as indexes into tables of their names, sent whole when they change
+        private int[] inputRuns = new int[64];
+        private int inputRunLength;
+        private final List<Object> inputs = new ArrayList<Object>();
+        private final Map<Object, Integer> inputIds = new java.util.HashMap<Object, Integer>();
+        int sentInputRuns;
+        int sentInputs;
+        private final List<String> inputFiles = new ArrayList<String>();
+        private final List<String> inputNodes = new ArrayList<String>();
+        private int sentInputFiles;
+        private int sentInputNodes;
         // the location of the event being written, and whether it's text - null: as for the text before
         Location current;
         boolean currentIsText;
+        // the context item it's written with, if it's a node - null if not
+        Object currentContext;
 
         Output(int id, String name, String uri, String method) {
             this.id = id;
@@ -95,6 +110,16 @@ final class OutputCapture {
                     }
                     runs[runLength++] = text.length();
                     runs[runLength++] = locationId;
+                }
+                int inputId = currentContext == null ? -1 : inputId(currentContext);
+                if (inputId >= 0 || inputRunLength > 0) {
+                    if (inputRunLength == 0 || inputRuns[inputRunLength - 1] != inputId) {
+                        if (inputRunLength == inputRuns.length) {
+                            inputRuns = java.util.Arrays.copyOf(inputRuns, inputRuns.length * 2);
+                        }
+                        inputRuns[inputRunLength++] = text.length();
+                        inputRuns[inputRunLength++] = inputId;
+                    }
                 }
             }
             text.append(chars, offset, Math.min(length, room));
@@ -127,6 +152,62 @@ final class OutputCapture {
                 ids.put(location, locationId);
             }
             return locationId;
+        }
+
+        private int inputId(Object context) {
+            Integer inputId = inputIds.get(context);
+            if (inputId == null) {
+                inputId = inputs.size();
+                inputs.add(context);
+                inputIds.put(context, inputId);
+            }
+            return inputId;
+        }
+
+        // the input runs not yet sent, as [offset, input id, ...]
+        synchronized List<Object> unsentInputRuns() {
+            List<Object> result = new ArrayList<Object>();
+            for (int i = sentInputRuns; i < inputRunLength; i++) {
+                result.add(inputRuns[i]);
+            }
+            sentInputRuns = inputRunLength;
+            return result;
+        }
+
+        // the inputs not yet sent, as [file, line, column, node, ...] - -1 for one that isn't in an input file - with the
+        // tables of files and nodes, if they've changed
+        synchronized void addUnsentInputs(Json.Obj changes, LocationResolver resolver) {
+            List<Object> flat = new ArrayList<Object>();
+            for (int i = sentInputs; i < inputs.size(); i++) {
+                Map<String, Object> input = resolver == null ? null : resolver.inputOf(inputs.get(i));
+                if (input == null) {
+                    flat.add(-1);
+                    flat.add(0);
+                    flat.add(0);
+                    flat.add(0);
+                    continue;
+                }
+                flat.add(index(inputFiles, (String) input.get("path")));
+                flat.add(input.get("line"));
+                flat.add(input.get("column"));
+                flat.add(index(inputNodes, (String) input.get("node")));
+            }
+            sentInputs = inputs.size();
+            changes.with("inputs", flat).with("inputRuns", unsentInputRuns());
+            if (inputFiles.size() > sentInputFiles || inputNodes.size() > sentInputNodes) {
+                changes.with("inputFiles", new ArrayList<Object>(inputFiles)).with("inputNodes", new ArrayList<Object>(inputNodes));
+                sentInputFiles = inputFiles.size();
+                sentInputNodes = inputNodes.size();
+            }
+        }
+
+        private static int index(List<String> names, String name) {
+            int index = names.indexOf(name);
+            if (index < 0) {
+                index = names.size();
+                names.add(name);
+            }
+            return index;
         }
 
         // the runs not yet sent, as [offset, location id, ...]
@@ -165,7 +246,15 @@ final class OutputCapture {
 
         // the location of the instruction being executed - null if there's none
         Location currentInstruction();
+
+        // the context item of the instruction being executed, if it's a node - null if not - or for a start tag (its
+        // location), the context item its instruction was entered with
+        Object currentContext(Location startTag);
+
+        // where the context item was in an input file: {path, line, column, node} - null if it wasn't in one
+        Map<String, Object> inputOf(Object context);
     }
+
 
     private LocationResolver resolver;
     // the XML result whose copy's serializer is being created
@@ -305,6 +394,7 @@ final class OutputCapture {
                         .with("truncated", output.isTruncated());
                 if (output.mapped) {
                     changes.with("locations", output.unsentLocations(resolver)).with("runs", output.unsentRuns());
+                    output.addUnsentInputs(changes, resolver);
                 }
                 changed.add(changes);
                 output.sent = length;
@@ -362,17 +452,26 @@ final class OutputCapture {
         // an event with no location, e.g. the indenter's whitespace, is part of the text before - and a node copied from
         // a source document, which has its location there, is the instruction's that copied it, e.g. xsl:copy-of
         private void at(Location location, boolean isText) {
+            at(location, isText, false);
+        }
+
+        // and for a start tag: its context item is its instruction's (see LocationResolver.currentContext) - its
+        // attributes' are the same
+        private void at(Location location, boolean isText, boolean isStartTag) {
             if (location != null && location.getLineNumber() > 0) {
                 Location instruction = resolver == null || resolver.isStylesheetLocation(location) ? null : resolver.currentInstruction();
                 output.current = instruction != null ? instruction : location;
                 output.currentIsText = isText && instruction == null;
+                if (attributes == null) {
+                    output.currentContext = resolver == null ? null : resolver.currentContext(isStartTag && instruction == null ? location : null);
+                }
             }
         }
 
         @Override
         public void startElement(net.sf.saxon.om.NodeName elemName, net.sf.saxon.type.SchemaType type, net.sf.saxon.om.AttributeMap attributes,
                 net.sf.saxon.om.NamespaceMap namespaces, Location location, int properties) throws XPathException {
-            at(location, false);
+            at(location, false, true);
             elements.push(location == null ? net.sf.saxon.expr.parser.Loc.NONE : location);
             this.attributes = attributes;
             try {

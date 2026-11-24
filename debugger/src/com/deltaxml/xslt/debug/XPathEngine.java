@@ -631,7 +631,40 @@ final class XPathEngine {
             if (stylesheetFunctions != null) {
                 addFunctionLibrary(stylesheetFunctions);
             }
+            if (SANDBOXED.get()) {
+                setFunctionLibrary(asHE((FunctionLibraryList) getFunctionLibrary()));
+            }
         }
+    }
+
+    /**
+     * An assistant's expression (the extension's MCP tool debug_evaluate) unless the user allows more: compiled with the
+     * function libraries Saxon-HE has - the standard functions and the stylesheet's own - whatever the edition running
+     * the stylesheet. Not Saxon-PE/EE's: Java methods by reflection, the EXPath file module, saxon: functions, or those
+     * loaded on demand. The stylesheet's own functions still run as they are, with whatever they call
+     */
+    static final ThreadLocal<Boolean> SANDBOXED = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    // standard functions that compile and run other code - a stylesheet or query in this configuration, where extension
+    // functions are allowed - or call a function by a name computed at run time: not for a sandboxed expression
+    private static final java.util.regex.Pattern RUNS_OTHER_CODE = java.util.regex.Pattern.compile("(?<![\\w.-])(transform|load-xquery-module|function-lookup)\\s*(#|\\()");
+
+    // why a sandboxed expression isn't evaluated, or null if it may be
+    static String sandboxProblem(String xpath) {
+        java.util.regex.Matcher m = RUNS_OTHER_CODE.matcher(xpath);
+        return m.find() ? m.group(1) + "() isn't allowed in an assistant's expression: it can run other code" : null;
+    }
+
+    private static FunctionLibraryList asHE(FunctionLibraryList list) {
+        FunctionLibraryList result = new FunctionLibraryList();
+        for (net.sf.saxon.functions.FunctionLibrary library : list.getLibraryList()) {
+            String name = library.getClass().getName();
+            if (name.startsWith("com.saxonica.") || name.endsWith(".OnDemandFunctionSet")) {
+                continue;
+            }
+            result.addFunctionLibrary(library instanceof FunctionLibraryList ? asHE((FunctionLibraryList) library) : library);
+        }
+        return result;
     }
 
     /** XPathExpression's constructor and setStackFrameMap are protected */

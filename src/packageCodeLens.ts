@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { ImportIndex } from './importIndex';
 import { PackageScope } from './packageScope';
 import { GlobalInstructionData } from './xslLexer';
+import { RecordTypes } from './recordTypes';
 
 /**
  * Code lenses for XSLT package overrides, as Java IDEs show overriding methods: on a declaration in an xsl:override,
@@ -41,6 +42,19 @@ export class PackageCodeLensProvider implements vscode.CodeLensProvider {
 			}));
 		}
 		if (ImportIndex.packageDeclaration(text)) {
+			// on the xsl:package: the modules that use it - checking them shows the uses a change breaks, e.g. narrowing a
+			// component's visibility, while they aren't open
+			const users = PackageScope.usersOf(document.fileName).length;
+			const root = RecordTypes.blankMarkup(text).search(RecordTypes.xsltPattern(/<xsl:package[\s>]/, text));
+			if (users > 0 && root >= 0) {
+				const line = document.positionAt(root).line;
+				lenses.push(new vscode.CodeLens(new vscode.Range(line, 0, line, 0), {
+					title: `used by ${users} ${users === 1 ? 'module' : 'modules'} - check for problems`,
+					tooltip: 'Check the modules that use this package, and those they import or include, for problems - e.g. uses of components that are no longer public',
+					command: 'xslt-xpath.checkPackageUsers',
+					arguments: [document.uri]
+				}));
+			}
 			for (const { component, overrides } of PackageScope.overridesOf(document.fileName)) {
 				if (overrides.length === 0) {
 					continue;

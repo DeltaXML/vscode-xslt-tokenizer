@@ -62,7 +62,8 @@ export class XPathDocumentChangeHandler {
 
 		//console.log('doTrigger', doTrigger);
 
-		if (doTrigger) {
+		// VS Code's setting for suggestions as a character is typed, for the document's language (see DocumentChangeHandler)
+		if (doTrigger && vscode.workspace.getConfiguration('editor', e.document).get<boolean>('suggestOnTriggerCharacters', true)) {
 			setTimeout(() => {
 				vscode.commands.executeCommand('editor.action.triggerSuggest');
 			}, 10);

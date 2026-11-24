@@ -1,4 +1,10 @@
+import { SchIncludes } from './schIncludes';
+import { SchematronContext } from './schematronContext';
 import { XSpecScenario } from './xspecScenario';
+import { XSpecLike } from './xspecLike';
+import { XSpecVariables } from './xspecVariables';
+import { XSpecHrefs } from './xspecHrefs';
+import { XSpecPackages } from './xspecPackages';
 import * as vscode from 'vscode';
 import { PackageScope } from './packageScope';
 import { XsltPackages } from './xsltPackages';
@@ -23,6 +29,11 @@ import { XdocReferences, XdocTarget } from './xdocReferences';
 import { RecordTypes } from './recordTypes';
 import { XPathQuery } from './xpathQuery';
 import { XSpecGlobalParams } from './xspecGlobalParams';
+import { XPathVersion } from './xpathVersion';
+import { XSpecNodeNames } from './xspecNodeNames';
+import { SchReferences } from './schReferences';
+import { XSpecSchematron } from './xspecSchematron';
+import { DcpParameters } from './dcpParameters';
 
 interface ImportedGlobals {
 	href: string;
@@ -50,6 +61,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	private docType: DocumentTypes;
 	private schemaData: SchemaData|undefined;
 	private languageConfig: LanguageConfiguration;
+
+	// an XPath document that's XPath 4.0 - not the query file set to XPath 3.1 (see XPathVersion)
+	private isXPath40Document(document: vscode.TextDocument) {
+		return this.docType === DocumentTypes.XPath && XPathVersion.isXPath40(document);
+	}
 
 	public constructor(xsltConfiguration: LanguageConfiguration) {
 		this.languageConfig = xsltConfiguration;
@@ -87,7 +103,27 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		}
 		// XSpec: an x:param of x:description, setting a global parameter of the stylesheet under test
 		if (this.docType === DocumentTypes.XSPEC) {
-			const param = XSpecGlobalParams.paramAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals);
+			// a variable the XSpec file declares - x:variable, or x:param of x:description or x:scenario: its own definition
+			// provider gives each declaration it may be (see XSpecVariables)
+			if (XSpecVariables.definition(document, position)) {
+				return undefined;
+			}
+			// x:like's label: the scenario with it
+			const scenarios = XSpecLike.definition(document, position);
+			if (scenarios) {
+				return scenarios[0];
+			}
+			// x:helper's package: its file
+			const helperPackage = XSpecPackages.definition(document, position);
+			if (helperPackage) {
+				return helperPackage;
+			}
+			// a file it refers to, e.g. x:import's
+			const href = XSpecHrefs.hrefAt(document, document.offsetAt(position));
+			if (href) {
+				return new vscode.Location(vscode.Uri.file(href.filePath), new vscode.Position(0, 0));
+			}
+			const param =XSpecGlobalParams.paramAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals);
 			const location = param ? XsltTokenDefinitions.createLocationFromInstruction(param, document) : undefined;
 			if (location) {
 				return location;
@@ -101,6 +137,20 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				const uri = template.href ? vscode.Uri.file(template.href) : document.uri;
 				return new vscode.Location(uri, XsltTokenDefinitions.createRangeFromTokenVals(paramToken.line, paramToken.startCharacter + 1, paramToken.length - 2));
 			}
+		}
+
+		// DCP: not in an XPath evaluated on the input documents, where a $name isn't a parameter (see DcpParameters)
+		if (this.docType === DocumentTypes.DCP && DcpParameters.isInInputXPath(document.getText(), document.offsetAt(position))) {
+			return undefined;
+		}
+		// DCP: a parameter's name in parameterRef, if or unless - its declaration
+		const dcpReference = this.docType === DocumentTypes.DCP ? XsltDefinitionProvider.dcpParameterReference(document, position, globalInstructionData) : undefined;
+		if (dcpReference) {
+			const dcpLocation = dcpReference.definitionLocation;
+			if (dcpLocation) {
+				dcpLocation.extractedImportData = extractedImportData;
+			}
+			return dcpLocation;
 		}
 
 		return new Promise((resolve, reject) => {
@@ -146,6 +196,18 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			return defnData;
 		}
+		// DCP: not in an XPath evaluated on the input documents, where a $name isn't a parameter (see DcpParameters)
+		if (this.docType === DocumentTypes.DCP && DcpParameters.isInInputXPath(document.getText(), document.offsetAt(position))) {
+			return undefined;
+		}
+		// DCP: a parameter's name in parameterRef, if or unless - as for $name in its XPath
+		const dcpReference = this.docType === DocumentTypes.DCP ? XsltDefinitionProvider.dcpParameterReference(document, position, globalInstructionData) : undefined;
+		if (dcpReference) {
+			if (dcpReference.definitionLocation) {
+				dcpReference.definitionLocation.extractedImportData = extractedImportData;
+			}
+			return dcpReference;
+		}
 		// uses, such as an xsl:apply-templates mode, are not declarations
 		let matchingGlobal = globalInstructionData.find(global => { 
 			return global.type !== GlobalInstructionType.AccumulatorUse && global.type !== GlobalInstructionType.Mode && global.token.line === position.line &&
@@ -171,6 +233,34 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			resolve(defnData);
 		});
+	}
+
+	// DCP: the parameter whose name is the value of a parameterRef, if or unless attribute at the position - its
+	// declaration, with the value as the reference (an XML token: its quotes are left out by Rename)
+	public static dcpParameterReference(document: vscode.TextDocument, position: vscode.Position, globals: GlobalInstructionData[]): DefinitionData | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset);
+		const tagEnd = text.indexOf('>', tagStart);
+		if (tagStart < 0 || tagEnd < offset) {
+			return undefined;
+		}
+		const tag = text.substring(tagStart, tagEnd);
+		for (const match of tag.matchAll(/\s(parameterRef|if|unless)\s*=\s*(["'])([^"']*)\2/g)) {
+			const valueStart = tagStart + match.index! + match[0].length - match[3].length - 1;
+			if (offset < valueStart || offset > valueStart + match[3].length) {
+				continue;
+			}
+			const name = match[3].trim();
+			const global = globals.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === name);
+			if (!global) {
+				return undefined;
+			}
+			const start = document.positionAt(valueStart - 1);
+			const token: BaseToken = { line: start.line, startCharacter: start.character, length: match[3].length + 2, value: match[2] + match[3] + match[2], tokenType: XsltTokenDefinitions.xsltStartTokenNumber };
+			return { definitionLocation: XsltTokenDefinitions.createLocationFromInstruction(global, document), inputSymbol: { token, type: global.type } };
+		}
+		return undefined;
 	}
 
 	private static nameCharRgx = new RegExp(/[A-Z]|[a-z]|_|-|:/);
@@ -282,7 +372,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		} else {
 			allTokens = this.xslLexer.analyse(document.getText());
 			globalInstructionData = this.xslLexer.globalInstructionData;
-			prefixBindings = this.xslLexer.prefixBindings;
+			prefixBindings = SchIncludes.withContext(document, this.xslLexer.prefixBindings);
 		}
 
 		const xsltPackages: XsltPackage[] = XsltPackages.all();
@@ -331,12 +421,25 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		if (xspecRoot) {
 			return xspecRoot;
 		}
+		// XSpec: in a Schematron test's expectation, the schema's assertion, report or rule ids, roles or contexts
+		const schematronIds = this.docType === DocumentTypes.XSPEC ? XSpecSchematron.completions(document, position) : undefined;
+		if (schematronIds) {
+			return new vscode.CompletionList(schematronIds, false);
+		}
+		// Schematron: in a reference, e.g. is-a or extends' rule, the ids it can refer to (see SchReferences)
+		const schIds = this.docType === DocumentTypes.SCH ? SchReferences.completions(document, position) : undefined;
+		if (schIds) {
+			return new vscode.CompletionList(schIds, false);
+		}
 		let result = await this.completionItems(document, position, token, context);
 		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix - or in an XSpec file, the items
 		// with its prefix for XSpec, e.g. t (see XsltTokenDiagnostics.xsltElementName)
+		// - or in a Schematron file, with its prefix for Schematron, or none (see SchSchema)
 		const isXSpec = this.docType === DocumentTypes.XSPEC;
-		const fromPrefix = isXSpec ? 'x' : 'xsl';
-		const prefix = isXSpec ? XsltDefinitionProvider.xspecPrefixOf(document) : this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
+		const isSch = this.docType === DocumentTypes.SCH;
+		const fromPrefix = isXSpec ? 'x' : isSch ? 'sch' : 'xsl';
+		const prefix = isXSpec ? XsltDefinitionProvider.xspecPrefixOf(document) : isSch ? XsltTokenDiagnostics.schPrefixOf(document.getText()) :
+			this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
 		if (result && prefix !== fromPrefix) {
 			result = Array.isArray(result) ? XsltDefinitionProvider.withXsltPrefix(result, prefix, fromPrefix) :
 				new vscode.CompletionList(XsltDefinitionProvider.withXsltPrefix(result.items, prefix, fromPrefix), result.isIncomplete);
@@ -353,9 +456,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	// copies of the items - which may be shared - with each name with the prefix xsl, in the label and the text inserted,
-	// with the prefix (see RecordTypes.withXsltPrefix)
+	// with the prefix (see RecordTypes.withXsltPrefix) - no prefix where it's '', e.g. for a Schematron file
 	private static withXsltPrefix(items: vscode.CompletionItem[], prefix: string, fromPrefix = 'xsl'): vscode.CompletionItem[] {
-		const text = (value: string) => fromPrefix === 'xsl' ? RecordTypes.withXsltPrefix(value, prefix) : value.replace(new RegExp(`(?<![\\w.:-])${fromPrefix}:`, 'g'), prefix + ':');
+		const text = (value: string) => fromPrefix === 'xsl' ? RecordTypes.withXsltPrefix(value, prefix) :
+			value.replace(new RegExp(`(?<![\\w.:-])${fromPrefix}:`, 'g'), prefix ? prefix + ':' : '');
 		return items.map((item) => {
 			const copy: vscode.CompletionItem = Object.assign(new vscode.CompletionItem(''), item);
 			copy.label = typeof item.label === 'string' ? text(item.label) : { ...item.label, label: text(item.label.label) };
@@ -430,19 +534,29 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				if ( DocumentChangeHandler.lastActiveXMLNonXSLUri) {
 					uri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
 				}
+			} else if (this.docType === DocumentTypes.SCH) {
+				// Schematron: the names of the data it validates - its schema's XML context file, chosen or inferred (see
+				// SchematronContext) - else the last XML file viewed, not a schema
+				const schema = SchematronContext.schemaOf(document.uri);
+				const dataFile = schema ? SchematronContext.contextFor(schema)?.file : undefined;
+				const lastXml = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+				uri = dataFile ? vscode.Uri.file(dataFile) : lastXml && !/\.sch$/i.test(lastXml.fsPath) ? lastXml : undefined;
 			} else {
 				uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
 			}
 			allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 			globalInstructionData = this.xslLexer.globalInstructionData;
-			prefixBindings = this.xslLexer.prefixBindings;
+			prefixBindings = SchIncludes.withContext(document, this.xslLexer.prefixBindings);
 			attNames = this.xslLexer.attributeNameTests ? this.xslLexer.attributeNameTests : [];
 			nodeNames = this.xslLexer.elementNameTests ? this.xslLexer.elementNameTests : [];
 			this.languageConfig['isVersion4'] = this.xslLexer.isXSLT40;
 			localLanguageConfig = { ...this.languageConfig };
 		}
 
-		if (uri) {
+		if (this.docType === DocumentTypes.XSPEC) {
+			// the names of the test data and the documents its hrefs refer to - not XSpec's own (see XSpecNodeNames)
+			symbolsForXPath = await XSpecNodeNames.symbols(document, (fileUri) => XsltDefinitionProvider.contextFileSymbols(fileUri));
+		} else if (uri) {
 			const lastSymbols = await XsltDefinitionProvider.contextFileSymbols(uri);
 			if (lastSymbols) {
 				symbolsForXPath = lastSymbols;
@@ -495,7 +609,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
-			let xslVariable = ['xsl:variable', 'xsl:param'];
+			// Schematron: sch:let and sch:param too (see SchConfiguration)
+			let xslVariable = this.docType === DocumentTypes.SCH ? localLanguageConfig.variableElementNames : ['xsl:variable', 'xsl:param'];
 
 			let completions: vscode.CompletionItem[]|undefined;
 			// XSLT 4.0: within a documentation note - an xsl:note with format="xdoc-md" - only its tags and parameter names
@@ -515,7 +630,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			// within element(...) or attribute(...): only the names, from the XML context file and the stylesheet
 			const kindTestNames = this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XPath ?
-				XsltTokenCompletions.getKindTestNameCompletions(document, position, symbolsForXPath, nodeNames, attNames, !!localLanguageConfig.isVersion4 || this.docType === DocumentTypes.XPath) : undefined;
+				XsltTokenCompletions.getKindTestNameCompletions(document, position, symbolsForXPath, nodeNames, attNames, !!localLanguageConfig.isVersion4 || this.isXPath40Document(document)) : undefined;
 			if (kindTestNames) {
 				resolve(new vscode.CompletionList(kindTestNames, false));
 				return;
@@ -529,7 +644,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			// an argument of a user-defined function, or the value of a typed let binding, for an enumeration type or xs:boolean
 			const argumentValues = !recordEntries && !selectValues && hasItemTypes ? XsltTokenCompletions.getArgumentValueCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
 			// XPath 4.0 keyword arguments, e.g. ex:area(2, scale := 2) - the names of the called function's parameters
-			const keywordArguments = (isXSLT40 || this.docType === DocumentTypes.XPath) && !recordEntries && !argumentValues?.inString ?
+			const keywordArguments = (isXSLT40 || this.isXPath40Document(document)) && !recordEntries && !argumentValues?.inString ?
 				XsltTokenCompletions.getKeywordArgumentCompletions(document, allTokens, position, this.docType === DocumentTypes.XPath, globalInstructionData, allImportedGlobals) : undefined;
 			// a '{' that starts an attribute or text value template - not an XPath token, as one in an expression is,
 			// e.g. of a map constructor - is followed by any XPath expression, so it has all the completions
@@ -553,7 +668,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			completions= XsltTokenCompletions.getCompletions(localLanguageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
 			if (completions && (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XPath)) {
 				// after an operand, only keyword operators - or at the start of an expression, snippets for 'for', 'let' etc. too
-				completions = XsltTokenCompletions.adjustExpressionCompletions(document, allTokens, position, !!localLanguageConfig.isVersion4 || this.docType === DocumentTypes.XPath, completions);
+				completions = XsltTokenCompletions.adjustExpressionCompletions(document, allTokens, position, !!localLanguageConfig.isVersion4 || this.isXPath40Document(document), completions);
 			}
 			// xsl:map-entry elements for a record type, before the other element completions
 			const mapEntryElements = hasItemTypes ? XsltTokenCompletions.getMapEntryElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;

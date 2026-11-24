@@ -14,6 +14,7 @@ import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { XSLTCodeActions } from '../../src/xsltCodeActions';
 import { PackageCodeLensProvider } from '../../src/packageCodeLens';
+import { PackageScope } from '../../src/packageScope';
 import { PackageNavigationProvider } from '../../src/packageNavigation';
 import { XSLTReferenceProvider } from '../../src/xsltReferenceProvider';
 import { ImportIndex } from '../../src/importIndex';
@@ -114,9 +115,24 @@ suite('XSLT packages: visibility', () => {
 
 	test('public and final components are visible - private ones, by default or explicitly, are not', async () => {
 		await passes('<xsl:sequence select="p:pub(1), $p:vpub"/><xsl:call-template name="p:tpub"/><xsl:call-template name="p:tfin"/>');
-		await fails('<xsl:sequence select="p:none()"/>', /p:none/);
-		await fails('<xsl:sequence select="$p:v"/>', /\$p:v cannot be resolved/);
-		await fails('<xsl:call-template name="p:t"/>', /'p:t' not found/);
+		await fails('<xsl:sequence select="p:none()"/>', /^The function p:none#0 is private in package 'urn:p', so it can't be used here/);
+		await fails('<xsl:sequence select="$p:v"/>', /^The variable \$p:v is private in package 'urn:p'/);
+		await fails('<xsl:call-template name="p:t"/>', /^The template p:t is private in package 'urn:p'/);
+		// a component the package doesn't have is still not found
+		await fails('<xsl:call-template name="p:nothing"/>', /'p:nothing' not found/);
+	});
+
+	test('XTSE0165: an xsl:package module can\'t be imported or included - a stylesheet module can', async () => {
+		const stylesheet = file('stylesheet.xsl', `<xsl:stylesheet ${ns}><xsl:template name="x"/></xsl:stylesheet>`);
+		// a file for each, as an open document keeps the text it was opened with
+		let count = 0;
+		const importing = (content: string) => file(`importing${++count}.xsl`, `<xsl:stylesheet ${ns}>\n  ${content}\n</xsl:stylesheet>`);
+		const provider = new XsltSymbolProvider(XSLTConfiguration.configuration, null);
+		const errorsIn = async (fsPath: string) => (await provider.diagnosticsFor(await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(fsPath), 'xslt')))
+			.filter((d) => d.severity === vscode.DiagnosticSeverity.Error).map((d) => d.message);
+		assert.include(await errorsIn(importing('<xsl:import href="p.xsl"/>')), "XTSE0165: 'p.xsl' is the xsl:package 'urn:p', so it can't be imported - use it with xsl:use-package");
+		assert.include(await errorsIn(importing('<xsl:include href="p.xsl"/>')), "XTSE0165: 'p.xsl' is the xsl:package 'urn:p', so it can't be included - use it with xsl:use-package");
+		assert.deepEqual((await errorsIn(importing(`<xsl:import href="${path.basename(stylesheet)}"/>`))).filter((m) => m.startsWith('XTSE0165')), []);
 	});
 
 	test('private-by-default enum and record item types are diagnosed and not completed by a using stylesheet', async () => {
@@ -476,6 +492,23 @@ suite('XSLT packages: quick fixes', () => {
 	const errorsOf = async (text: string) => (await lint(text)).diagnostics.filter((d) => d.severity === vscode.DiagnosticSeverity.Error).map((d) => d.message);
 	const stylesheet = (useChildren: string, topLevel = '') => `<xsl:stylesheet ${ns}>\n  <xsl:use-package name="urn:p">\n    ${useChildren}\n  </xsl:use-package>\n  ${topLevel}\n</xsl:stylesheet>`;
 
+	test('a reference to a private component of the package: a fix makes it public in the package', async () => {
+		const { document, diagnostics } = await lint(stylesheet('', '<xsl:template name="main"><xsl:sequence select="p:none()"/></xsl:template>'));
+		const diagnostic = diagnostics.find((d) => /^The function p:none#0 is private in package 'urn:p'/.test(d.message));
+		assert.isDefined(diagnostic, JSON.stringify(diagnostics.map((d) => d.message)));
+		const actions = (new XSLTCodeActions().provideCodeActions(document, diagnostic!.range, { diagnostics: [diagnostic!], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [])
+			.filter((action) => action.kind?.value === vscode.CodeActionKind.QuickFix.value);
+		const action = actions.find((a) => a.title === "Make function p:none#0 public in package 'urn:p'");
+		assert.isDefined(action, JSON.stringify(actions.map((a) => a.title)));
+		const [uri, edits] = action!.edit!.entries()[0];
+		assert.strictEqual(uri.fsPath, vscode.Uri.file(p).fsPath);
+		const packageDocument = await vscode.workspace.openTextDocument(p);
+		const text = packageDocument.getText();
+		const fixed = edits.map((e) => ({ start: packageDocument.offsetAt(e.range.start), end: packageDocument.offsetAt(e.range.end), text: e.newText })).sort((a, b) => b.start - a.start)
+			.reduce((result, e) => result.substring(0, e.start) + e.text + result.substring(e.end), text);
+		assert.include(fixed, '<xsl:function name="p:none" visibility="public">');
+	});
+
 	test('XTSE3020: a function name in xsl:accept gets its arity', async () => {
 		const { titles, fixed } = await fixes(stylesheet('<xsl:accept component="function" names="p:pub" visibility="private"/>'), /XTSE3020/, "Change to 'p:pub#1'");
 		assert.deepEqual(titles, ["Change to 'p:pub#1'"]);
@@ -584,9 +617,16 @@ suite('XSLT packages: overrides in code lenses and hover', () => {
 
 	test('a package component\'s lens shows the declarations in the workspace that override it', async () => {
 		const lenses = new PackageCodeLensProvider().provideCodeLenses(await open(p));
-		assert.deepEqual(lenses.map((l) => [l.range.start.line, l.command?.title]), [[1, 'overridden in 1 module']]);
-		const [, , locations] = lenses[0].command!.arguments as [vscode.Uri, vscode.Position, vscode.Location[]];
+		assert.deepEqual(lenses.map((l) => [l.range.start.line, l.command?.title]), [[0, 'used by 1 module - check for problems'], [1, 'overridden in 1 module']]);
+		const [, , locations] = lenses[1].command!.arguments as [vscode.Uri, vscode.Position, vscode.Location[]];
 		assert.deepEqual(locations.map((l) => [l.uri.fsPath, l.range.start.line]), [[user, 3]]);
+	});
+
+	test('the package\'s lens checks the modules that use it - with what they import or include', async () => {
+		const lenses = new PackageCodeLensProvider().provideCodeLenses(await open(p));
+		assert.strictEqual(lenses[0].command?.command, 'xslt-xpath.checkPackageUsers');
+		assert.strictEqual((lenses[0].command!.arguments![0] as vscode.Uri).fsPath, p);
+		assert.deepEqual(PackageScope.usersOf(p), [user]);
 	});
 
 	test('Go to Implementations: from a package component, or a reference to it, to the declarations overriding it', async () => {

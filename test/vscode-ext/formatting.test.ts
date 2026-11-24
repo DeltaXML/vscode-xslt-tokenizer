@@ -10,7 +10,7 @@
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
-import { XMLConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
+import { XMLConfiguration, XSLTConfiguration, XSpecConfiguration } from '../../src/languageConfigurations';
 import { XMLDocumentFormattingProvider } from '../../src/xmlDocumentFormattingProvider';
 
 const spaces: vscode.FormattingOptions = { tabSize: 2, insertSpaces: true };
@@ -32,6 +32,22 @@ suite('Formatting', () => {
 	test('elements are indented by nesting level', async () => {
 		const { lines } = await format(stylesheet(['<xsl:template match="/">', '<a>', '<b/>', '</a>', '</xsl:template>']));
 		assert.deepEqual(lines, stylesheet(['  <xsl:template match="/">', '    <a>', '      <b/>', '    </a>', '  </xsl:template>']));
+	});
+
+	test('with another prefix for XSLT, e.g. x, end tags are outdented as with xsl', async () => {
+		const withX = (body: string[]) => ['<x:stylesheet xmlns:x="http://www.w3.org/1999/XSL/Transform" version="3.0">', ...body, '</x:stylesheet>'];
+		const { lines } = await format(withX(['<x:template match="/">', '<x:if test="true()">', '<a/>', '</x:if>', '</x:template>']));
+		assert.deepEqual(lines, withX(['  <x:template match="/">', '    <x:if test="true()">', '      <a/>', '    </x:if>', '  </x:template>']));
+	});
+
+	test('an XSpec file with another prefix for XSpec, e.g. t: end tags are outdented', async () => {
+		const xspec = (body: string[]) => ['<t:description xmlns:t="http://www.jenitennison.com/xslt/xspec" stylesheet="a.xsl">', ...body, '</t:description>'];
+		const document = await vscode.workspace.openTextDocument({ content: xspec(['<t:scenario label="s">', '<t:context>', '<a/>', '</t:context>', '</t:scenario>']).join('\n'), language: 'xspec' });
+		const edits = new XMLDocumentFormattingProvider(XSpecConfiguration.configuration).provideDocumentFormattingEdits(document, spaces, token());
+		const edit = new vscode.WorkspaceEdit();
+		edit.set(document.uri, edits);
+		await vscode.workspace.applyEdit(edit);
+		assert.deepEqual(document.getText().split('\n'), xspec(['  <t:scenario label="s">', '    <t:context>', '      <a/>', '    </t:context>', '  </t:scenario>']));
 	});
 
 	test('blank lines are left empty, and whitespace-only lines are emptied', async () => {
@@ -150,6 +166,35 @@ suite('Formatting', () => {
 			await vscode.workspace.applyEdit(edit);
 			assert.deepEqual(document.getText().split('\n').slice(4, 6), [`        then 'new'`, '        '], JSON.stringify(autoIndent));
 		}
+	});
+
+	test('after a comma that ends else, return or satisfies branches - however many - the next item is indented as the first', async () => {
+		// a map's entries: the value of 'x', on lines of its own, then 'y'
+		const entries = async (value: string[]) => {
+			const { lines } = await format(stylesheet(['<xsl:template match="/">', '<xsl:sequence select="map {', `'x': ${value[0]}`, ...value.slice(1, -1), `${value[value.length - 1]},`, `'y': 2`, '}"/>', '</xsl:template>']));
+			const indent = (start: string) => lines.find((line) => line.trimStart().startsWith(start))!.search(/\S/);
+			return { lines, x: indent(`'x'`), y: indent(`'y'`) };
+		};
+		const cases: { [name: string]: string[] } = {
+			'if': ['if (1)', 'then 1', 'else 2'],
+			'else if': ['if (1)', 'then 1', 'else if (2)', 'then 2', 'else 3'],
+			'let return': ['let $v := 1', 'return $v'],
+			'for return': ['for $v in 1', 'return $v'],
+			'some satisfies': ['some $v in 1', 'satisfies $v'],
+			'let return if': ['let $v := 1', 'return if ($v)', 'then 1', 'else 2'],
+			'let return let return': ['let $v := 1', 'return let $w := 2', 'return $w'],
+			'let with two variables': ['let $v := 1,', '$w := 2', 'return $v + $w']
+		};
+		for (const [name, value] of Object.entries(cases)) {
+			const { lines, x, y } = await entries(value);
+			assert.strictEqual(y, x, `${name}:\n${lines.join('\n')}`);
+		}
+		// a sequence: as after a plain value
+		const sequence = async (first: string[]) => (await format(stylesheet(['<xsl:template match="/">', `<xsl:sequence select="(${first[0]}`, ...first.slice(1, -1), `${first[first.length - 1]},`, '4)"/>', '</xsl:template>']))).lines
+			.find((line) => line.trimStart().startsWith('4)'))!.search(/\S/);
+		const plain = await sequence(['1']);
+		assert.strictEqual(await sequence(['let $v := 1', 'return $v']), plain);
+		assert.strictEqual(await sequence(['if (1)', 'then 1', 'else if (2)', 'then 2', 'else 3']), plain);
 	});
 
 	test('xsl:text content is kept as it is', async () => {

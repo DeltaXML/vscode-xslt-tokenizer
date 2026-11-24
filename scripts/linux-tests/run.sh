@@ -27,6 +27,8 @@ else
     steps+='
 echo "== Building the debug adapter"
 SAXON_JAR=/opt/SaxonHE12-9J/saxon-he-12.9.jar scripts/build-debugger.sh
+echo "== Compiling the extension (testXPathQueryServer loads out/src/xpathQueryServer.js)"
+npx tsc -p ./
 echo "== Debug adapter protocol tests"
 node scripts/test-debugger.js /opt/SaxonHE12-9J/saxon-he-12.9.jar /opt/SaxonHE13-1J/saxon-he-13.1.jar
 echo "== VS Code extension tests"
@@ -34,7 +36,8 @@ XSLT_TEST_SAXON_JAR=/opt/SaxonHE13-1J/saxon-he-13.1.jar xvfb-run -a npm test
 '
 fi
 
-docker run --rm --init $([[ -t 0 ]] && echo -it) \
+# --shm-size: Docker's default 64MB /dev/shm crashes VS Code's renderer part-way through the extension tests
+docker run --rm --init --shm-size=2g $([[ -t 0 ]] && echo -it) \
     -v "$root:/src:ro" \
     -v xslt-tokenizer-node-modules:/home/node/work/node_modules \
     -v xslt-tokenizer-vscode-test:/home/node/work/.vscode-test \

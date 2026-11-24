@@ -8,9 +8,14 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { XSpecScenario } from './xspecScenario';
+import { XSpecLike } from './xspecLike';
+import { XSpecSourceMap } from './xspecSourceMap';
+import { XSpecSnippets } from './xspecSnippets';
+import { SchSnippets } from './schSnippets';
 import { XslLexerLight } from './xslLexerLight';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, Data } from './xpLexer';
+import { XPathBranches } from './xpathBranches';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
@@ -27,6 +32,7 @@ import { XdocNotes } from './xdocNote';
 import { PackageScope } from './packageScope';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { FixedNamespaces } from './fixedNamespaces';
+import { XPathVersion } from './xpathVersion';
 
 enum TagType {
 	XSLTstart,
@@ -52,7 +58,16 @@ interface XSLTToken extends BaseToken {
 	tagType?: TagType;
 }
 
+// the tokens of the attribute that sets the context of an element's content: the match of an xsl:template (a pattern), or the
+// select of an xsl:for-each or xsl:iterate - as indexes of the start and end tokens of its value
+export interface ContextRange {
+	start: number;
+	end: number;
+	isPattern: boolean;
+}
+
 export interface ElementData {
+	contextRange?: ContextRange;
 	variables: VariableData[];
 	currentVariable?: VariableData;
 	xpathVariableCurrentlyBeingDefined?: boolean;
@@ -76,6 +91,9 @@ export interface XPathData {
 	rangeVarKeyword?: string;
 	awaitingArity: boolean;
 	tokenIndex?: number;
+	// see XPathBranches
+	opensBranch?: boolean;
+	branch?: string;
 }
 
 export interface VariableData {
@@ -120,7 +138,7 @@ export class XsltTokenCompletions {
 	private static atomicItemTypeNames: string[] = [];
 
 	private static sequenceTypesFor(docType: DocumentTypes) {
-		if (docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath) {
+		if (docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XPath && !XsltTokenCompletions.xpath31)) {
 			return XsltTokenCompletions.itemTypeNames.concat(XsltTokenCompletions.sequenceTypes, ['record()', 'enum()']);
 		}
 		// before XSLT 4.0, with the setting: the named item types, and record and enumeration types
@@ -167,6 +185,21 @@ export class XsltTokenCompletions {
 		let lineNumber = -1;
 		let docType = languageConfig.isVersion4 ? DocumentTypes.XSLT40 : languageConfig.docType;
 		let isXSLT = docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40;
+		XsltTokenCompletions.xspecXPath40 = docType === DocumentTypes.XSPEC && XsltTokenDiagnostics.isXSpecXPath40(document.getText());
+		XsltTokenCompletions.xpath31 = docType === DocumentTypes.XPath && !XPathVersion.isXPath40(document);
+		// XSpec: the x:variable and x:param elements in scope where the cursor is, as XSpec scopes them - read only if a
+		// variable is completed
+		// XSpec, run-as="external": the functions and global variables of the stylesheet tested can't be used in XPath
+		// expressions, as the linter reports - only called with x:call, so its completion of names has them all
+		const xspecCallable = importedInstructionData;
+		const xspecExternal = docType === DocumentTypes.XSPEC && document.uri.scheme === 'file' ? XsltTokenDiagnostics.xspecExternalModulesOf(document.getText(), document.fileName) : undefined;
+		if (xspecExternal) {
+			const usableInXPath = [GlobalInstructionType.Variable, GlobalInstructionType.Parameter, GlobalInstructionType.Function];
+			importedInstructionData = importedInstructionData.filter((instruction) => !usableInXPath.includes(instruction.type) || !instruction.href ||
+				![...xspecExternal].some((module) => XSpecSourceMap.samePath(module, instruction.href!)));
+		}
+		XsltTokenCompletions.xspecVariables = docType === DocumentTypes.XSPEC && document.uri.scheme === 'file' ?
+			() => XSpecLike.variablesInScope(document.getText(), document.fileName, document.offsetAt(position)) : undefined;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined = false;
@@ -216,6 +249,12 @@ export class XsltTokenCompletions {
 		// select attribute's embedded XPath expression begins.
 		let awaitingSelectExprStart = false;
 		let pendingSelectExprIndex: number | undefined = undefined;
+		// see ContextRange: the attribute of the start-tag being scanned that sets the context for its content
+		let awaitingContextStart: boolean | 'pattern' = false;
+		let inContextValue = false;
+		let pendingContext: ContextRange | undefined;
+		// the elements above the cursor, for the context of a relative path - see XsltSymbolProvider.getCompletionNodeNames
+		XsltSymbolProvider.contextElementStack = isXSLT ? elementStack : undefined;
 		// don't include imported for path completions:
 		let allInstructionData = globalInstructionData;
 		const lastTokenIndex = allTokens.length - 1;
@@ -298,7 +337,16 @@ export class XsltTokenCompletions {
 				pendingSelectExprIndex = index;
 				awaitingSelectExprStart = false;
 			}
+			if (!isXMLToken && awaitingContextStart) {
+				pendingContext = { start: index, end: index, isPattern: awaitingContextStart === 'pattern' };
+				awaitingContextStart = false;
+				inContextValue = true;
+			} else if (!isXMLToken && inContextValue && pendingContext) {
+				pendingContext.end = index;
+			}
 			if (isXMLToken) {
+				// the end of the value's tokens: its closing quote, or the next attribute
+				inContextValue = false;
 				inScopeXPathVariablesList = [];
 				xpathVariableCurrentlyBeingDefined = false;
 				// preserve a reference to the pre-reset xpathStack: the closing quote of an XPath-bearing
@@ -392,12 +440,14 @@ export class XsltTokenCompletions {
 								tagType = TagType.Start;
 								awaitingSelectExprStart = false;
 								pendingSelectExprIndex = undefined;
+								pendingContext = undefined;
 								break;
 							case XMLCharState.rStNoAtt:
 							case XMLCharState.rSt:
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
+								awaitingContextStart = false;
 								if (variableData !== null && pendingSelectExprIndex !== undefined) {
 									variableData.selectExprStartIndex = pendingSelectExprIndex;
 								}
@@ -457,11 +507,11 @@ export class XsltTokenCompletions {
 											// if a top-level element, use global variables instad of inScopeVariablesList;
 											elementStack.push({
 												namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList,
-												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], contextRange: pendingContext
 											});
 										}
 									} else if (startTagToken) {
-										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [] });
+										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], contextRange: pendingContext });
 									}
 									// copy (not reuse) newVariablesList so that variables still in scope (e.g. from
 									// an enclosing xsl:template) remain visible for completions inside this element,
@@ -528,6 +578,14 @@ export class XsltTokenCompletions {
 						// track the select attribute of an xsl:variable/xsl:param so its bound
 						// expression's start token can be captured precisely (see VariableData.selectExprStartIndex)
 						awaitingSelectExprStart = tagType === TagType.XSLTvar && xmlTokenType === XSLTokenLevelState.attributeName && attNameText === 'select';
+						awaitingContextStart = false;
+						if (isXSLT && xmlTokenType === XSLTokenLevelState.attributeName) {
+							if (tagElementName === 'xsl:template' && attNameText === 'match') {
+								awaitingContextStart = 'pattern';
+							} else if ((tagElementName === 'xsl:for-each' || tagElementName === 'xsl:iterate') && attNameText === 'select') {
+								awaitingContextStart = true;
+							}
+						}
 						let problemReported = false;
 
 						if (!problemReported) {
@@ -611,9 +669,9 @@ export class XsltTokenCompletions {
 									if (tagElementName === 'xsl:use-package') {
 										resultCompletions = XsltTokenCompletions.getPackageNameCompletions(document, position);
 									} else if (tagElementName === 'xsl:call-template' || (tagElementName === 'x:call' && xspecCallAttribute === 'template')) {
-										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, xspecCallable);
 									} else if (tagElementName === 'x:call' && xspecCallAttribute === 'function') {
-										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Function, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Function, globalInstructionData, xspecCallable);
 									} else if ((tagElementName === 'xsl:with-param' || tagElementName === 'x:param') && elementStack.length > 0) {
 										// get name attribute of parent
 										let parentElemment = elementStack[elementStack.length - 1];
@@ -831,7 +889,8 @@ export class XsltTokenCompletions {
 							case 'some':
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
-								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true, rangeVarKeyword: valueText });
+								// a copy: the variables it declares are added to the list in scope, not to those before it
+								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true, rangeVarKeyword: valueText, opensBranch: true });
 								break;
 							case 'key':
 							case 'value':
@@ -844,29 +903,15 @@ export class XsltTokenCompletions {
 								xpathVariableCurrentlyBeingDefined = false;
 								break;
 							case 'then':
-								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
+								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, opensBranch: true });
 								inScopeXPathVariablesList = [];
 								break;
 							case 'return':
 							case 'satisfies':
 							case 'else':
-								if (xpathStack.length > 0) {
-									let poppedData = xpathStack.pop();
-									if (poppedData) {
-										inScopeXPathVariablesList = poppedData.variables;
-										if (valueText === 'else') {
-											preXPathVariable = poppedData.preXPathVariable;
-										} else {
-											// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c
-											preXPathVariable = false;
-										}
-										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
-									} else {
-										inScopeXPathVariablesList = [];
-										preXPathVariable = false;
-										xpathVariableCurrentlyBeingDefined = false;
-									}
-								}
+								// the branch keeps the variables of its for, let, some or every in scope until a ',' or bracket ends it
+								({ inScopeXPathVariablesList, preXPathVariable, xpathVariableCurrentlyBeingDefined } = XPathBranches.startBranch(xpathStack, token, valueText,
+									{ inScopeXPathVariablesList, preXPathVariable, xpathVariableCurrentlyBeingDefined }));
 								break;
 						}
 						break;
@@ -976,6 +1021,8 @@ export class XsltTokenCompletions {
 									resultCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 									resultCompletions = resultCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStack));
 								}
+								// the bracket ends the branches in it, e.g. (let $v := 1 return $v)
+								XPathBranches.endBranches(xpathStack);
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
 									if (poppedData) {
@@ -1005,6 +1052,9 @@ export class XsltTokenCompletions {
 								break;
 							case CharLevelState.sep:
 								if (token.value === ',') {
+									// the comma ends the branches before it, e.g. the last $v in let $v := 1 return $v, $v is another variable
+									({ inScopeXPathVariablesList, preXPathVariable, xpathVariableCurrentlyBeingDefined } = XPathBranches.afterComma(xpathStack,
+										{ inScopeXPathVariablesList, preXPathVariable, xpathVariableCurrentlyBeingDefined }));
 									if (xpathStack.length > 0) {
 										let xp = xpathStack[xpathStack.length - 1];
 										if (xp.functionArity !== undefined) {
@@ -1192,7 +1242,7 @@ export class XsltTokenCompletions {
 	}
 
 	private static axisCompletionNames(docType: DocumentTypes) {
-		const axes = docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? Data.cAxes40 : Data.cAxes;
+		const axes = docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XPath && !XsltTokenCompletions.xpath31) ? Data.cAxes40 : Data.cAxes;
 		return axes.map(axis => axis + '::');
 	}
 
@@ -1202,8 +1252,8 @@ export class XsltTokenCompletions {
 		} else if (docType === DocumentTypes.XSLT40) {
 			return XsltTokenCompletions.useIxslFunctions ? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlus40;
 		} else if (docType === DocumentTypes.XPath) {
-			// XPath documents use XPath 4.0
-			return XPathFunctionDetails.xpathDataPlus40;
+			// XPath documents use XPath 4.0 - but the query file may be set to XPath 3.1 (see XPathVersion)
+			return XsltTokenCompletions.xpath31 ? XPathFunctionDetails.xpathData : XPathFunctionDetails.xpathDataPlus40;
 		} else {
 			return XPathFunctionDetails.xpathData;
 		}
@@ -1315,7 +1365,7 @@ export class XsltTokenCompletions {
 							xpathCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 						}
 						if (!xpathCompletions) {
-							const atomicTypes40 = docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? XsltTokenCompletions.atomicItemTypeNames.concat(['enum()']) : [];
+							const atomicTypes40 = docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XPath && !XsltTokenCompletions.xpath31) ? XsltTokenCompletions.atomicItemTypeNames.concat(['enum()']) : [];
 							let completionStrings = isSimpleType ? atomicTypes40.concat(FunctionData.simpleTypes) : XsltTokenCompletions.sequenceTypesFor(docType);
 							xpathCompletions = XsltTokenCompletions.getNormalCompletions(position, completionStrings, vscode.CompletionItemKind.TypeParameter);
 						}
@@ -2688,8 +2738,13 @@ export class XsltTokenCompletions {
 		return undefined;
 	}
 
+	// an XSpec file whose test runner is XSLT 4.0 (see XsltTokenDiagnostics.isXSpecXPath40)
+	private static xspecXPath40 = false;
+	// an XPath document that isn't XPath 4.0: the 'Find Nodes with XPath' query file, set to XPath 3.1 (see XPathVersion)
+	private static xpath31 = false;
+
 	private static isXPath40(docType: DocumentTypes) {
-		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath;
+		return docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XPath && !XsltTokenCompletions.xpath31) || (docType === DocumentTypes.XSPEC && XsltTokenCompletions.xspecXPath40);
 	}
 
 	// XSLT 4.0: the documentation of each field of a record type, for its completion - with the text of its @field tag in
@@ -2757,8 +2812,24 @@ export class XsltTokenCompletions {
 		XsltTokenCompletions.pushStackVariableNames(0, xpathStack, completionStrings);
 		// startIndex = 2 - so we miss out globals
 		XsltTokenCompletions.pushStackVariableNames(2, elementStack, completionStrings);
-		return XsltTokenCompletions.createVariableCompletions(pos, '$', completionStrings, token, vscode.CompletionItemKind.Variable);
+		// XSpec: the variables of the enclosing scenarios, and those x:like brings in - with the type of each declared
+		const xspecVariables = XsltTokenCompletions.xspecVariables?.() ?? [];
+		xspecVariables.forEach((variable) => {
+			if (completionStrings.indexOf(variable.name) < 0) {
+				completionStrings.push(variable.name);
+			}
+		});
+		const items = XsltTokenCompletions.createVariableCompletions(pos, '$', completionStrings, token, vscode.CompletionItemKind.Variable);
+		xspecVariables.filter((variable) => variable.as).forEach((variable) => {
+			const item = items.find((i) => i.label === '$' + variable.name);
+			if (item) {
+				item.detail = variable.as;
+			}
+		});
+		return items;
 	}
+
+	private static xspecVariables: (() => { name: string, as?: string }[]) | undefined;
 
 	private static getTokenSpecialCompletions(token: BaseToken, type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
 		let completionStrings: string[] = [];
@@ -3040,7 +3111,8 @@ export class XsltTokenCompletions {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tag = text.substring(text.lastIndexOf('<', offset), text.indexOf('>', offset) + 1);
-		const name = tag.match(/(?<![\w.:-])name\s*=\s*(["'])([^"']*)\1/)?.[2].trim();
+		// xsl:use-package's name, or XSpec's x:helper package-name
+		const name = tag.match(/(?<![\w.:-])(?:package-)?name\s*=\s*(["'])([^"']*)\1/)?.[2].trim();
 		const versions = [...new Set(XsltPackages.all().filter((pkg) => pkg.name === name).map((pkg) => pkg.version ?? '1'))]
 			.sort((a, b) => XsltPackages.compareVersions(b, a));
 		const range = XsltTokenCompletions.attributeValueRange(document, position);
@@ -3359,6 +3431,36 @@ export class XsltTokenCompletions {
 					newItem.insertText = new vscode.SnippetString('subtreeProcessingMode defaultMode="${1:text}">\n\t<subtrees>\n\t\t<subtree elemXpath="${3:/container}" mode="${4:data}"/>$0\n\t</subtrees>\n</subtreeProcessingMode>');
 					completionItems.push(newItem);
 				}
+			} else if (docType === DocumentTypes.SCH) {
+				// each form a Schematron element is written in, with the attributes it needs (see SchSnippets)
+				const parent = XsltTokenCompletions.parentInText(document, pos)?.replace(/^.*:/, '');
+				const snippets = SchSnippets.forElement(tagName, parent);
+				if (snippets) {
+					useCurrent = false;
+					snippets.forEach((snippet) => {
+						const item = new vscode.CompletionItem(snippet.label, vscode.CompletionItemKind.Struct);
+						item.documentation = tagDetail.length > 0 ? tagDetail : undefined;
+						item.insertText = new vscode.SnippetString(snippet.body);
+						completionItems.push(item);
+					});
+				}
+			} else if (docType === DocumentTypes.XSPEC) {
+				// each form an XSpec element is written in, with the attributes it needs (see XSpecSnippets)
+				const parent = XsltTokenCompletions.parentInText(document, pos)?.replace(/^.*:/, '');
+				const snippets = XSpecSnippets.forElement(tagName, parent);
+				if (snippets) {
+					useCurrent = false;
+					snippets.forEach((snippet) => {
+						const item = new vscode.CompletionItem(snippet.label, vscode.CompletionItemKind.Struct);
+						item.documentation = tagDetail.length > 0 ? tagDetail : undefined;
+						item.insertText = new vscode.SnippetString(snippet.body);
+						item.detail = snippet.detail;
+						if (snippet.suggest) {
+							item.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
+						}
+						completionItems.push(item);
+					});
+				}
 			}
 			if (useCurrent) {
 				switch (snippetAttrs.length) {
@@ -3399,6 +3501,15 @@ export class XsltTokenCompletions {
 			}
 		});
 		return completionItems;
+	}
+
+	// the name of the element a '<' just typed is in, from the text before it - the element stack can end before, e.g.
+	// with <x:call><</x:call> the '<' is read with the end tag after it
+	private static parentInText(document: vscode.TextDocument, pos: vscode.Position): string | null {
+		const text = document.getText();
+		const tagStart = text.lastIndexOf('<', document.offsetAt(pos) - 1);
+		const ancestors = tagStart > -1 ? RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart) : [];
+		return ancestors[ancestors.length - 1]?.name ?? null;
 	}
 
 	private static addNewCompletionItem(completionItems: vscode.CompletionItem[], itemLabel: string, documentation: string, snippetString: string) {

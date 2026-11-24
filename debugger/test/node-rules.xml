@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<orders>
+  <order id="A1"
+         date="2026-11-02">
+    <line product="pen" quantity="2">Blue pens</line>
+    <note/>
+  </order>
+  <order id="B2"><line product="ink"/></order>
+</orders>

@@ -130,6 +130,35 @@ export class XsltPackages {
 		return result;
 	}
 
+	// the modules of a stylesheet - it, and those it imports or includes, at any depth - that use a package at their top level, in
+	// the order found, each with the packages it uses
+	public static usingModules(xsltFsPath: string): { file: string; packages: { name: string; versionRange?: string }[] }[] {
+		const result: { file: string; packages: { name: string; versionRange?: string }[] }[] = [];
+		const visited = new Set<string>();
+		const visit = (file: string) => {
+			if (visited.has(file)) {
+				return;
+			}
+			visited.add(file);
+			const { usedPackages, references } = XsltPackages.moduleInfo(file);
+			if (usedPackages.length > 0) {
+				result.push({ file, packages: usedPackages.map((used) => ({ name: used.name, versionRange: used.versionRange })) });
+			}
+			references.forEach((reference) => visit(reference.path));
+		};
+		visit(path.normalize(xsltFsPath));
+		return result;
+	}
+
+	// whether the file is an xsl:package: its root element is
+	public static isPackage(file: string): boolean {
+		try {
+			return !!ImportIndex.packageDeclaration(fs.readFileSync(file, 'utf8'));
+		} catch {
+			return false;
+		}
+	}
+
 	// from the index - or for a file it doesn't have, e.g. outside the workspace, from the file's text
 	private static moduleInfo(file: string) {
 		if (ImportIndex.instance.has(file)) {

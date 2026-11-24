@@ -1,0 +1,16 @@
+{
+	"title": "Video 4: XSLT 3.0 packages",
+	"steps": [
+		{ "caption": "A stylesheet that uses a package", "note": "Packages in the workspace are found automatically: no configuration" },
+		"Hover over the package name: its documentation, and the components you can use",
+		{ "caption": "Run it with Quick Run", "note": "The package is passed to Saxon for you" },
+		"Go from an override to the package's declaration",
+		"Call a private function: reported straight away",
+		"Make a function final in the package: its override is reported",
+		{ "caption": "Change an override's parameter type: the signature doesn't match", "note": "XTSE3070 - with a quick fix" },
+		{ "caption": "Visibility rules checked as you type, as Saxon applies them", "note": "xsl:accept, xsl:expose and xsl:override" },
+		{ "caption": "Turn a library into a package: Analyse as Package", "note": "What would have to change, before anything is changed" },
+		{ "caption": "Convert to Package", "note": "Every change shown in the Refactor Preview first" },
+		"XSLT 3.0 packages, without the setup"
+	]
+}

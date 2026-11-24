@@ -7,7 +7,10 @@ import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
 import * as vscode from 'vscode';
+import { revertAndCloseEditorsIn } from './testEditors';
 import { XSpecScenario } from '../../src/xspecScenario';
+import { XSpecSnippets } from '../../src/xspecSnippets';
+import { XSpecRequired } from '../../src/xspecRequired';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSpecConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
@@ -45,6 +48,37 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 	suiteSetup(async () => {
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
 	});
+	// this suite's editors, with their changes reverted: closing an unsaved one later, e.g. with closeAllEditors in another
+	// suite, would ask to save it - a modal dialog that stops the test run
+	suiteTeardown(async () => {
+		await revertAndCloseEditorsIn(dir);
+		// the folders of single tests, e.g. xspec-root-
+		await revertAndCloseEditorsIn(os.tmpdir());
+	});
+
+	test('an XSpec file created for a stylesheet, then deleted: the stylesheet isn\'t checked as a module of it', async function () {
+		// it waits on purpose - up to 2 s for the XSpec file to be checked, and 3 s for an error that shouldn't appear, which is
+		// the usual way it passes - so about 7.5 s alone: over the 10 s default on a busy full run
+		this.timeout(30000);
+		const uri = stylesheet(`deleted${count++}.xsl`);
+		const editor = await XSpecScenario.create(uri, at('<xsl:function'));
+		const xspecUri = editor!.document.uri;
+		// once it's checked, as when it's open
+		for (let i = 0; i < 20 && !XsltSymbolProvider.importSymbolHrefs.has(xspecUri.fsPath) && ![...XsltSymbolProvider.importSymbolHrefs.values()].some((hrefs) => hrefs.includes(uri.fsPath)); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+		fs.unlinkSync(xspecUri.fsPath);
+		// the stylesheet's problems, as published when it's open - after a change, as it's checked again then
+		const stylesheetEditor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+		await stylesheetEditor.edit((edit) => edit.insert(new vscode.Position(0, 0), ' '));
+		const notFound = () => vscode.languages.getDiagnostics(uri).filter((d) => d.message.includes('not found')).map((d) => d.message);
+		for (let i = 0; i < 30 && notFound().length === 0; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		assert.deepEqual(notFound(), []);
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+	});
 
 	test('the declaration at the cursor: a top-level function, named template or template rule', () => {
 		assert.deepEqual(XSpecScenario.declarationAt(stylesheetText, at('<xsl:function')), { kind: 'function', name: 'f:area', as: 'xs:double', params: [{ name: 'width', as: 'xs:double' }, { name: 'label', as: 'xs:string' }] });
@@ -66,8 +100,9 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		assert.include(text, '<x:param as="xs:double" select="1"/><!-- $width -->');
 		assert.include(text, '<x:param as="xs:string" select="\'text\'"/><!-- $label -->');
 		assert.include(text, '<x:expect label="the result" select="()"/>');
-		// the function's namespace, and xs for the types, declared on x:description
-		assert.match(text, /<x:description [^>]*xmlns:f="urn:f" xmlns:xs="http:\/\/www.w3.org\/2001\/XMLSchema">/);
+		// xs, in any new XSpec file, and the function's namespace, declared on x:description - xs once
+		assert.match(text, /<x:description [^>]*xmlns:xs="http:\/\/www.w3.org\/2001\/XMLSchema"[^>]*xmlns:f="urn:f">/);
+		assert.strictEqual(text.split('xmlns:xs=').length, 2);
 		assert.include(text, '<x:scenario label="f:area">');
 		await editor!.document.save();
 		const problems = await moduleDiagnostics.call(XsltSymbolProvider, editor!.document, false, XSpecConfiguration.configuration);
@@ -161,6 +196,7 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 			const editor = await XSpecScenario.createFile(vscode.Uri.file(packagePath), undefined, 'external');
 			const text = editor!.document.getText();
 			assert.include(text, 'run-as="external"');
+			assert.include(text, 'xmlns:xs="http://www.w3.org/2001/XMLSchema"');
 			assert.include(text, `stylesheet="${path.basename(packagePath)}"`);
 			assert.notInclude(text, 'x:helper');
 			assert.include(text, '<x:call function="s:area">');
@@ -191,6 +227,7 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 			const harness = `${path.basename(packagePath, '.xsl')}-xspec-harness.xsl`;
 			assert.include(text, `stylesheet="${harness}"`);
 			assert.include(text, '<x:helper package-name="urn:parts" package-version="2.0"/>');
+			assert.include(text, 'xmlns:xs="http://www.w3.org/2001/XMLSchema"');
 			assert.notInclude(text, 'run-as');
 			assert.include(text, '<x:call function="s:area">');
 			assert.notInclude(text, 's:hidden');
@@ -322,5 +359,141 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		assert.include(text, '<x:call function="o:total">');
 		assert.include(text, 'pending="to do"');
 		assert.match(text, /<\/x:description>\s*$/);
+	});
+
+	test('x:variable and scenario x:param: with a name and a type, for a value in select or as content', async () => {
+		const uri = stylesheet(`snippets${count++}.xsl`);
+		const xspecPath = path.join(dir, `snippets${count++}.xspec`);
+		const content = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.basename(uri.fsPath)}">
+  <x:scenario label="area">
+    IN_SCENARIO
+    <x:call function="f:area">IN_CALL</x:call>
+  </x:scenario>
+</x:description>`;
+		const text = content.replace('IN_SCENARIO', '<').replace('IN_CALL', '<');
+		fs.writeFileSync(xspecPath, text);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		await vscode.window.showTextDocument(document);
+		const completions = async (marker: string) => {
+			const offset = content.replace(marker === 'IN_SCENARIO' ? 'IN_CALL' : 'IN_SCENARIO', '<').indexOf(marker) + 1;
+			const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(offset));
+			return new Map(list.items.map((item) => [typeof item.label === 'string' ? item.label : item.label.label, item.insertText instanceof vscode.SnippetString ? item.insertText.value : String(item.insertText)]));
+		};
+		const inScenario = await completions('IN_SCENARIO');
+		assert.strictEqual(inScenario.get('x:variable (select)'), 'x:variable name="${1:name}" as="${2:item()*}" select="$3"/>$0');
+		assert.strictEqual(inScenario.get('x:variable'), 'x:variable name="${1:name}" as="${2:item()*}">\n\t$0\n</x:variable>');
+		assert.strictEqual(inScenario.get('x:param (select)'), 'x:param name="${1:name}" as="${2:item()*}" select="$3"/>$0');
+		// an x:param of x:call passes a value: not a declaration
+		const inCall = await completions('IN_CALL');
+		assert.isFalse(inCall.has('x:param (select)'));
+		assert.notInclude(inCall.get('x:param') ?? '', 'item()*');
+	});
+
+	test('variable completion where XPath is expected: the variables in scope as XSpec scopes them, with their types', async () => {
+		const uri = stylesheet(`scoped${count++}.xsl`);
+		const sharedName = `shared${count++}.xspec`;
+		fs.writeFileSync(path.join(dir, sharedName), `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="${path.basename(uri.fsPath)}">
+  <x:variable name="imported-global" select="2"/>
+  <x:scenario label="common" shared="yes"><x:variable name="from-shared" as="xs:integer" select="3"/></x:scenario>
+</x:description>`);
+		const xspecPath = path.join(dir, `scoped${count++}.xspec`);
+		const content = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.basename(uri.fsPath)}">
+  <x:import href="${sharedName}"/>
+  <x:variable name="own-global" select="1"/>
+  <x:scenario label="outer">
+    <x:variable name="outer-var" as="element(item)"><item/></x:variable>
+    <x:scenario label="area">
+      <x:like label="common"/>
+      <x:variable name="local" as="xs:double" select="1"/>
+      <x:variable name="this-one" select="$|"/>
+      <x:call function="f:area"><x:param select="1"/><x:param select="'a'"/></x:call>
+      <x:variable name="later" select="1"/>
+    </x:scenario>
+  </x:scenario>
+  <x:scenario label="other"><x:variable name="not-visible" select="1"/></x:scenario>
+</x:description>`;
+		const offset = content.indexOf('|');
+		fs.writeFileSync(xspecPath, content.replace('|', ''));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		await vscode.window.showTextDocument(document);
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(offset));
+		const variables = new Map(list.items.filter((item) => item.kind === vscode.CompletionItemKind.Variable)
+			.map((item) => [typeof item.label === 'string' ? item.label : item.label.label, item.detail]));
+		for (const name of ['$own-global', '$imported-global', '$outer-var', '$from-shared', '$local']) {
+			assert.isTrue(variables.has(name), `${name} in ${[...variables.keys()].join(' ')}`);
+		}
+		for (const name of ['$this-one', '$later', '$not-visible']) {
+			assert.isFalse(variables.has(name), name);
+		}
+		assert.strictEqual(variables.get('$local'), 'xs:double');
+		assert.strictEqual(variables.get('$outer-var'), 'element(item)');
+		assert.strictEqual(variables.get('$from-shared'), 'xs:integer');
+	});
+
+	test('variable completion in a shared scenario: those in scope at every x:like using it', async () => {
+		const uri = stylesheet(`template${count++}.xsl`);
+		const xspecPath = path.join(dir, `template${count++}.xspec`);
+		const content = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.basename(uri.fsPath)}">
+  <x:scenario label="sized" shared="yes">
+    <x:call function="f:area"><x:param select="$|"/><x:param select="'a'"/></x:call>
+  </x:scenario>
+  <x:scenario label="small"><x:variable name="width" select="1"/><x:variable name="only-small" select="1"/><x:like label="sized"/></x:scenario>
+  <x:scenario label="large"><x:variable name="width" select="1000"/><x:like label="sized"/></x:scenario>
+</x:description>`;
+		const offset = content.indexOf('|');
+		fs.writeFileSync(xspecPath, content.replace('|', ''));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		await vscode.window.showTextDocument(document);
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(offset));
+		const variables = list.items.filter((item) => item.kind === vscode.CompletionItemKind.Variable).map((item) => typeof item.label === 'string' ? item.label : item.label.label);
+		assert.include(variables, '$width');
+		assert.notInclude(variables, '$only-small');
+	});
+
+	test('XSpec element snippets: every form has the attributes XSpec requires of the element', () => {
+		// each element with a rule, where its snippets are offered - x:param in x:call or x:context is completed for
+		// each parameter of the function or template instead
+		const placed: [string, string][] = [['variable', 'scenario'], ['param', 'description'], ['param', 'scenario'], ['import', 'description'],
+			['like', 'scenario'], ['scenario', 'description'], ['expect', 'scenario'], ['helper', 'description']];
+		for (const [element, parent] of placed) {
+			const rule = XSpecRequired.ruleFor(element, parent, () => false);
+			const snippets = XSpecSnippets.forElement(`x:${element}`, parent);
+			assert.isDefined(rule, element);
+			assert.isNotEmpty(snippets, element);
+			for (const snippet of snippets!) {
+				assert.isTrue(rule!.oneOf.some((attribute) => snippet.body.includes(` ${attribute}="`)), `${snippet.label}: ${snippet.body}`);
+			}
+		}
+		// with the prefix the file uses
+		assert.strictEqual(XSpecSnippets.forElement('t:like', 'scenario')![0].body, 't:like label="$1"/>$0');
+		assert.isUndefined(XSpecSnippets.forElement('x:param', 'call'));
+		// x:context with the document node its content is in as the context - select="/", as without it, the children
+		const documentNode = XSpecSnippets.forElement('x:context', 'scenario')!.find((s) => s.label === 'x:context (document node)');
+		assert.strictEqual(documentNode?.body, 'x:context select="${1:/}">\n\t$0\n</x:context>');
+	});
+
+	test('XSpec element completion: each form of an element, with the list of values shown where they have completion', async () => {
+		const uri = stylesheet(`forms${count++}.xsl`);
+		const xspecPath = path.join(dir, `forms${count++}.xspec`);
+		const content = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.basename(uri.fsPath)}">
+  <x:scenario label="s">
+    <
+  </x:scenario>
+</x:description>`;
+		fs.writeFileSync(xspecPath, content);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		await vscode.window.showTextDocument(document);
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(content.indexOf('<\n') + 1));
+		const items = new Map(list.items.map((item) => [typeof item.label === 'string' ? item.label : item.label.label, item]));
+		const body = (label: string) => (items.get(label)?.insertText as vscode.SnippetString | undefined)?.value;
+		assert.strictEqual(body('x:expect'), 'x:expect label="$1" select="$2"/>$0');
+		assert.strictEqual(body('x:expect (test)'), 'x:expect label="$1" test="$2"/>$0');
+		assert.strictEqual(body('x:expect (content)'), 'x:expect label="$1">\n\t$0\n</x:expect>');
+		assert.strictEqual(body('x:call'), 'x:call function="$1">\n\t$0\n</x:call>');
+		assert.strictEqual(body('x:call (template)'), 'x:call template="$1">\n\t$0\n</x:call>');
+		assert.strictEqual(body('x:context (href)'), 'x:context href="$1" select="$2"/>$0');
+		assert.strictEqual(body('x:like'), 'x:like label="$1"/>$0');
+		assert.strictEqual(items.get('x:like')?.command?.command, 'editor.action.triggerSuggest');
+		assert.isUndefined(items.get('x:expect')?.command);
 	});
 });

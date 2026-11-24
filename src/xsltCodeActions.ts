@@ -268,6 +268,18 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	// the edits of a fix for a problem with packages (see PackageScope)
 	private static packageFixEdit(document: vscode.TextDocument, fix: PackageFix) {
 		const edit = new vscode.WorkspaceEdit();
+		if (fix.path) {
+			// another file, e.g. a module of the package: its text as it's open - else as it is on disk
+			const uri = vscode.Uri.file(fix.path);
+			const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+			const text = open ? open.getText() : fs.readFileSync(fix.path, 'utf8');
+			const positionAt = (offset: number) => {
+				const before = text.slice(0, offset).split('\n');
+				return new vscode.Position(before.length - 1, before[before.length - 1].length);
+			};
+			fix.edits.forEach((textEdit) => edit.replace(uri, new vscode.Range(positionAt(textEdit.start), positionAt(textEdit.end)), textEdit.text));
+			return edit;
+		}
 		fix.edits.forEach((textEdit) => edit.replace(document.uri, new vscode.Range(document.positionAt(textEdit.start), document.positionAt(textEdit.end)), XSLTCodeActions.inModule(document, textEdit.text)));
 		return edit;
 	}

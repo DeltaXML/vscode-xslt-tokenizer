@@ -16,11 +16,18 @@ import { ImportIndex } from '../../src/importIndex';
 
 const toXslt = (text: string) => text.replace(/\bxmlns:xsl=/g, 'xmlns:xslt=').replace(/(?<![\w.:-])xsl:/g, 'xslt:');
 
+// the documents checked: files, not untitled documents - which are unsaved, so would ask to be saved if shown in an
+// editor and closed, e.g. by another suite closing all editors
+const problemsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-prefix-'));
+let problemsCount = 0;
+
 async function problems(text: string) {
 	const lexer = new XslLexer(XSLTConfiguration.configuration);
 	lexer.provideCharLevelState = true;
 	const tokens = lexer.analyse(text);
-	const document = await vscode.workspace.openTextDocument({ content: text, language: 'xslt' });
+	const file = path.join(problemsDir, `module${problemsCount++}.xsl`);
+	fs.writeFileSync(file, text);
+	const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
 	const config = { ...XSLTConfiguration.configuration, isVersion4: lexer.isXSLT40 };
 	const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(config, DocumentTypes.XSLT, document, tokens, lexer.globalInstructionData, [], []);
 	// a problem's message and line - as for the xsl prefix
@@ -29,6 +36,7 @@ async function problems(text: string) {
 
 suite('An XSLT prefix other than xsl', function () {
 	this.timeout(60000);
+	suiteTeardown(() => fs.rmSync(problemsDir, { recursive: true, force: true }));
 	const sampleDir = path.join(__dirname, '..', '..', '..', 'sample');
 	const samples = fs.readdirSync(sampleDir).filter((f) => f.endsWith('.xsl'))
 		.map((f) => ({ name: f, text: fs.readFileSync(path.join(sampleDir, f), 'utf8') }))

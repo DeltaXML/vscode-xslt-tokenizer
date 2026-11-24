@@ -115,6 +115,11 @@ export class FileSelection {
     return contextFiles?.[stylesheetFsPath];
   }
 
+  // the XML files viewed or picked recently, the last first - e.g. for a Schematron schema's context file
+  public recentXmlFiles(): string[] {
+    return this.context.workspaceState.get<string[]>(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL) ?? [];
+  }
+
   public addToRecentlyUsedPickFile(workspaceLabel: string, pickedFsPath: string) {
     let fileListForLabel: string[] | undefined = this.context.workspaceState.get(workspaceLabel);
     if (!fileListForLabel) { fileListForLabel = []; }
@@ -159,6 +164,12 @@ export class FileSelection {
       this.addToRecentlyUsedPickFile(workspaceLabel, value);
     }
     return value;
+  }
+
+  // the value last entered (or picked) for a stylesheet parameter - after a run, the value it used
+  public lastParameterValue(name: string): string | undefined {
+    const recentValues: string[] | undefined = this.context.workspaceState.get(FileSelection.MMO_PREFIX + 'parameter:' + name);
+    return recentValues?.[0];
   }
 
   public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean; prevStageLabel?: string; prevStageGroup?: string; xmlStylesheetPI?: boolean; noneItemDescription?: string; clearIncludesPrevStage?: boolean }) {

@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { BaseToken, TokenLevelState } from './xpLexer';
 import { XslLexer, XSLTokenLevelState } from './xslLexer';
-import { XSLTConfiguration } from './languageConfigurations';
+import { SchConfiguration, XSLTConfiguration } from './languageConfigurations';
 
 // a point in a path or lookup chain where its value so far can be checked: the variable it starts with, a step
 // ('/' or '//' and a node test), a predicate ('[...]') or a lookup ('?key')
@@ -35,6 +35,9 @@ export interface PathChain {
 	line: number;
 	// the variable it starts with, if any - not checked when Saxon hasn't evaluated it yet
 	variable?: string;
+	// in a Schematron abstract pattern's rule: the variable it starts with is the pattern's parameter, replaced by its
+	// value as text - it's checked alone too, as its value is often a path, e.g. @name
+	parameter?: boolean;
 	points: ChainPoint[];
 }
 
@@ -64,6 +67,10 @@ export class XsltEmptySteps {
 	// the decorations at the pause, and the document they're for: shown again when it's shown again in an editor - VS
 	// Code makes a new editor for it, e.g. after switching to another file's editor and back
 	private static shown: { uri: string; decorations: vscode.DecorationOptions[] } | undefined;
+	// a clear put off while the program runs: a step ends with a new pause soon after, and the fades are then replaced
+	// in one go - clearing them at once would show them unfaded until the new ones are ready, a flicker at each step
+	private static pendingClear: ReturnType<typeof setTimeout> | undefined;
+	private static readonly runningClearDelay = 500;
 
 	public static register(context: vscode.ExtensionContext, debugType: string) {
 		XsltEmptySteps.decoration = vscode.window.createTextEditorDecorationType({ opacity: '0.5' });
@@ -81,6 +88,7 @@ export class XsltEmptySteps {
 	}
 
 	private static clear() {
+		XsltEmptySteps.cancelPendingClear();
 		XsltEmptySteps.generation++;
 		XsltEmptySteps.decorated.forEach((editor) => {
 			try {
@@ -92,6 +100,30 @@ export class XsltEmptySteps {
 		XsltEmptySteps.decorated = [];
 		XsltEmptySteps.lastFaded = [];
 		XsltEmptySteps.shown = undefined;
+	}
+
+	private static cancelPendingClear() {
+		if (XsltEmptySteps.pendingClear !== undefined) {
+			clearTimeout(XsltEmptySteps.pendingClear);
+			XsltEmptySteps.pendingClear = undefined;
+		}
+	}
+
+	// the new pause's fades in place of the last pause's, in one go
+	private static show(editor: vscode.TextEditor, decorations: vscode.DecorationOptions[]) {
+		XsltEmptySteps.cancelPendingClear();
+		const document = editor.document;
+		XsltEmptySteps.decorated.filter((e) => e !== editor).forEach((e) => {
+			try {
+				e.setDecorations(XsltEmptySteps.decoration!, []);
+			} catch {
+				// an editor VS Code has closed since
+			}
+		});
+		editor.setDecorations(XsltEmptySteps.decoration!, decorations);
+		XsltEmptySteps.decorated = [editor];
+		XsltEmptySteps.shown = { uri: document.uri.toString(), decorations };
+		XsltEmptySteps.lastFaded = decorations.map((d) => ({ line: d.range.start.line, text: document.getText(d.range), hover: (d.hoverMessage as vscode.MarkdownString).value }));
 	}
 
 	private static showAgain(editors: readonly vscode.TextEditor[]) {
@@ -108,11 +140,33 @@ export class XsltEmptySteps {
 	}
 
 	private static async update(item: vscode.DebugThread | vscode.DebugStackFrame | undefined, debugType: string) {
-		XsltEmptySteps.clear();
-		const generation = XsltEmptySteps.generation;
+		// the last pause's fades stay until this one's are ready (or it's found there are none)
+		const generation = ++XsltEmptySteps.generation;
 		if (!(item instanceof vscode.DebugStackFrame) || item.session.type !== debugType) {
+			// running, or another session's frame: a step soon pauses again, so not at once
+			XsltEmptySteps.cancelPendingClear();
+			XsltEmptySteps.pendingClear = setTimeout(() => {
+				XsltEmptySteps.pendingClear = undefined;
+				if (generation === XsltEmptySteps.generation) {
+					XsltEmptySteps.clear();
+				}
+			}, XsltEmptySteps.runningClearDelay);
 			return;
 		}
+		XsltEmptySteps.cancelPendingClear();
+		try {
+			await XsltEmptySteps.fadeAt(item, generation);
+		} finally {
+			// none to show, e.g. no paths on the line, or the evaluation failed
+			if (generation === XsltEmptySteps.generation && XsltEmptySteps.decorated.length > 0 && XsltEmptySteps.shownGeneration !== generation) {
+				XsltEmptySteps.clear();
+			}
+		}
+	}
+
+	private static shownGeneration = 0;
+
+	private static async fadeAt(item: vscode.DebugStackFrame, generation: number) {
 		const session = item.session;
 		// only the frame selected (the adapter's frame ids are their positions) - the stack may be deep, e.g. in recursion
 		const { stackFrames } = await session.customRequest('stackTrace', { threadId: item.threadId, startFrame: item.frameId, levels: 1 });
@@ -127,18 +181,26 @@ export class XsltEmptySteps {
 		}
 		const document = editor.document;
 		const text = document.getText();
-		const chains = XsltEmptySteps.chains(text, frame.line - 1, frame.column, /\(XPath\)$/.test(frame.name ?? ''));
+		const chains = document.languageId === 'sch' ? XsltEmptySteps.schematronChains(text, frame.line - 1) :
+			XsltEmptySteps.chains(text, frame.line - 1, frame.column, /\(XPath\)$/.test(frame.name ?? ''));
 		if (chains.length === 0) {
 			return;
 		}
 		const evaluate = async (expression: string) => session.customRequest('evaluate', { expression, frameId: item.frameId, context: 'watch' });
 		// variables Saxon hasn't evaluated yet aren't evaluated for this: it could run stylesheet code
 		const notEvaluated = new Set<string>();
+		// in a Schematron abstract pattern's rule: its parameters' values (by name, with no $), as the debugger replaces them
+		const parameterValues = new Map<string, string>();
 		try {
 			const { scopes } = await session.customRequest('scopes', { frameId: item.frameId });
 			const locals = (scopes ?? []).find((s: { name: string }) => s.name === 'Locals');
 			const { variables } = locals ? await session.customRequest('variables', { variablesReference: locals.variablesReference }) : { variables: [] };
 			(variables ?? []).filter((v: { value: string }) => v.value === '(not evaluated yet)').forEach((v: { name: string }) => notEvaluated.add(v.name));
+			const parameters = (scopes ?? []).find((s: { name: string }) => s.name === 'Parameters');
+			if (parameters && chains.some((c) => c.parameter)) {
+				const { variables: values } = await session.customRequest('variables', { variablesReference: parameters.variablesReference });
+				(values ?? []).forEach((v: { name: string, value: string }) => parameterValues.set(v.name.replace(/^\$/, ''), v.value));
+			}
 		} catch {
 			// as if all were evaluated
 		}
@@ -149,7 +211,7 @@ export class XsltEmptySteps {
 				const values: string[] = result.variablesReference > 0 ?
 					((await session.customRequest('variables', { variablesReference: result.variablesReference })).variables ?? []).map((v: { value: string }) => v.value) :
 					[result.result];
-				return values.map((v) => v.replace(/^"|"$/g, ''));
+				return values.map((v) => XsltEmptySteps.stringValue(v));
 			} catch {
 				// e.g. a variable not in scope, or a lookup on something that's not a map or array
 				return undefined;
@@ -166,6 +228,11 @@ export class XsltEmptySteps {
 			if (chain.variable && notEvaluated.has(chain.variable)) {
 				continue;
 			}
+			// a parameter: only with a value that, put in its place as text, is still what the chain starts with
+			const parameterValue = chain.parameter ? parameterValues.get(chain.variable!.replace(/^\$/, '')) : undefined;
+			if (chain.parameter && (parameterValue === undefined || !XsltEmptySteps.isPrimary(parameterValue))) {
+				continue;
+			}
 			// whether each of its points has a value (1 or 0), all at once, each step evaluated once - exists() only
 			// needs a step's first item, as the stylesheet may, where count() would need them all
 			const bindings = XsltEmptySteps.bindings(text, chain);
@@ -177,14 +244,12 @@ export class XsltEmptySteps {
 			if (empty >= 0) {
 				const point = chain.points[empty];
 				const range = new vscode.Range(document.positionAt(point.markStart), document.positionAt(point.markEnd));
-				decorations.push({ range, hoverMessage: await XsltEmptySteps.hover(point, bindings.slice(0, empty), strings) });
+				decorations.push({ range, hoverMessage: await XsltEmptySteps.hover(point, bindings.slice(0, empty), strings, empty === 0 ? parameterValue : undefined) });
 			}
 		}
 		if (generation === XsltEmptySteps.generation && decorations.length > 0) {
-			editor.setDecorations(XsltEmptySteps.decoration!, decorations);
-			XsltEmptySteps.decorated.push(editor);
-			XsltEmptySteps.shown = { uri: document.uri.toString(), decorations };
-			XsltEmptySteps.lastFaded = decorations.map((d) => ({ line: d.range.start.line, text: document.getText(d.range), hover: (d.hoverMessage as vscode.MarkdownString).value }));
+			XsltEmptySteps.show(editor, decorations);
+			XsltEmptySteps.shownGeneration = generation;
 		}
 	}
 
@@ -227,7 +292,7 @@ export class XsltEmptySteps {
 	}
 
 	// why it's empty there - given the bindings of the points before it, and how to evaluate a sequence of strings
-	private static async hover(point: ChainPoint, bindings: string[], strings: (expression: string) => Promise<string[] | undefined>) {
+	private static async hover(point: ChainPoint, bindings: string[], strings: (expression: string) => Promise<string[] | undefined>, parameterValue?: string) {
 		const markdown = new vscode.MarkdownString();
 		const code = (s: string) => '`' + s.replace(/`/g, '\'') + '`';
 		// the value before this point: the context item, or the root, for a path's first step
@@ -235,7 +300,7 @@ export class XsltEmptySteps {
 		const lets = bindings.length > 0 ? `let ${bindings.join(', ')} return ` : '';
 		switch (point.kind) {
 			case 'root':
-				markdown.appendMarkdown(`${code(point.test!)} is empty here`);
+				markdown.appendMarkdown(parameterValue !== undefined ? `${code(point.test!)} - the parameter's value, ${code(parameterValue)} - is empty here` : `${code(point.test!)} is empty here`);
 				break;
 			case 'predicate': {
 				const counted = (await strings(`${lets}string(count(${before}))`))?.[0];
@@ -244,7 +309,7 @@ export class XsltEmptySteps {
 				break;
 			}
 			case 'lookup': {
-				const keys = await strings(`${lets}let $v := (${before}) return (string(count($v)), distinct-values($v!(if (. instance of map(*)) then Q{http://www.w3.org/2005/xpath-functions/map}keys(.)!string() ` +
+				const keys = await strings(`${lets}let $_v := (${before}) return (string(count($_v)), distinct-values($_v!(if (. instance of map(*)) then Q{http://www.w3.org/2005/xpath-functions/map}keys(.)!string() ` +
 					`else if (. instance of array(*)) then '#array ' || Q{http://www.w3.org/2005/xpath-functions/array}size(.) else ()))[position() le 50])`);
 				const arrays = (keys ?? []).slice(1).filter((k) => k.startsWith('#array '));
 				const mapKeys = (keys ?? []).slice(1).filter((k) => !k.startsWith('#array '));
@@ -268,7 +333,7 @@ export class XsltEmptySteps {
 				const axis = point.separator === '//' ? '//' : '/';
 				const candidates = isAttribute ? `${axis}@*` : point.axis ? `${axis}${point.axis}::*` : `${axis}*`;
 				const what = isAttribute ? 'attributes' : point.separator === '//' ? 'descendant elements' : point.axis ? `elements on the ${point.axis} axis` : 'child elements';
-				const names = await strings(`${lets}let $all := (${before})${candidates} return (string(count($all)), distinct-values($all!(name() || ' ' || local-name() || ' ' || namespace-uri()))[position() le 50])`);
+				const names = await strings(`${lets}let $_all := (${before})${candidates} return (string(count($_all)), distinct-values($_all!(name() || ' ' || local-name() || ' ' || namespace-uri()))[position() le 50])`);
 				if (!names) {
 					markdown.appendMarkdown(`Empty here: no ${code(test)} nodes`);
 					break;
@@ -290,6 +355,31 @@ export class XsltEmptySteps {
 			}
 		}
 		return markdown;
+	}
+
+	// a string as the debugger shows it - in single quotes, as an XPath string literal, with a ' in it doubled (a text
+	// node's value is in double quotes) - as the string itself; another value as it is
+	public static stringValue(value: string) {
+		const literal = /^'([\s\S]*)'$/.exec(value);
+		if (literal) {
+			return literal[1].replace(/''/g, '\'');
+		}
+		const text = /^"([\s\S]*)"$/.exec(value);
+		return text ? text[1] : value;
+	}
+
+	/**
+	 * Whether an abstract pattern's parameter value, put in place of the parameter as text (as SchXslt2 does), is what a
+	 * chain starting with the parameter starts with: e.g. @name, customer, order/line or f(x) - not a | b or $x + 1,
+	 * where $p/c would become a | b/c. Not a value with no text, nor one the pattern didn't supply
+	 */
+	public static isPrimary(value: string) {
+		let outer = value.trim().replace(/"[^"]*"|'[^']*'/g, '""');
+		for (let previous = ''; previous !== outer;) {
+			previous = outer;
+			outer = outer.replace(/\([^()[\]]*\)|\[[^()[\]]*\]/g, '');
+		}
+		return value.trim() !== '' && value !== '(not supplied)' && !/[\s|,!+=<>]/.test(outer) && !/^[-/]|-$/.test(outer);
 	}
 
 	public static unescape(xml: string) {
@@ -395,7 +485,119 @@ export class XsltEmptySteps {
 		return chains;
 	}
 
-	private static groupChains(t: BaseToken[], text: string, offset: (token: BaseToken) => number, relativeAllowed: boolean): PathChain[] {
+	/**
+	 * In a Schematron schema, paused in a rule - at the rule, a let, an assert or report, or a value-of in its message -
+	 * the paths of the rule's lets, tests and messages on lines up to the one paused at (its lets all, when paused at
+	 * the rule), relative ones too: they're all evaluated with the rule's node as the context item. Not the rule's
+	 * context (a match pattern). In an abstract pattern's rule, a path may start with a parameter, which is checked
+	 * alone too (see PathChain.parameter). Paused elsewhere - e.g. at a global let - only that element's paths from a
+	 * variable or the root
+	 */
+	public static schematronChains(text: string, stopLine: number): PathChain[] {
+		const tokens = new XslLexer(SchConfiguration.configuration).analyse(text);
+		const xslStart = XslLexer.getXsltStartTokenNumber();
+		const lineStarts = [0];
+		for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) {
+			lineStarts.push(i + 1);
+		}
+		const offset = (token: BaseToken) => lineStarts[token.line] + token.startCharacter;
+		const tokenText = (token: BaseToken) => text.substr(offset(token), token.length);
+		const localName = (name: string) => name.replace(/^.*:/, '');
+		const evaluated = new Set(['test', 'value', 'select', 'path', 'subject']);
+
+		// the XPath tokens of each attribute, with its element - its line and local name - and the rule it's in (its line)
+		const groups: { elementLine: number; elementName: string; rule: number; abstract: boolean; tokens: BaseToken[] }[] = [];
+		// the lines of the elements starting on each line, and the rule they're in
+		const startTags: { line: number; name: string; rule: number }[] = [];
+		const stack: { name: string; line: number; abstract: boolean }[] = [];
+		// the variables lets declare: a variable that isn't one, in an abstract pattern, is the pattern's parameter
+		const declared = new Set<string>();
+		const ruleOf = () => [...stack].reverse().find((e) => e.name === 'rule')?.line ?? -1;
+		let elementName: string | undefined;
+		let elementLine = -1;
+		let abstract = false;
+		let isEndTag = false;
+		let attributeName: string | undefined;
+		let current: BaseToken[] | undefined;
+		for (const token of tokens) {
+			if (token.tokenType < xslStart) {
+				if (attributeName !== undefined && elementName !== undefined && evaluated.has(attributeName) && elementName !== 'rule') {
+					if (!current) {
+						current = [];
+						groups.push({ elementLine, elementName, rule: ruleOf(), abstract: stack.some((e) => e.abstract), tokens: current });
+					}
+					current.push(token);
+				}
+				continue;
+			}
+			const type = token.tokenType - xslStart;
+			if (type === XSLTokenLevelState.attributeValue) {
+				const value = tokenText(token).replace(/^["']|["']$/g, '');
+				if (attributeName === 'abstract' && elementName === 'pattern') {
+					abstract = value === 'true';
+				} else if (attributeName === 'name' && elementName === 'let') {
+					declared.add(value);
+				}
+				continue;
+			}
+			if (type === XSLTokenLevelState.entityRef || type === XSLTokenLevelState.attributeEquals) {
+				continue;
+			}
+			current = undefined;
+			attributeName = undefined;
+			if (type === XSLTokenLevelState.elementName || type === XSLTokenLevelState.xslElementName) {
+				if (isEndTag) {
+					stack.pop();
+				} else {
+					elementName = localName(tokenText(token));
+					if (elementLine <= stopLine) {
+						startTags.push({ line: elementLine, name: elementName, rule: elementName === 'rule' ? elementLine : ruleOf() });
+					}
+				}
+			} else if (type === XSLTokenLevelState.attributeName) {
+				attributeName = elementName !== undefined ? tokenText(token) : undefined;
+			} else if (type === XSLTokenLevelState.xmlPunctuation) {
+				const punctuation = tokenText(token);
+				if (punctuation === '<' || punctuation === '</') {
+					isEndTag = punctuation === '</';
+					elementName = undefined;
+					elementLine = token.line;
+					abstract = false;
+				} else if (punctuation === '>' && elementName !== undefined && !isEndTag) {
+					stack.push({ name: elementName, line: elementLine, abstract });
+					elementName = undefined;
+				} else if (punctuation === '/>') {
+					elementName = undefined;
+				}
+			}
+		}
+		// the element paused at: the first starting on the line
+		const stopped = startTags.find((s) => s.line === stopLine);
+		if (!stopped) {
+			return [];
+		}
+		const chains: PathChain[] = [];
+		for (const group of groups) {
+			let relativeAllowed: boolean;
+			if (stopped.rule >= 0) {
+				const inScope = group.rule === stopped.rule && (group.elementLine <= stopLine || (stopped.name === 'rule' && group.elementName === 'let'));
+				if (!inScope) {
+					continue;
+				}
+				relativeAllowed = true;
+			} else if (group.elementLine === stopLine) {
+				relativeAllowed = false;
+			} else {
+				continue;
+			}
+			// in an abstract pattern, a variable no let declares is a parameter
+			const isParameter = (name: string) => group.abstract && !declared.has(name.replace(/^\$/, ''));
+			chains.push(...XsltEmptySteps.groupChains(group.tokens, text, offset, relativeAllowed, isParameter));
+		}
+		return chains;
+	}
+
+	private static groupChains(t: BaseToken[], text: string, offset: (token: BaseToken) => number, relativeAllowed: boolean, isParameter?: (name: string) => boolean): PathChain[] {
 		const op = (i: number, ...values: string[]) => i >= 0 && i < t.length && t[i].tokenType === TokenLevelState.operator && values.includes(t[i].value);
 		const end = (i: number) => offset(t[i]) + t[i].length;
 		const isStepStart = (i: number) => i < t.length && (t[i].tokenType === TokenLevelState.axisName || t[i].tokenType === TokenLevelState.nodeNameTest ||
@@ -545,10 +747,11 @@ export class XsltEmptySteps {
 					break;
 				}
 			}
-			// a variable (or other expression it starts with) alone isn't a path
+			// a variable (or other expression it starts with) alone isn't a path - unless it's a parameter
 			const checked = points.slice(0, safe);
-			if (checked.length > (checked[0]?.kind === 'root' ? 1 : 0)) {
-				chains.push({ start, line: t[i].line, variable, points: checked });
+			const parameter = variable !== undefined && isParameter?.(variable) === true;
+			if (checked.length > (checked[0]?.kind === 'root' && !parameter ? 1 : 0)) {
+				chains.push({ start, line: t[i].line, variable, points: checked, ...(parameter ? { parameter } : {}) });
 			}
 		}
 		return chains;

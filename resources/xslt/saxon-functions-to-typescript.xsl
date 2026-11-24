@@ -90,7 +90,7 @@ export const xpath40Arities = {{
       <xsl:variable name="entries" as="xs:string*" select="
         for $fn in $functions[f:name/@namespace eq $group?uri],
             $proto in $fn/f:signatures/f:proto[f:in-spec = 'xpath40'],
-            $arity in count($proto/f:arg[not(@default)]) to count($proto/f:arg)
+            $arity in gen:required-count($fn, $proto) to count($proto/f:arg)
         return $fn/f:name || '#' || $arity"/>
       <xsl:text>&#9;{$group?key}: [&#10;</xsl:text>
       <xsl:value-of select="distinct-values($entries) ! ('&#9;&#9;' || gen:ts-string(.))" separator=",&#10;"/>
@@ -102,7 +102,24 @@ export const xpath40Arities = {{
   <xsl:function name="gen:arg" as="xs:string">
     <xsl:param name="arg" as="element(f:arg)"/>
     <!-- some types (e.g. long enum types) are split over several lines in the source -->
-    <xsl:sequence select="'$' || $arg/@name || ' as ' || normalize-space($arg/@type) || (if ($arg/@default) then ' := ' || normalize-space($arg/@default) else '')"/>
+    <xsl:sequence select="'$' || $arg/@name || ' as ' || normalize-space($arg/@type) || (
+      if ($arg/@default) then ' := ' || normalize-space($arg/@default)
+      else if (gen:is-array-get($arg/ancestor::f:function) and $arg/@name eq 'default') then ' := fn:error()'
+      else '')"/>
+  </xsl:function>
+
+  <!-- the documentation lists array:get's 2-argument form for XPath 3.1 only, and its 3-argument form without a default for
+       $default: in XPath 4.0 $default is optional, as the 2-argument form is still there (Saxon 13 accepts both) -->
+  <xsl:function name="gen:is-array-get" as="xs:boolean">
+    <xsl:param name="function" as="element(f:function)"/>
+    <xsl:sequence select="$function/f:name eq 'get' and $function/f:name/@namespace eq 'http://www.w3.org/2005/xpath-functions/array'"/>
+  </xsl:function>
+
+  <!-- the number of arguments a call must have: those with no default -->
+  <xsl:function name="gen:required-count" as="xs:integer">
+    <xsl:param name="function" as="element(f:function)"/>
+    <xsl:param name="proto" as="element(f:proto)"/>
+    <xsl:sequence select="count($proto/f:arg[not(@default)]) - (if (gen:is-array-get($function)) then 1 else 0)"/>
   </xsl:function>
 
   <xsl:function name="gen:is-unimplemented" as="xs:boolean">

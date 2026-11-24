@@ -1,0 +1,19 @@
+{
+	"title": "Video 1: Run and debug a stylesheet",
+	"steps": [
+		{ "caption": "Open an XML file: it becomes the XML context file", "note": "Shown in the XSLT editor's status bar" },
+		"Open a stylesheet",
+		{ "caption": "Click ▶ Quick Run"},
+		{ "caption": "Pick a result file location, or press Enter to use the previous result file" },
+		"The result opens beside the stylesheet",
+		"Set a breakpoint: click in the margin",
+		{ "caption": "Click Debug"},
+		{ "caption": "Pick a result file location, or press Enter to use the previous result file" },
+		"Paused at the breakpoint: the context item, variables and parameters",
+		"Remove the breakpoint, and continue to the end",
+		{ "caption": "Need parameters or options? Click Edit Debug/Run Task", "note": "The button beside Debug: the task is saved in tasks.json" },
+		{ "caption": "Add a parameter to the task", "note": "Quick Run and the debugger both use the task" },
+		{ "caption": "Run again: the task is used - here, with a higher discount threshold", "note": "Pick a result file location, or press Enter to use the previous result file" },
+		"Run and debug any stylesheet - no setup needed"
+	]
+}

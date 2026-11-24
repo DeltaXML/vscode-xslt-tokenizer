@@ -10,6 +10,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { McpRoot } from './mcpRoot';
+import { DiskTextDocument } from './diskTextDocument';
 import { ImportNode, ImportTreeProvider } from '../importTreeProvider';
 import { ImportIndex } from '../importIndex';
 import { GlobalInstructionData, GlobalInstructionType, XslLexer } from '../xslLexer';
@@ -21,9 +23,11 @@ import { XSpecTestNode, XSpecTests } from '../xspecTests';
 
 // what the tools need from the extension: the problems and the declarations of an XSLT module or XSpec file, as the
 // linter finds them - undefined for a document in another language
+// a module's problems and declarations, checked as in the editor: with the top-level stylesheet that imports or includes
+// it - the one given, or else the one found for it (see XsltSymbolProvider.processTopLevelImports)
 export interface XsltModules {
-	problems(document: vscode.TextDocument): Promise<vscode.Diagnostic[]> | undefined;
-	declarations(document: vscode.TextDocument): Promise<{ own: GlobalInstructionData[], imported: GlobalInstructionData[] }> | undefined;
+	problems(document: vscode.TextDocument, topLevel?: string): Promise<vscode.Diagnostic[]> | undefined;
+	declarations(document: vscode.TextDocument, topLevel?: string): Promise<{ own: GlobalInstructionData[], imported: GlobalInstructionData[] }> | undefined;
 }
 
 export type ToolResult = { content: { type: 'text', text: string }[], isError: boolean };
@@ -57,6 +61,7 @@ export class XsltMcpTools {
 	private static readonly severities: Severity[] = ['error', 'warning', 'info', 'hint'];
 	private static readonly maxFiles = 1000;
 	private static readonly maxReferences = 200;
+	private static readonly maxDeclarations = 500;
 
 	public constructor(private readonly modules: XsltModules) {
 	}
@@ -66,33 +71,111 @@ export class XsltMcpTools {
 	}
 
 	private static resolve(filePath: string): string {
-		const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const folder = McpRoot.current();
 		return path.isAbsolute(filePath) || !folder ? path.resolve(filePath) : path.resolve(folder, filePath);
 	}
 
-	// a path as shown: relative to the first workspace folder, if it's in it
+	// a path as shown: relative to the project's folder, if it's in it
 	private static shown(file: string) {
-		const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const folder = McpRoot.current();
 		return folder && file.startsWith(folder + path.sep) ? path.relative(folder, file) : file;
 	}
 
-	private static async open(filePath: string, withXSpec: boolean): Promise<vscode.TextDocument | string> {
+	// withSchematron: a Schematron schema (.sch) too - for the tool that checks a file, as the extension does
+	private static async open(filePath: string, withXSpec: boolean, withSchematron = false): Promise<vscode.TextDocument | string> {
 		const resolved = XsltMcpTools.resolve(filePath);
-		if (!(withXSpec ? /\.(xslt?|xspec)$/i : /\.xslt?$/i).test(resolved)) {
-			return `Not an XSLT${withXSpec ? ' or XSpec' : ''} file: ${resolved}`;
+		if (!(withSchematron ? /\.(xslt?|xspec|sch)$/i : withXSpec ? /\.(xslt?|xspec)$/i : /\.xslt?$/i).test(resolved)) {
+			return `Not an XSLT${withSchematron ? ', XSpec or Schematron' : withXSpec ? ' or XSpec' : ''} file: ${resolved}`;
 		}
 		if (!fs.existsSync(resolved)) {
 			return `File not found: ${resolved}`;
 		}
-		return vscode.workspace.openTextDocument(vscode.Uri.file(resolved));
+		return DiskTextDocument.current(vscode.Uri.file(resolved));
+	}
+
+	// the index of the workspace's modules, built: a module's top-level stylesheet is found from it. The editor builds it in
+	// the background the first time it's needed, and checks the open modules again once it's built - a tool's answer
+	// can't be updated, so it waits, or a module would be checked without the declarations of the modules that include it
+	private static async indexBuilt() {
+		if (ImportIndex.isEnabled()) {
+			await ImportIndex.instance.whenBuilt();
+		}
+	}
+
+	// a module's declarations: its own and those of the modules it uses - with the top-level stylesheet given, or else the
+	// one found for it from the index
+	private async declarationsOf(document: vscode.TextDocument, topLevel?: string) {
+		if (!topLevel) {
+			await XsltMcpTools.indexBuilt();
+		}
+		return this.modules.declarations(document, topLevel);
+	}
+
+	// a tool's topLevelStylesheet argument, for the module: the stylesheet's path - undefined, when not given - or the
+	// error to return
+	private static topLevelArgument(document: vscode.TextDocument, topLevelStylesheet?: string): { topLevel?: string, error?: ToolResult } {
+		if (!topLevelStylesheet) {
+			return {};
+		}
+		if (document.languageId !== 'xslt') {
+			return { error: XsltMcpTools.text(`A top-level stylesheet is only for an XSLT module, not an XSpec file: ${document.fileName}`, true) };
+		}
+		const found = XsltMcpTools.topLevelFor(document.fileName, topLevelStylesheet);
+		return 'problem' in found ? { error: XsltMcpTools.text(found.problem, true) } : { topLevel: found.path };
+	}
+
+	// the text that says which top-level stylesheet a module was checked with, when one was given
+	private static withTopLevel(topLevel?: string) {
+		return topLevel ? ` - checked with the top-level stylesheet ${XsltMcpTools.shown(topLevel)}` : '';
+	}
+
+	// the top-level stylesheet given for a module: an XSLT file that imports or includes it, directly or indirectly - or
+	// the reason it can't be used
+	private static topLevelFor(module: string, topLevel: string): { path: string } | { problem: string } {
+		const resolved = XsltMcpTools.resolve(topLevel);
+		if (!/\.xslt?$/i.test(resolved)) {
+			return { problem: `The top-level stylesheet isn't an XSLT file: ${resolved}` };
+		}
+		if (!fs.existsSync(resolved)) {
+			return { problem: `The top-level stylesheet isn't found: ${resolved}` };
+		}
+		if (resolved === module) {
+			return { problem: `The top-level stylesheet is the module itself: ${resolved} - leave topLevelStylesheet out to check it on its own` };
+		}
+		// its xsl:import and xsl:include hrefs, followed down the tree
+		const seen = new Set<string>([resolved]);
+		const pending = [resolved];
+		while (pending.length > 0) {
+			const file = pending.shift()!;
+			let text: string;
+			try {
+				text = fs.readFileSync(file, 'utf8');
+			} catch {
+				continue;
+			}
+			for (const reference of ImportIndex.moduleReferences(text, file)) {
+				if (reference.path === module) {
+					return { path: resolved };
+				}
+				if (!seen.has(reference.path)) {
+					seen.add(reference.path);
+					pending.push(reference.path);
+				}
+			}
+		}
+		return { problem: `${XsltMcpTools.shown(resolved)} doesn't import or include ${XsltMcpTools.shown(module)}, directly or indirectly` };
 	}
 
 	// ---------------------------------------------------------------- problems
 
 	// a document's problems, of the severity given or worse, as lines of 'line:column severity message' - an empty file
 	// is one: the linter doesn't report it, so that a new file isn't shown with an error, but Saxon can't compile it
-	private async problemLines(document: vscode.TextDocument, minSeverity: Severity): Promise<string[] | undefined> {
-		const diagnostics = await this.modules.problems(document);
+	private async problemLines(document: vscode.TextDocument, minSeverity: Severity, topLevel?: string): Promise<string[] | undefined> {
+		// with a top-level stylesheet given, the index isn't used
+		if (!topLevel) {
+			await XsltMcpTools.indexBuilt();
+		}
+		const diagnostics = await this.modules.problems(document, topLevel);
 		if (!diagnostics) {
 			return undefined;
 		}
@@ -104,33 +187,58 @@ export class XsltMcpTools {
 			.map((d) => `${d.range.start.line + 1}:${d.range.start.character + 1} ${XsltMcpTools.severities[d.severity]} ${d.message}`);
 	}
 
-	public async lintFile(filePath: string, minSeverity: Severity = 'hint'): Promise<ToolResult> {
-		const document = await XsltMcpTools.open(filePath, true);
+	// topLevelStylesheet: one to check an XSLT module with, instead of the one found for it - e.g. one outside the
+	// workspace, or another of those that include it
+	public async lintFile(filePath: string, minSeverity: Severity = 'hint', topLevelStylesheet?: string): Promise<ToolResult> {
+		const document = await XsltMcpTools.open(filePath, true, true);
 		if (typeof document === 'string') {
 			return XsltMcpTools.text(document, true);
 		}
-		const lines = await this.problemLines(document, minSeverity);
-		if (!lines) {
-			return XsltMcpTools.text(`Not checked - the file's language is '${document.languageId}', not XSLT or XSpec: ${document.fileName}`, true);
+		const { topLevel, error } = XsltMcpTools.topLevelArgument(document, topLevelStylesheet);
+		if (error) {
+			return error;
 		}
-		return XsltMcpTools.text(lines.length === 0 ? `No problems: ${document.fileName}` :
-			`${lines.length} problem${lines.length === 1 ? '' : 's'} in ${document.fileName}:\n${lines.join('\n')}`);
+		const lines = await this.problemLines(document, minSeverity, topLevel);
+		if (!lines) {
+			return XsltMcpTools.text(`Not checked - the file's language is '${document.languageId}', not XSLT, XSpec or Schematron: ${document.fileName}`, true);
+		}
+		const withTopLevel = XsltMcpTools.withTopLevel(topLevel);
+		return XsltMcpTools.text(lines.length === 0 ? `No problems: ${document.fileName}${withTopLevel}` :
+			`${lines.length} problem${lines.length === 1 ? '' : 's'} in ${document.fileName}${withTopLevel}:\n${lines.join('\n')}`);
 	}
 
-	// the problems of the XSLT and XSpec files in a folder - not XSpec's generated test runners
-	public async lintFiles(folder: string | undefined, pattern = '**/*.{xsl,xslt,xspec}', minSeverity: Severity = 'warning'): Promise<ToolResult> {
-		const base = folder ? XsltMcpTools.resolve(folder) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	// the folders and files lint_files leaves out, within the folder: node_modules, XSpec's generated test runners, hidden
+	// folders such as .git or .vscode-test - unless the pattern names one - and the files.exclude setting's patterns
+	// (findFiles doesn't apply files.exclude when given an exclude pattern)
+	public static lintExcludes(base: string, pattern: string) {
+		const excludes = ['**/node_modules/**', '**/xspec/*-compiled.xsl'];
+		if (!/(^|\/)\./.test(pattern)) {
+			excludes.push('**/.*/**');
+		}
+		const filesExclude = vscode.workspace.getConfiguration('files', vscode.Uri.file(base)).get<Record<string, unknown>>('exclude') ?? {};
+		for (const [glob, on] of Object.entries(filesExclude)) {
+			// true only - not a 'when' clause; nested braces aren't allowed in a glob pattern
+			if (on === true && !glob.includes('{')) {
+				excludes.push(glob, glob.replace(/\/$/, '') + '/**');
+			}
+		}
+		return new vscode.RelativePattern(base, `{${excludes.join(',')}}`);
+	}
+
+	// the problems of the XSLT and XSpec files in a folder - not XSpec's generated test runners or hidden folders
+	public async lintFiles(folder: string | undefined, pattern = '**/*.{xsl,xslt,xspec,sch}', minSeverity: Severity = 'warning'): Promise<ToolResult> {
+		const base = folder ? XsltMcpTools.resolve(folder) : McpRoot.current();
 		if (!base || !fs.existsSync(base) || !fs.statSync(base).isDirectory()) {
 			return XsltMcpTools.text(base ? `Folder not found: ${base}` : 'No folder given, and no workspace folder is open', true);
 		}
-		const uris = await vscode.workspace.findFiles(new vscode.RelativePattern(base, pattern), '{**/node_modules/**,**/xspec/*-compiled.xsl}', XsltMcpTools.maxFiles + 1);
-		const files = uris.map((uri) => uri.fsPath).filter((file) => /\.(xslt?|xspec)$/i.test(file)).sort();
+		const uris = await vscode.workspace.findFiles(new vscode.RelativePattern(base, pattern), XsltMcpTools.lintExcludes(base, pattern), XsltMcpTools.maxFiles + 1);
+		const files = uris.map((uri) => uri.fsPath).filter((file) => /\.(xslt?|xspec|sch)$/i.test(file)).sort();
 		const results: string[] = [];
 		let checked = 0;
 		let problems = 0;
 		// one at a time: each is checked with the declarations of its own imports
 		for (const file of files.slice(0, XsltMcpTools.maxFiles)) {
-			const lines = await this.problemLines(await vscode.workspace.openTextDocument(vscode.Uri.file(file)), minSeverity);
+			const lines = await this.problemLines(await DiskTextDocument.current(vscode.Uri.file(file)), minSeverity);
 			if (!lines) {
 				continue;
 			}
@@ -183,8 +291,8 @@ export class XsltMcpTools {
 
 	// the declarations with the name, of a kind - as seen from the module: its own, then those it imports or includes,
 	// highest import precedence first. A name may be '$name' for a variable, or 'name#2' for a function of arity 2
-	private async findDeclarations(document: vscode.TextDocument, name: string, kind?: string) {
-		const declared = await this.modules.declarations(document);
+	private async findDeclarations(document: vscode.TextDocument, name: string, kind?: string, topLevel?: string) {
+		const declared = await this.declarationsOf(document, topLevel);
 		const arityMatch = /^(.*)#(\d+)$/.exec(name.trim());
 		const bareName = (arityMatch ? arityMatch[1] : name.trim()).replace(/^\$/, '');
 		const arity = arityMatch ? Number(arityMatch[2]) : undefined;
@@ -241,26 +349,92 @@ export class XsltMcpTools {
 		return XsltMcpTools.describe(global, document) + (text ? '\n' + text.split('\n').map((line) => '    ' + line).join('\n') : '');
 	}
 
-	public async findDeclaration(filePath: string, name: string, kind?: string): Promise<ToolResult> {
+	// a declaration's identity for import precedence: the same name, kind and (for a function) arity - the first has the
+	// highest import precedence and is used
+	private static precedenceKey(global: GlobalInstructionData) {
+		return `${global.type === GlobalInstructionType.Parameter ? GlobalInstructionType.Variable : global.type} ${global.name}#${global.type === GlobalInstructionType.Function ? global.idNumber : ''}`;
+	}
+
+	// every component the module can use: its own declarations, then those of the modules it imports or includes and the
+	// packages it uses - each with its parameters and types, and the first line of its documentation - to see what can be
+	// reused before writing a new one
+	// topLevelStylesheet: as for lintFile - the declarations as seen with it
+	public async listDeclarations(filePath: string, kind?: string, topLevelStylesheet?: string): Promise<ToolResult> {
 		const document = await XsltMcpTools.open(filePath, true);
 		if (typeof document === 'string') {
 			return XsltMcpTools.text(document, true);
 		}
-		const found = await this.findDeclarations(document, name, kind);
+		const { topLevel, error } = XsltMcpTools.topLevelArgument(document, topLevelStylesheet);
+		if (error) {
+			return error;
+		}
+		const declared = await this.declarationsOf(document, topLevel);
+		if (!declared) {
+			return XsltMcpTools.text(`Not an XSLT or XSpec file: ${document.fileName}`, true);
+		}
+		const types = kind ? declarationKinds[kind] : Object.values(declarationKinds).flat();
+		const wanted = (global: GlobalInstructionData) => types.includes(global.type) && !!global.name;
+		const seen = new Set<string>();
+		let shown = 0;
+		const line = (global: GlobalInstructionData) => {
+			const key = XsltMcpTools.precedenceKey(global);
+			const overridden = seen.has(key);
+			seen.add(key);
+			const first = overridden ? undefined : XsltMcpTools.documentation(global, document).text?.split('\n').map((l) => l.trim()).find((l) => l !== '');
+			const brief = first ? ' - ' + (first.length > 100 ? first.substring(0, 100) + '…' : first) : '';
+			return '  ' + XsltMcpTools.describe(global, document) + (overridden ? ' - not used: overridden by one with a higher import precedence' : brief);
+		};
+		const sections: string[] = [];
+		let total = 0;
+		for (const [title, globals] of [['Declared in this module', declared.own], ['Declared in the modules and packages it uses', declared.imported]] as const) {
+			const wantedGlobals = globals.filter(wanted);
+			total += wantedGlobals.length;
+			const lines: string[] = [];
+			for (const global of wantedGlobals) {
+				if (shown >= XsltMcpTools.maxDeclarations) {
+					break;
+				}
+				shown++;
+				lines.push(line(global));
+			}
+			if (wantedGlobals.length > 0) {
+				sections.push(`${title} (${wantedGlobals.length}):\n${lines.join('\n')}`);
+			}
+		}
+		const what = kind ? `${kind} declarations` : 'declarations';
+		if (total === 0) {
+			return XsltMcpTools.text(`No ${what} in ${XsltMcpTools.shown(document.fileName)} or the modules and packages it uses${XsltMcpTools.withTopLevel(topLevel)}`);
+		}
+		const more = total > shown ? ` - the first ${shown} are listed: give a kind to narrow it` : '';
+		return XsltMcpTools.text(`${total} ${what} usable from ${XsltMcpTools.shown(document.fileName)}${XsltMcpTools.withTopLevel(topLevel)}${more}\n\n${sections.join('\n\n')}\n\n` +
+			'Use find_declaration for a declaration\'s full documentation, and find_references for where it is used.');
+	}
+
+	// topLevelStylesheet: as for lintFile - the declarations as seen with it
+	public async findDeclaration(filePath: string, name: string, kind?: string, topLevelStylesheet?: string): Promise<ToolResult> {
+		const document = await XsltMcpTools.open(filePath, true);
+		if (typeof document === 'string') {
+			return XsltMcpTools.text(document, true);
+		}
+		const { topLevel, error } = XsltMcpTools.topLevelArgument(document, topLevelStylesheet);
+		if (error) {
+			return error;
+		}
+		const found = await this.findDeclarations(document, name, kind, topLevel);
 		if (found.length === 0) {
 			const builtIn = (!kind || kind === 'function') && XsltMcpTools.builtInFunctions(name.replace(/#\d+$/, ''), true).length > 0;
-			return XsltMcpTools.text(`No ${kind ?? 'declaration'} named ${name} is declared in ${XsltMcpTools.shown(document.fileName)} or the modules and packages it uses` +
+			return XsltMcpTools.text(`No ${kind ?? 'declaration'} named ${name} is declared in ${XsltMcpTools.shown(document.fileName)} or the modules and packages it uses${XsltMcpTools.withTopLevel(topLevel)}` +
 				(builtIn ? ` - ${name.replace(/#\d+$/, '')} is a built-in function: see the xpath_function tool` : ''));
 		}
 		// for the same name, kind and arity in more than one module, the first - with the highest import precedence - is used
-		const key = (global: GlobalInstructionData) => `${global.type === GlobalInstructionType.Parameter ? GlobalInstructionType.Variable : global.type} ${global.name}#${global.type === GlobalInstructionType.Function ? global.idNumber : ''}`;
+		const key = XsltMcpTools.precedenceKey;
 		const seen = new Set<string>();
 		const lines = found.map((global) => {
 			const isUsed = !seen.has(key(global));
 			seen.add(key(global));
 			return isUsed ? XsltMcpTools.describeWithDocumentation(global, document) : XsltMcpTools.describe(global, document) + ' - not used: overridden by the one above, with a higher import precedence';
 		});
-		return XsltMcpTools.text(lines.join('\n'));
+		return XsltMcpTools.text(lines.join('\n') + (topLevel ? `\n\nAs seen from ${XsltMcpTools.shown(document.fileName)}${XsltMcpTools.withTopLevel(topLevel)}` : ''));
 	}
 
 	public async findReferences(filePath: string, name: string, kind?: string): Promise<ToolResult> {
@@ -347,12 +521,17 @@ export class XsltMcpTools {
 	// ---------------------------------------------------------------- types
 
 	// a named item type (xsl:item-type), or a record type: its fields - or an enumeration type's values
-	public async describeType(filePath: string, name: string): Promise<ToolResult> {
+	// topLevelStylesheet: as for lintFile - the types declared with it
+	public async describeType(filePath: string, name: string, topLevelStylesheet?: string): Promise<ToolResult> {
 		const document = await XsltMcpTools.open(filePath, true);
 		if (typeof document === 'string') {
 			return XsltMcpTools.text(document, true);
 		}
-		const declared = await this.modules.declarations(document);
+		const { topLevel, error } = XsltMcpTools.topLevelArgument(document, topLevelStylesheet);
+		if (error) {
+			return error;
+		}
+		const declared = await this.declarationsOf(document, topLevel);
 		const all = (declared?.own ?? []).concat(declared?.imported ?? []);
 		const itemTypes = new Map<string, string>();
 		// the first with a name has the highest import precedence
@@ -377,10 +556,10 @@ export class XsltMcpTools {
 		} else if (values) {
 			lines.push(`an enumeration type, with the values: ${values.map((value) => `'${value}'`).join(', ')}`);
 		} else if (!declaration) {
-			return XsltMcpTools.text(`No item type named ${typeText} is declared in ${XsltMcpTools.shown(document.fileName)} or the modules and packages it uses` +
+			return XsltMcpTools.text(`No item type named ${typeText} is declared in ${XsltMcpTools.shown(document.fileName)} or the modules and packages it uses${XsltMcpTools.withTopLevel(topLevel)}` +
 				(itemTypes.size > 0 ? ` - those declared are: ${[...itemTypes.keys()].join(', ')}` : ''));
 		}
-		return XsltMcpTools.text(lines.join('\n'));
+		return XsltMcpTools.text(lines.join('\n') + (topLevel ? `\n\nAs seen from ${XsltMcpTools.shown(document.fileName)}${XsltMcpTools.withTopLevel(topLevel)}` : ''));
 	}
 
 	// ---------------------------------------------------------------- built-in functions

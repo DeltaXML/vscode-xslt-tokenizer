@@ -25,7 +25,7 @@ import javax.xml.parsers.SAXParserFactory;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
 import org.xml.sax.Locator;
-import org.xml.sax.helpers.DefaultHandler;
+import org.xml.sax.ext.DefaultHandler2;
 
 /**
  * The lines of a stylesheet where execution can stop. Saxon reports each instruction's location as that of the end
@@ -239,8 +239,11 @@ final class BreakableLines {
             // not supported by this parser
         }
         SAXParser parser = factory.newSAXParser();
-        DefaultHandler handler = new DefaultHandler() {
+        // DefaultHandler2: also a LexicalHandler, for the comments
+        DefaultHandler2 handler = new DefaultHandler2() {
             private Locator locator;
+            // within the DTD, whose comments aren't the stylesheet's
+            private boolean inDtd;
             // for each open element: its tag, and whether its descendants are executed
             private final Deque<Tag> open = new ArrayDeque<Tag>();
             private final Deque<Boolean> executed = new ArrayDeque<Boolean>();
@@ -257,6 +260,36 @@ final class BreakableLines {
             @Override
             public InputSource resolveEntity(String publicId, String systemId) {
                 return new InputSource(new StringReader(""));
+            }
+
+            // as an EntityResolver2, which the parser calls instead of the method above
+            @Override
+            public InputSource resolveEntity(String name, String publicId, String baseURI, String systemId) {
+                return new InputSource(new StringReader(""));
+            }
+
+            @Override
+            public void startDTD(String name, String publicId, String systemId) {
+                inDtd = true;
+            }
+
+            @Override
+            public void endDTD() {
+                inDtd = false;
+            }
+
+            @Override
+            public void comment(char[] ch, int start, int length) {
+                if (inDtd) {
+                    return;
+                }
+                // the locator is at the end of the comment's '-->'; it starts at the '<!--' before it, as '--' can't
+                // appear within a comment
+                int endLine = locator.getLineNumber();
+                int endOffset = Math.min(text.length(), lineStarts[Math.min(endLine, lineStarts.length) - 1] + Math.max(locator.getColumnNumber() - 1, 0));
+                int startOffset = text.lastIndexOf("<!--", Math.max(endOffset - 4, 0));
+                int startLine = startOffset < 0 ? endLine : lineOf(lineStarts, startOffset);
+                result.comments.add(new Comment(startLine, endLine, open.peek(), result.tags.size()));
             }
 
             @Override
@@ -364,6 +397,11 @@ final class BreakableLines {
         };
         InputSource source = new InputSource(new StringReader(text));
         source.setSystemId(systemId);
+        try {
+            parser.setProperty("http://xml.org/sax/properties/lexical-handler", handler);
+        } catch (Exception e) {
+            // not supported by this parser: no comments, so breakpoints in them aren't moved
+        }
         parser.parse(source, handler);
         for (Tag tag : result.tags) {
             List<Tag> ending = result.tagsEndingOn.get(tag.endLine);
@@ -374,6 +412,65 @@ final class BreakableLines {
             ending.add(tag);
         }
         return result;
+    }
+
+    /** an XML comment, as the parser reports it: its lines, the element it's in, and the tags before it */
+    private static final class Comment {
+        final int startLine;
+        final int endLine;
+        // null for a comment outside the root element
+        final Tag parent;
+        // the number of start tags before it: the tags after it follow these in the list of tags
+        final int tagsBefore;
+
+        Comment(int startLine, int endLine, Tag parent, int tagsBefore) {
+            this.startLine = startLine;
+            this.endLine = endLine;
+            this.parent = parent;
+            this.tagsBefore = tagsBefore;
+        }
+    }
+
+    private final List<Comment> comments = new ArrayList<Comment>();
+
+    // a breakpoint on a line of an XML comment with no start tag on it: moved to the first instruction after the
+    // comment, within the comment's parent element - e.g. from a comment before an instruction, or from a stylesheet's
+    // header notes to its first global variable or instruction. Not out of the parent (a comment at the end of a
+    // template isn't moved into the next one), and not where the comment isn't executed, e.g. within xsl:note
+    private Resolution resolveInComment(int line) {
+        for (Comment comment : comments) {
+            if (comment.startLine <= line && line <= comment.endLine) {
+                Tag parent = comment.parent;
+                if (parent != null && parent.untracedReason != null && !parent.untracedReason.equals("isn't an instruction Saxon can stop at")) {
+                    // within xsl:note, an attribute set or a top-level data element - nothing in it is executed
+                    return null;
+                }
+                for (Tag tag : tags.subList(comment.tagsBefore, tags.size())) {
+                    if (parent != null && !isWithin(tag, parent)) {
+                        // past the end of the comment's parent: the tags after it are too
+                        return null;
+                    }
+                    if (tag.untracedReason == null) {
+                        Resolution resolution = resolve(tag.startLine);
+                        if (resolution.verified) {
+                            return new Resolution(true, resolution.line, resolution.aliasLines,
+                                    "Moved from line " + line + ", in a comment, to the next instruction").forElement(resolution.element);
+                        }
+                    }
+                }
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isWithin(Tag tag, Tag ancestor) {
+        for (Tag t = tag.parent; t != null; t = t.parent) {
+            if (t == ancestor) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // the instructions Saxon traces - for coverage, the lines that can be run: not, e.g., a function's xsl:param, or an
@@ -422,6 +519,10 @@ final class BreakableLines {
             }
         }
         if (best == null) {
+            Resolution moved = resolveInComment(line);
+            if (moved != null) {
+                return moved;
+            }
             return new Resolution(false, line, noAliases, "No XSLT instruction or literal result element starts on this line");
         } else if (best.untracedReason != null) {
             return new Resolution(false, line, noAliases, best.name + " " + best.untracedReason);

@@ -43,15 +43,29 @@ public final class XsltDebugAdapter {
     // while the transform is run again, to go back: the output already shown in the Debug Console isn't shown again
     volatile boolean muted;
 
+    // for a run without VS Code (TraceRun): the messages go to this, in the same JVM, not to the protocol's stdout
+    private final java.util.function.Consumer<Map<String, Object>> sink;
+
     private XsltDebugAdapter(OutputStream protocolOut) {
         this.protocolOut = protocolOut;
+        this.sink = null;
+    }
+
+    XsltDebugAdapter(java.util.function.Consumer<Map<String, Object>> sink) {
+        this.protocolOut = null;
+        this.sink = sink;
+    }
+
+    // System.out and System.err as 'output' events - the principal result (with no -o), xsl:message and Saxon's errors
+    void redirectSystemStreams() throws IOException {
+        System.setOut(new PrintStream(new OutputEventStream(this, "stdout"), true, "UTF-8"));
+        stderr = new OutputEventStream(this, "stderr");
+        System.setErr(new PrintStream(stderr, true, "UTF-8"));
     }
 
     public static void main(String[] args) throws IOException {
         XsltDebugAdapter adapter = new XsltDebugAdapter(new BufferedOutputStream(new FileOutputStream(FileDescriptor.out)));
-        System.setOut(new PrintStream(new OutputEventStream(adapter, "stdout"), true, "UTF-8"));
-        adapter.stderr = new OutputEventStream(adapter, "stderr");
-        System.setErr(new PrintStream(adapter.stderr, true, "UTF-8"));
+        adapter.redirectSystemStreams();
         adapter.run(new BufferedInputStream(new FileInputStream(FileDescriptor.in)));
     }
 
@@ -112,6 +126,10 @@ public final class XsltDebugAdapter {
 
     synchronized void send(Map<String, Object> message) {
         message.put("seq", seq++);
+        if (sink != null) {
+            sink.accept(message);
+            return;
+        }
         byte[] body = Json.stringify(message).getBytes(StandardCharsets.UTF_8);
         try {
             protocolOut.write(("Content-Length: " + body.length + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
@@ -146,7 +164,7 @@ public final class XsltDebugAdapter {
                 .with("body", Json.obj().with("error", Json.obj().with("id", 1).with("format", message).with("showUser", false))));
     }
 
-    private void handle(Map<String, Object> request) {
+    void handle(Map<String, Object> request) {
         String command = String.valueOf(request.get("command"));
         Map<String, Object> args = Json.object(request, "arguments");
         try {
@@ -208,8 +226,9 @@ public final class XsltDebugAdapter {
                     respond(request, Json.obj().with("variables", debugger.variables((int) Json.number(args, "variablesReference", 0))));
                     break;
                 case "evaluate":
+                    // sandbox: an assistant's expression, with Saxon-HE's functions only - see XPathEngine.SANDBOXED
                     respond(request, debugger.evaluate(Json.string(args, "expression"),
-                            (int) Json.number(args, "frameId", -1), Json.string(args, "context")));
+                            (int) Json.number(args, "frameId", -1), Json.string(args, "context"), Json.bool(args, "sandbox")));
                     break;
                 case "continue":
                     debugger.resume(Debugger.Step.NONE);

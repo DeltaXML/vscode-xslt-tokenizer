@@ -8,6 +8,7 @@
  *  DeltaXML Ltd.
  */
 import * as childProcess from 'child_process';
+import { McpRoot } from './mcpRoot';
 
 // Claude Code's scopes for an MCP server: 'user' for all projects, 'local' for one project's folder (private to the user)
 export type ClaudeScope = 'user' | 'local';
@@ -39,18 +40,20 @@ export class ClaudeCodeSetup {
 		return ClaudeCodeSetup.run(['mcp', 'add', '--transport', 'http', '--scope', scope, ClaudeCodeSetup.serverName, url, '--header', `Authorization: Bearer ${token}`], folder);
 	}
 
-	// sets it up again, with the new token, where it's set up now: for all projects, and for each of the folders - the
-	// scopes and folders updated
-	public static async update(url: string, token: string, folders: string[]): Promise<{ updated: string[], result?: ClaudeResult }> {
+	// sets it up again, e.g. with a new token or URL, where it's set up now: for all projects (unless not includeUser),
+	// and for each of the folders - the scopes and folders updated. With withRoot - for a multi-root workspace - each folder's
+	// has itself as the root of the URL, as when it was set up
+	public static async update(url: string, token: string, folders: string[], includeUser = true, withRoot = false): Promise<{ updated: string[], result?: ClaudeResult }> {
 		const updated: string[] = [];
-		const places: { scope: ClaudeScope, folder?: string, name: string }[] = [{ scope: 'user', name: 'all projects' }, ...folders.map((folder) => ({ scope: 'local' as ClaudeScope, folder, name: folder }))];
+		const places: { scope: ClaudeScope, folder?: string, name: string }[] = [...(includeUser ? [{ scope: 'user' as ClaudeScope, name: 'all projects' }] : []),
+			...folders.map((folder) => ({ scope: 'local' as ClaudeScope, folder, name: folder }))];
 		for (const place of places) {
 			const removed = await ClaudeCodeSetup.remove(place.scope, place.folder);
 			if (removed.notFound) {
 				return { updated, result: removed };
 			}
 			if (removed.ok) {
-				const added = await ClaudeCodeSetup.run(['mcp', 'add', '--transport', 'http', '--scope', place.scope, ClaudeCodeSetup.serverName, url, '--header', `Authorization: Bearer ${token}`], place.folder);
+				const added = await ClaudeCodeSetup.run(['mcp', 'add', '--transport', 'http', '--scope', place.scope, ClaudeCodeSetup.serverName, place.folder && withRoot ? McpRoot.urlFor(url, place.folder) : url, '--header', `Authorization: Bearer ${token}`], place.folder);
 				if (!added.ok) {
 					return { updated, result: added };
 				}

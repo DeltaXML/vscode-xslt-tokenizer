@@ -18,22 +18,9 @@ import * as cp from 'child_process';
 import { XsltDebug, XsltDebugAdapterProcess, XsltDebugConfigurationProvider, XsltDebugLog, XsltDebugOutputs, XsltDebugProblems } from '../../src/xsltDebug';
 import { unquotedPath, unquotedPaths } from '../../src/settingPaths';
 import { XsltEmptySteps } from '../../src/xsltEmptySteps';
+import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 
 const fixtures = path.resolve(__dirname, '..', '..', '..', 'debugger', 'test');
-
-// starting a debug session saves the unsaved editors in the active group (debug.saveBeforeStart): an untitled document
-// left open by another suite would get a Save As dialog, which waits for an answer - so, for a suite, none are saved
-function noSaveBeforeStart() {
-	const config = () => vscode.workspace.getConfiguration('debug');
-	let saved: string | undefined;
-	suiteSetup(async () => {
-		saved = config().inspect<string>('saveBeforeStart')?.globalValue;
-		await config().update('saveBeforeStart', 'none', vscode.ConfigurationTarget.Global);
-	});
-	suiteTeardown(async () => {
-		await config().update('saveBeforeStart', saved, vscode.ConfigurationTarget.Global);
-	});
-}
 
 suite('XSLT debugger - configurations', () => {
 	suiteSetup(() => {
@@ -71,6 +58,10 @@ suite('XSLT debugger - configurations', () => {
 			type: XsltDebug.type, request: 'launch', name: 'Debug report', task: 'report'
 		});
 		assert.match(<string>XsltDebug.withTaskProperties({ type: XsltDebug.type, request: 'launch', name: 'x', task: 'missing' }, tasks), /no 'xslt' task labelled 'missing'/);
+		// a Quick Run task asks for its result file: a configuration's own resultPath - e.g. a run for an AI assistant - isn't asked for
+		const quickRun = [{ type: 'xslt', label: 'Quick Run', xsltFile: 'report.xsl', xmlSource: 'books.xml', resultPath: '${command:xslt-xpath.pickResultFile}' }];
+		const forAssistant = XsltDebug.withTaskProperties({ type: XsltDebug.type, request: 'launch', name: 'run', task: 'Quick Run', resultPath: '/tmp/report.out' }, quickRun) as vscode.DebugConfiguration;
+		assert.strictEqual(forAssistant.resultPath, '/tmp/report.out');
 	});
 
 	test('configurations without a launch.json: the active stylesheet, then each xslt task', () => {
@@ -310,7 +301,6 @@ suite('XSLT debugger - Saxon\'s problems', () => {
 
 suite('XSLT debugger - sessions that fail to start', function () {
 	this.timeout(30000);
-	noSaveBeforeStart();
 	const fixture = path.join(fixtures, 'basic.xsl');
 	// not a jar at all, but with a Saxon jar's name
 	const notAJar = path.join(os.tmpdir(), 'xslt-debug-test', 'saxon-he-13.0.jar');
@@ -358,7 +348,6 @@ suite('XSLT debugger - sessions that fail to start', function () {
 
 suite('XSLT debugger - debug sessions', function () {
 	this.timeout(60000);
-	noSaveBeforeStart();
 	const saxonJar = process.env.XSLT_TEST_SAXON_JAR;
 
 	// the adapter's 'stopped' events, and the stack trace when each occurred
@@ -430,7 +419,7 @@ suite('XSLT debugger - debug sessions', function () {
 		const { variables } = await session.customRequest('variables', { variablesReference: scopes[0].variablesReference });
 		assert.deepInclude(variables.map((v: any) => [v.name, v.value]), ['$doubled', '4']);
 		const evaluated = await session.customRequest('evaluate', { expression: 'string(@n) || "!"', frameId: stackFrames[0].id, context: 'watch' });
-		assert.strictEqual(evaluated.result, '"2!"');
+		assert.strictEqual(evaluated.result, "'2!'");
 
 		do {
 			await session.customRequest('stepIn', { threadId: 1 });
@@ -510,6 +499,9 @@ suite('XSLT debugger - debug sessions', function () {
 		stops = [];
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', saxonJar, vscode.ConfigurationTarget.Global);
+		// no XML context file: not one an earlier test viewed - e.g. in a folder it has since deleted
+		const context = await DocumentChangeHandler.contextFor(undefined);
+		DocumentChangeHandler.setLastPicked(null, false);
 		try {
 			await vscode.window.showTextDocument(vscode.Uri.file(path.join(fixtures, 'error.xsl')));
 			const ended = new Promise<vscode.DebugSession>((resolve) => {
@@ -527,6 +519,36 @@ suite('XSLT debugger - debug sessions', function () {
 			assert.strictEqual(path.basename(session.configuration.xsltFile), 'error.xsl');
 			assert.include(session.configuration.saxonArgs, '-it');
 		} finally {
+			DocumentChangeHandler.setLastPicked(context.uri, context.isNone);
+			await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', undefined, vscode.ConfigurationTarget.Global);
+		}
+	});
+
+	test('Run Without Debugging, with no launch.json: the active stylesheet, run to the end - no pause at its breakpoint or error', async () => {
+		stops = [];
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', saxonJar, vscode.ConfigurationTarget.Global);
+		const context = await DocumentChangeHandler.contextFor(undefined);
+		DocumentChangeHandler.setLastPicked(null, false);
+		const errorXsl = vscode.Uri.file(path.join(fixtures, 'error.xsl'));
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(errorXsl, new vscode.Position(2, 0)))]);
+		try {
+			await vscode.window.showTextDocument(errorXsl);
+			const ended = new Promise<vscode.DebugSession>((resolve) => {
+				const listener = vscode.debug.onDidTerminateDebugSession((session) => {
+					listener.dispose();
+					resolve(session);
+				});
+			});
+			// as VS Code starts it for Ctrl+F5 with no launch.json: an empty configuration
+			assert.isTrue(await vscode.debug.startDebugging(undefined, {} as vscode.DebugConfiguration, { noDebug: true }));
+			const session = await ended;
+			assert.strictEqual(path.basename(session.configuration.xsltFile), 'error.xsl');
+			assert.isTrue(session.configuration.noDebug);
+			assert.deepEqual(stops.map((s) => s.reason), []);
+		} finally {
+			vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+			DocumentChangeHandler.setLastPicked(context.uri, context.isNone);
 			await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', undefined, vscode.ConfigurationTarget.Global);
 		}
 	});
@@ -591,6 +613,9 @@ suite('XSLT debugger - debug sessions', function () {
 		stops = [];
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', saxonJar, vscode.ConfigurationTarget.Global);
+		// no XML context file: not one an earlier test viewed - e.g. in a folder it has since deleted
+		const context = await DocumentChangeHandler.contextFor(undefined);
+		DocumentChangeHandler.setLastPicked(null, false);
 		try {
 			await vscode.window.showTextDocument(vscode.Uri.file(path.join(fixtures, 'error.xsl')));
 			const ended = new Promise<vscode.DebugSession>((resolve) => {
@@ -607,6 +632,7 @@ suite('XSLT debugger - debug sessions', function () {
 			assert.include(session.configuration.saxonArgs, '-it');
 			assert.notOk(session.configuration.resultPath);
 		} finally {
+			DocumentChangeHandler.setLastPicked(context.uri, context.isNone);
 			await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', undefined, vscode.ConfigurationTarget.Global);
 		}
 	});

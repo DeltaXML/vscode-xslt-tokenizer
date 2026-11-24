@@ -132,6 +132,18 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.isAbove((await problems(simplified.replace(' xsl:version="3.0"', ''))).length, 0);
 	});
 
+	test('a file whose root isn\'t an XSLT module, e.g. a unit test suite for XSLT: one problem on the root, its xsl: elements aren\'t checked', async () => {
+		const suite = '<test:suite xmlns:test="http://www.jenitennison.com/xslt/unit-test" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">' +
+			'<test:test id="a"><xsl:variable name="doc"><elem1/></xsl:variable><test:param name="p" select="$doc"/></test:test>' +
+			'<test:xslt><xsl:function name="f:g"/></test:xslt><test:expect select="nosuch(1)"/></test:suite>';
+		assert.deepEqual(await problems(suite), ['XSLT: The root element \'test:suite\' isn\'t xsl:stylesheet, xsl:transform or xsl:package, or a simplified stylesheet (a literal result element with xsl:version) - the file isn\'t checked as XSLT']);
+		// a simplified stylesheet isn't replaced by this problem: it's reported as before - here without the xmlns:xsl binding
+		assert.deepEqual(await problems('<table xsl:version="3.0"><xsl:value-of select="1"/></table>'),
+			['Expected on the root element: xmlns:xsl=\'http://www.w3.org/1999/XSL/Transform\' prefix/namespace-uri binding']);
+		// an XSLT module, with a version, is still checked
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><xsl:value-of select="nosuch(1)"/></xsl:template>')), ['XPath: Function: \'nosuch\' with 1 arguments not found']);
+	});
+
 	test('a function with a shadow attribute for its name: its parameters aren\'t the previous function\'s (initial-function-101)', async () => {
 		const fn = (name: string) => `<xsl:function ${name} xmlns:f="urn:f"><xsl:param name="p"/><xsl:sequence select="$p"/></xsl:function>`;
 		assert.deepEqual(await problems(stylesheet(fn('name="f:a"') + fn('_name="f:b"') + fn('_name="{\'f:c\'}"'))), []);
@@ -219,5 +231,124 @@ suite('False errors found with the W3C XSLT test suites', () => {
 			reported.set(as, await problems(fn(as)));
 		}
 		assert.deepEqual([...reported].filter(([, messages]) => messages.length > 0), []);
+	});
+
+	test('declarations with the same name, one or both with use-when: only one may be compiled (accumulator-032, shadow-005, catalog-010)', async () => {
+		const declarations = (first: string, second: string) => stylesheet(`<xsl:param name="mode" static="yes" select="'a'"/>
+<xsl:variable name="count" select="1"${first}/>
+<xsl:variable name="count" select="2"${second}/>
+<xsl:template name="main"${first}><r>{$count}</r></xsl:template>
+<xsl:template name="main"${second}/>
+<xsl:function name="f:f" xmlns:f="urn:f"${first}/>
+<xsl:function name="f:f" xmlns:f="urn:f"${second}/>
+<xsl:accumulator name="acc" initial-value="0"${first}><xsl:accumulator-rule match="*" select="1"/></xsl:accumulator>
+<xsl:accumulator name="acc" initial-value="0"${second}><xsl:accumulator-rule match="*" select="1"/></xsl:accumulator>`);
+		const duplicates = (messages: string[]) => messages.filter((m) => /Duplicate/.test(m));
+		assert.deepEqual(duplicates(await problems(declarations(` use-when="$mode = 'a'"`, ` use-when="$mode = 'b'"`))), []);
+		assert.deepEqual(duplicates(await problems(declarations(` _use-when="{$mode = 'a'}"`, ` _use-when="{$mode = 'b'}"`))), []);
+		assert.deepEqual(duplicates(await problems(declarations('', ` use-when="$mode = 'b'"`))), []);
+		// still reported: neither has use-when
+		assert.lengthOf(duplicates(await problems(declarations('', ''))), 4);
+	});
+
+	test('whitespace around the type in xsl:context-item as=" xs:integer " (context-item-007, context-item-911)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template name="t"><xsl:context-item use=" required " as=" xs:integer "/><xsl:sequence select=". + 1"/></xsl:template>',
+			'xsl:stylesheet', ' xmlns:xs="http://www.w3.org/2001/XMLSchema"')), []);
+	});
+
+	test('a dynamic call of the context item, .() (higher-order-functions-041, higher-order-functions-042)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><xsl:for-each select="(function() { 1 }, function() { 2 })"><xsl:sequence select=".()"/></xsl:for-each></xsl:template>')), []);
+	});
+
+	test('an attribute wildcard with whitespace, @ *, and minus after it, @*-5 (whitespace-028, select-2701)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="doc"><xsl:copy-of select=" @ * "/><xsl:value-of select="@*-5"/><xsl:value-of select="@ * - 5"/></xsl:template>')), []);
+	});
+
+	test('a comment or processing instruction within a text value template: removed before it\'s read (cvt-043, cvt-044, cvt-050)', async () => {
+		// between tokens - in the W3C tests, it's within a name, e.g. str<!--x-->ing($p), which is still reported
+		const body = `<xsl:param name="p" select="1"/>
+<xsl:template name="main"><out xsl:expand-text="yes">The {$p <!--old: * 2--> + 1} and {string(<?pi x?>$p)}</out><out xsl:expand-text="yes">{count(1 to 5)<!--
+  over two lines -->} {$p}</out></xsl:template>`;
+		assert.deepEqual(await problems(stylesheet(body)), []);
+		// still reported: a '<' that starts an element
+		assert.isNotEmpty(await problems(stylesheet('<xsl:template name="main"><out xsl:expand-text="yes">{1 <b/> 2}</out></xsl:template>')));
+	});
+
+	test('names matched by namespace, not prefix: two prefixes for one namespace on the root (call-template-1701, variable-1012, attribute-set-1806)', async () => {
+		const body = (uri: string) => `<xsl:variable name="txt:me" select="1"/>
+<xsl:attribute-set name="hoo:set"/>
+<xsl:character-map name="hoo:map"/>
+<xsl:template name="hoo:a"/>
+<xsl:template match="/" mode="hoo:m"/>
+<xsl:template match="/"><xsl:call-template name="woo:a"/><xsl:value-of select="$new:me"/><e xsl:use-attribute-sets="woo:set"/><xsl:apply-templates mode="woo:m"/></xsl:template>
+<xsl:output use-character-maps="woo:map"/>`;
+		const sheet = (uri: string) => stylesheet(body(uri), 'xsl:stylesheet', ` xmlns:hoo="urn:a" xmlns:woo="${uri}" xmlns:txt="urn:a" xmlns:new="${uri}"`);
+		assert.deepEqual(await problems(sheet('urn:a')), []);
+		// still reported: another namespace
+		assert.lengthOf((await problems(sheet('urn:b'))).filter((m) => /not found|No template rule|cannot be resolved/.test(m)), 5);
+	});
+
+	test('names matched by namespace, not prefix: namespaces declared on an inner element (output-0205, character-map-008, call-template-0702, call-template-0703)', async () => {
+		const body = `<xsl:output use-character-maps="z:map02" xmlns:z="urn:c"/>
+<xsl:character-map name="y:map02" xmlns:y="urn:c" use-character-maps="y:map03"/>
+<xsl:character-map name="x:map03" xmlns:x="urn:c"/>
+<xsl:template match="/doc" xmlns:P="urn:p"><xsl:call-template name="ntmp1"><xsl:with-param name="P:pvar1" select="1"/></xsl:call-template></xsl:template>
+<xsl:template name="ntmp1" xmlns:Q="urn:p"><xsl:param name="Q:pvar1"/><xsl:param name="Q{}pvar2"/><xsl:value-of select="$R:pvar1" xmlns:R="urn:p"/><xsl:value-of select="$pvar2"/></xsl:template>`;
+		assert.deepEqual(await problems(stylesheet(body)), []);
+		// still reported: another namespace
+		const other = body.replace('xmlns:z="urn:c"', 'xmlns:z="urn:d"').replace('xmlns:P="urn:p"', 'xmlns:P="urn:q"').replace('xmlns:R="urn:p"', 'xmlns:R="urn:q"');
+		assert.lengthOf(await problems(stylesheet(other)), 3);
+	});
+
+	test('xsl:catch\'s error variables in its own select attribute, e.g. select="$err:description" (try-019)', async () => {
+		const sheet = (catchSelect: string) => stylesheet(`<xsl:template name="main"><xsl:try select="error()"><xsl:catch errors="*"
+  select="${catchSelect}"/></xsl:try><xsl:try select="1"><xsl:catch><xsl:value-of select="$err:code"/></xsl:catch></xsl:try></xsl:template>`,
+		'xsl:stylesheet', ' xmlns:err="http://www.w3.org/2005/xqt-errors" xmlns:e="http://www.w3.org/2005/xqt-errors"');
+		assert.deepEqual(await problems(sheet("'Error:', $err:code, $err:description, $err:value, $err:line-number, $e:column-number")), []);
+		// still reported: not an error variable - and one after the xsl:catch
+		assert.lengthOf(await problems(sheet('$err:nothing')), 1);
+		assert.lengthOf(await problems(stylesheet(`<xsl:template name="main"><xsl:try select="1"><xsl:catch select="1"/></xsl:try><xsl:value-of select="$err:code"/></xsl:template>`,
+			'xsl:stylesheet', ' xmlns:err="http://www.w3.org/2005/xqt-errors"')), 1);
+	});
+
+	test('an xsl:with-param the template doesn\'t declare, in backwards compatible mode: ignored (variable-2201, backwards-013)', async () => {
+		const sheet = (version: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="${version}">
+<xsl:template match="/"><xsl:call-template name="t"><xsl:with-param name="unwanted" select="2"/></xsl:call-template></xsl:template>
+<xsl:template name="t"/>
+</xsl:stylesheet>`;
+		assert.deepEqual(await problems(sheet('1.0')), []);
+		// still reported: XTSE0680 from XSLT 2.0
+		assert.lengthOf(await problems(sheet('3.0')), 1);
+	});
+
+	test('a key or accumulator name in a string, matched by namespace: key(\'bar:mykey\') for foo:mykey (key-013)', async () => {
+		const sheet = (uri: string) => stylesheet(`<xsl:key name="foo:mykey" match="div" use="title"/>
+<xsl:accumulator name="foo:acc" initial-value="0"><xsl:accumulator-rule match="*" select="1"/></xsl:accumulator>
+<xsl:template match="/"><xsl:value-of select="key('bar:mykey', 'x'), accumulator-before('bar:acc')"/></xsl:template>`, 'xsl:stylesheet', ` xmlns:foo="urn:k" xmlns:bar="${uri}"`);
+		assert.deepEqual((await problems(sheet('urn:k'))).filter((m) => /not found/.test(m)), []);
+		// still reported: another namespace
+		assert.lengthOf((await problems(sheet('urn:other'))).filter((m) => /not found/.test(m)), 2);
+	});
+
+	test('what\'s in an element whose use-when is always false, e.g. false(): not compiled (use-when-0122, use-when-0221, version-001, version-030)', async () => {
+		const excluded = (useWhen: string) => stylesheet(`<xsl:template match="para"${useWhen}><p><xsl:value-of my="word"/><xsl:next-matching-nonsense/></p></xsl:template>
+<xsl:template match="/"><out><xsl:new-8.5-feature${useWhen}><xsl:text>x</xsl:text></xsl:new-8.5-feature><e xsl:use-when="false()"><xsl:value-of select="$undeclared"/></e></out></xsl:template>`);
+		for (const useWhen of [' use-when="false()"', ' use-when="number(system-property(\'xsl:version\')) &gt;= 8.5"', ' use-when="system-property(\'xsl:version\') gt 4.0"',
+			' use-when="element-available(\'xsl:new-8.5-feature\')"']) {
+			assert.deepEqual(await problems(excluded(useWhen)), [], useWhen);
+		}
+		// still reported: a condition that may be true - or an element-available() test for an XSLT instruction
+		for (const useWhen of [' use-when="true()"', ' use-when="system-property(\'xsl:version\') &gt;= 3.0"', ' use-when="element-available(\'xsl:text\')"']) {
+			assert.isNotEmpty(await problems(excluded(useWhen)), useWhen);
+		}
+	});
+
+	test('XPath 4.0: array:get with its $default optional - two arguments as in 3.1, or three', async () => {
+		const arrays = (select: string) => stylesheet(`<xsl:variable name="a" select="${select}"/>`, 'xsl:stylesheet', ' xmlns:array="http://www.w3.org/2005/xpath-functions/array"').replace('version="3.0"', 'version="4.0"');
+		for (const select of ['array:get([1, 2], 2)', 'array:get([1, 2], 3, \'none\')']) {
+			assert.deepEqual((await problems(arrays(select))).filter((m) => !/unused/.test(m)), [], select);
+		}
+		// four is too many
+		assert.lengthOf((await problems(arrays('array:get([1], 1, 2, 3)'))).filter((m) => /array:get/.test(m)), 1);
 	});
 });

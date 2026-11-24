@@ -68,6 +68,19 @@ final class Debugger {
     private boolean noDebug;
     // with "coverage": the number of times each line of each module is arrived at, by path - sent when the run ends
     private Map<String, Map<Integer, Integer>> coverage;
+    // the template rules each input node was processed by - sent when the run ends (see NodeRules)
+    private final NodeRules nodeRules = new NodeRules(this::pathOf);
+    // whether the input nodes are mapped - to the template rules that processed them, and from the output (the launch
+    // request's 'mapInputs', on unless false)
+    private boolean mapInputs = true;
+    // for the output map's input: the element instructions entered whose start tag hasn't been written yet - Saxon writes
+    // it with the element's first content, by when another template may be running - with the context item each was
+    // entered with, by the instruction's location, oldest first. Start tags are written in the order their instructions
+    // were entered, so the oldest is the one being written, even where the instruction is nested in itself, e.g. by a
+    // recursive template. An entry is removed when its instruction is left: one whose element wasn't written to an
+    // output, e.g. in a variable's temporary tree, never will be
+    private final Map<String, Deque<Object[]>> unwrittenElements = new HashMap<String, Deque<Object[]>>();
+    private final Deque<Object[]> enteredElements = new ArrayDeque<Object[]>();
     private boolean messageEscaping;
 
     // --- breakpoints: normalised file path -> line -> breakpoint (written by the DAP thread at any time)
@@ -208,6 +221,7 @@ final class Debugger {
         this.breakpoints = before.breakpoints;
         saxonArgs.addAll(before.saxonArgs);
         messageEscaping = before.messageEscaping;
+        mapInputs = before.mapInputs;
         functionBreakpoints = before.functionBreakpoints;
         nextFunctionBreakpointId = before.nextFunctionBreakpointId;
         breakOnErrors = before.breakOnErrors;
@@ -251,6 +265,27 @@ final class Debugger {
                 Traceable traceable = lastEntered;
                 return traceable == null ? null : traceable.getLocation();
             }
+
+            // the frame's context item - the frames are only read on the transform thread - or for a start tag, its
+            // instruction's when it was entered
+            public Object currentContext(Location startTag) {
+                if (!mapInputs || Thread.currentThread() != transformThread) {
+                    return null;
+                }
+                Deque<Object[]> entries = startTag == null ? null : unwrittenElements.get(locationKey(startTag));
+                Object[] entry = entries == null ? null : entries.pollFirst();
+                if (entry != null) {
+                    entry[2] = Boolean.TRUE;
+                    return entry[0];
+                }
+                Frame top = frames.peek();
+                Item item = top == null || top.context == null ? null : top.context.getContextItem();
+                return item instanceof net.sf.saxon.om.NodeInfo ? item : null;
+            }
+
+            public Map<String, Object> inputOf(Object context) {
+                return context instanceof net.sf.saxon.om.NodeInfo ? nodeRules.position((net.sf.saxon.om.NodeInfo) context) : null;
+            }
         });
         // a global variable's frame: it's being evaluated (only read on the transform thread, as are the frames)
         Values.evaluatingGlobals = () -> {
@@ -277,6 +312,7 @@ final class Debugger {
         stopOnEntry = Json.bool(args, "stopOnEntry");
         noDebug = Json.bool(args, "noDebug");
         coverage = Json.bool(args, "coverage") ? new HashMap<String, Map<Integer, Integer>>() : null;
+        mapInputs = !Boolean.FALSE.equals(args.get("mapInputs"));
         // an XSpec test run: the test runner's globals aren't shown with those of the stylesheet tested
         values.hideXSpecGlobals = Json.string(args, "xspecFile") != null;
         // as for an 'xslt' task: "on" keeps Saxon's own xsl:message output, which escapes characters XML doesn't allow
@@ -310,6 +346,17 @@ final class Debugger {
             }
         }
         return false;
+    }
+
+    // in an XSpec test run, an xsl:message of the test runner or XSpec's own modules - e.g. the runner's progress
+    // message for each scenario, such as 'PENDING: (force focus) o:heading' - rather than of the stylesheet tested: the
+    // modules a step doesn't stop in (see stepSkipped). The Test Explorer shows the outcomes, so it isn't written
+    boolean isXSpecMessage(net.sf.saxon.s9api.Location location) {
+        if (!values.hideXSpecGlobals || location == null || location.getSystemId() == null) {
+            return false;
+        }
+        String path = pathOf(location.getSystemId());
+        return path != null && isStepSkipped(path);
     }
 
     // one of the runner's lines for an XSpec file's step (see stepStops)
@@ -368,7 +415,12 @@ final class Debugger {
                     }
                 }
             }
-            result.add(Json.obj().with("verified", true).with("line", actualLine));
+            Map<String, Object> verified = Json.obj().with("verified", true).with("line", actualLine);
+            if (resolution != null && resolution.message != null) {
+                // e.g. why it was moved from a comment
+                verified.put("message", resolution.message);
+            }
+            result.add(verified);
         }
         breakpoints.put(normalised, lines);
         return result;
@@ -502,6 +554,7 @@ final class Debugger {
                 System.err.flush();
                 sendOutputs(null, false);
                 sendCoverage();
+                sendNodeRules();
                 dap.event("exited", Json.obj().with("exitCode", exitCode));
                 dap.event("terminated", Json.obj());
             }
@@ -699,8 +752,25 @@ final class Debugger {
     }
 
     Map<String, Object> evaluate(final String expression, final int frameId, final String context) throws Exception {
+        return evaluate(expression, frameId, context, false);
+    }
+
+    // sandboxed: an assistant's expression - with Saxon-HE's function libraries only (see XPathEngine.SANDBOXED)
+    Map<String, Object> evaluate(final String expression, final int frameId, final String context, final boolean sandboxed) throws Exception {
+        if (sandboxed && XPathEngine.sandboxProblem(expression) != null) {
+            throw new IllegalArgumentException(XPathEngine.sandboxProblem(expression));
+        }
         return onTransformThread(new Callable<Map<String, Object>>() {
             public Map<String, Object> call() throws Exception {
+                XPathEngine.SANDBOXED.set(sandboxed);
+                try {
+                    return evaluateNow();
+                } finally {
+                    XPathEngine.SANDBOXED.set(false);
+                }
+            }
+
+            private Map<String, Object> evaluateNow() throws Exception {
                 Frame frame = frame(frameId < 0 ? 0 : frameId);
                 String xpath = expression.trim();
                 if ("hover".equals(context)) {
@@ -752,6 +822,22 @@ final class Debugger {
         }
         // entered again: a result of stepping through its expression that wasn't used is out of date
         SteppedResult.discard(traceable);
+        // not for a template or function entered: it's entered with its own context
+        if (mapInputs && !(traceable instanceof TraceableComponent)) {
+            recordIteration(context);
+        }
+        if (mapInputs && isElementConstructor(traceable)) {
+            Item item = context.getContextItem();
+            // [context item, instruction location key, written]
+            Object[] entry = new Object[] { item instanceof net.sf.saxon.om.NodeInfo ? item : null, locationKey(traceable.getLocation()), Boolean.FALSE };
+            Deque<Object[]> entries = unwrittenElements.get((String) entry[1]);
+            if (entries == null) {
+                entries = new ArrayDeque<Object[]>();
+                unwrittenElements.put((String) entry[1], entries);
+            }
+            entries.addLast(entry);
+            enteredElements.push(entry);
+        }
         if (isSequenceConstructor(traceable)) {
             // which Saxon 12 traces at its first instruction's location (Saxon 13 doesn't) - not an instruction of
             // its own: stopping at it would stop twice where the first instruction is
@@ -801,6 +887,18 @@ final class Debugger {
         String element = reportedElement(traceable);
         top.line = lines == null ? reportedLine : lines.displayLine(reportedLine, tagLocation.getColumnNumber(), element);
         top.column = lines == null ? location.getColumnNumber() : lines.displayColumn(reportedLine, tagLocation.getColumnNumber(), element);
+        if (mapInputs && isCall && traceable.getClass().getSimpleName().equals("TemplateRule") && top.owner == traceable) {
+            Item item = context.getContextItem();
+            if (item instanceof net.sf.saxon.om.NodeInfo) {
+                nodeRules.template((net.sf.saxon.om.NodeInfo) item, path, top.line, top.column, top.name);
+            }
+        }
+        if (mapInputs && top.owner == traceable && isIterationInstruction(traceable)) {
+            // where the instruction is, for the items it goes on to process (see recordIteration)
+            top.ownPath = path;
+            top.ownLine = top.line;
+            top.ownColumn = top.column;
+        }
         boolean onStoppedLine = top.line == stoppedLine && path.equals(stoppedPath);
         if (!onStoppedLine) {
             stoppedPath = null;
@@ -1258,6 +1356,15 @@ final class Debugger {
             unwindTo(tryDepths.pop().getValue());
             return;
         }
+        if (mapInputs && isElementConstructor(traceable) && !enteredElements.isEmpty()) {
+            Object[] entry = enteredElements.pop();
+            if (entry[2] == Boolean.FALSE) {
+                Deque<Object[]> entries = unwrittenElements.get((String) entry[1]);
+                if (entries != null) {
+                    entries.remove(entry);
+                }
+            }
+        }
         Frame top = frames.peek();
         if (top != null && top.owner == traceable) {
             frames.pop();
@@ -1291,10 +1398,29 @@ final class Debugger {
         }
     }
 
+    // a literal result element, xsl:element or xsl:copy: an instruction that may write a start tag
+    private static boolean isElementConstructor(Traceable traceable) {
+        String className = traceable.getClass().getSimpleName();
+        return className.equals("FixedElement") || className.equals("ComputedElement") || className.equals("Copy");
+    }
+
+    // an instruction's location, as given to the output's start tag: where its start tag ends (see startTagLocation)
+    private String locationKey(Location location) {
+        Location tag = location == null ? null : startTagLocation(location);
+        return tag == null ? "" : tag.getSystemId() + ':' + tag.getLineNumber() + ':' + tag.getColumnNumber();
+    }
+
     // a template rule, named template or function - not a focus instruction, e.g. xsl:for-each
     private static boolean isDeclaration(Traceable owner) {
         String className = owner == null ? "" : owner.getClass().getSimpleName();
         return className.equals("TemplateRule") || className.equals("NamedTemplate") || className.equals("UserFunction");
+    }
+
+    // the template rules each input node was processed by (see NodeRules)
+    private void sendNodeRules() {
+        if (!nodeRules.isEmpty()) {
+            dap.event("xsltNodeRules", nodeRules.toJson());
+        }
     }
 
     // the coverage collected: the hits of each line, by path, e.g. {"/a.xsl": {"12": 3}}
@@ -1591,6 +1717,9 @@ final class Debugger {
             throw new Abandoned();
         }
         boolean dropping = rules.getName().equals("deep-skip");
+        if (mapInputs && Thread.currentThread() == transformThread && !runningTask && item instanceof net.sf.saxon.om.NodeInfo) {
+            nodeRules.builtIn((net.sf.saxon.om.NodeInfo) item, rules.getName(), mode.isUnnamedMode() ? "#default" : mode.getModeName().getDisplayName());
+        }
         if (Thread.currentThread() != transformThread || runningTask || !(rules.getName().startsWith("text-only") || dropping) || mode.isEmpty() ||
                 !(item instanceof net.sf.saxon.om.NodeInfo) || ((net.sf.saxon.om.NodeInfo) item).getNodeKind() != net.sf.saxon.type.Type.ELEMENT) {
             return;
@@ -1807,6 +1936,55 @@ final class Debugger {
 
     // instructions that change the focus get their own stack frame, showing the context item - and, like calls, are
     // stepped over (all their iterations) with Step Over, and out of with Step Out
+    // xsl:for-each, xsl:for-each-group or xsl:iterate: an instruction whose items - its groups' members, for
+    // xsl:for-each-group - are recorded for the input mapping, as a template rule's are (see NodeRules)
+    private static boolean isIterationInstruction(Traceable traceable) {
+        String className = traceable.getClass().getSimpleName();
+        return className.equals("ForEach") || className.equals("ForEachGroup") || className.equals("IterateInstr");
+    }
+
+    // an instruction entered within an xsl:for-each, xsl:for-each-group or xsl:iterate (the frame on top): the first
+    // for an item - or group - records the item, or the group's members. Saxon reports a new item for xsl:iterate
+    // and xsl:for-each-group (and xsl:apply-templates) by startCurrentItem, but not for xsl:for-each, and without the
+    // context, which the group is had from - so by the focus the instruction is entered with: its iterator and position
+    private void recordIteration(XPathContext context) {
+        Frame top = frames.peek();
+        if (top == null || top.ownLine <= 0 || context == null) {
+            return;
+        }
+        net.sf.saxon.om.FocusIterator iterator = context.getCurrentIterator();
+        if (iterator == null) {
+            return;
+        }
+        int position = iterator.position();
+        if (iterator == top.lastIterator && position == top.lastPosition) {
+            return;
+        }
+        top.lastIterator = iterator;
+        top.lastPosition = position;
+        if (top.owner.getClass().getSimpleName().equals("ForEachGroup")) {
+            net.sf.saxon.expr.sort.GroupIterator groups = context.getCurrentGroupIterator();
+            if (groups == null) {
+                return;
+            }
+            try {
+                net.sf.saxon.om.SequenceIterator members = groups.currentGroup().iterate();
+                for (Item member = members.next(); member != null; member = members.next()) {
+                    if (member instanceof net.sf.saxon.om.NodeInfo) {
+                        nodeRules.instruction((net.sf.saxon.om.NodeInfo) member, top.ownPath, top.ownLine, top.ownColumn, top.name);
+                    }
+                }
+            } catch (Exception e) {
+                // not available
+            }
+        } else {
+            Item item = context.getContextItem();
+            if (item instanceof net.sf.saxon.om.NodeInfo) {
+                nodeRules.instruction((net.sf.saxon.om.NodeInfo) item, top.ownPath, top.ownLine, top.ownColumn, top.name);
+            }
+        }
+    }
+
     private static boolean isFocusInstruction(Traceable traceable) {
         String className = traceable.getClass().getSimpleName();
         return className.equals("ForEach") || className.equals("ForEachGroup") || className.equals("IterateInstr") || className.equals("AnalyzeString");
@@ -2014,6 +2192,13 @@ final class Debugger {
         // for an XPath expression's frame: its instruction's line, if the instruction was just stopped at there - a
         // breakpoint there isn't stopped at again when the expression first arrives at that line (-1: none)
         int skipBreakpointLine = -1;
+        // for xsl:for-each, xsl:for-each-group or xsl:iterate's frame: where the instruction is, and the focus its
+        // last item - or group - was recorded with, for the input mapping (see recordIteration)
+        String ownPath;
+        int ownLine;
+        int ownColumn;
+        net.sf.saxon.om.FocusIterator lastIterator;
+        int lastPosition;
         Traceable current;
         XPathContext context;
         String systemId;

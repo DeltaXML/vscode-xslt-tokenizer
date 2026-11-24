@@ -11,12 +11,16 @@ import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
-import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
+import { ContextRange, ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
 import { anyDocumentSymbol, XSLTCodeActions } from './xsltCodeActions';
 import { ImportIndex } from './importIndex';
+import { SchIncludes } from './schIncludes';
 import { XSLTConfiguration } from './languageConfigurations';
 import * as fs from 'fs';
 import { HrefPaths, ImportProblem } from './hrefPaths';
+import { SaxonTaskProvider } from './saxonTaskProvider';
+import { XsltDebugOutputs } from './xsltDebug';
+import { XSpecNodeNames } from './xspecNodeNames';
 
 interface ImportedGlobals {
 	href: string;
@@ -27,6 +31,8 @@ interface ImportedGlobals {
 interface Cleaned {
 	cleanedTokens: TokenWithUnion[];
 	hasParentAxis: boolean;
+	// the path starts with a variable, followed to its declaration
+	viaVariable?: boolean;
 }
 
 interface GlobalsSummary {
@@ -86,12 +92,21 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static instanceForXSLT: XsltSymbolProvider|null = null;
 	private readonly xslLexer: XslLexer;
 	public readonly collection: vscode.DiagnosticCollection | null;
+	// documents that aren't the file to fix: an earlier version of it, in a source control diff - and an AI agent's: Claude Code's
+	// diff (the original, the proposed change and a read-only view), and VS Code's for GitHub Copilot's chat edits (a snapshot of the
+	// file before them, and the original they're compared with), and Copilot's pull request documents - whose problems would otherwise
+	// stay in the Problems view, and reopen the old version when clicked
+	private static readonly historySchemes = ['git', 'gitlens', 'git-graph', 'svn', 'review', 'pr',
+		'_claude_vscode_fs_left', '_claude_vscode_fs_right', '_claude_vscode_fs_readonly',
+		'chat-editing-snapshot-text-model', 'chat-editing-text-model', 'copilot-pr'];
 	private internalDiagnostics: vscode.Diagnostic[];
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
 	public static documentSymbols = new Map<vscode.Uri, vscode.DocumentSymbol[]>();
 	private importHrefs: Map<string, string[]> = new Map();
 	public static importSymbolHrefs: Map<string, string[]> = new Map();
+	// the imports added for a module's parent stylesheet, which aren't in the module: not checked as its own are
+	private static parentImports = new WeakSet<GlobalInstructionData>();
 	private static readonly useSourceFile: UseSource = <UseSource>vscode.workspace.getConfiguration('XSLT.resources').get('useSourceFile');
 	// the declarations imported by each document, by its URI, when it was last checked
 	private importedGlobalsByDocument = new Map<string, GlobalInstructionData[]>();
@@ -100,6 +115,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	// and its declarations: its own, then those of the modules it imports or includes and the packages it uses, highest
 	// import precedence first
 	private lastDeclarations = new Map<string, { own: GlobalInstructionData[], imported: GlobalInstructionData[] }>();
+	// the results of checks with a top-level stylesheet given (see getDocumentSymbols), by the document and the stylesheet
+	private topLevelChecks = new Map<string, { diagnostics: vscode.Diagnostic[], own: GlobalInstructionData[], imported: GlobalInstructionData[] }>();
 	// false when another extension already reports the same problems, e.g. Red Hat's XML extension for XML files
 	private readonly showDiagnostics: () => boolean;
 
@@ -113,6 +130,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.internalDiagnostics = [];
 		if (xsltConfiguration.docType === DocumentTypes.XSLT) {
 			XsltSymbolProvider.instanceForXSLT = this;
+		}
+		// a read-only copy of a file, e.g. an older version in a source control diff, is closed when the diff is: its
+		// problems go too, not left to link to a document that's no longer shown
+		if (collection) {
+			vscode.workspace.onDidCloseTextDocument((closed) => XsltSymbolProvider.clearClosed(collection, closed.uri));
+			// and as soon as its last tab is closed
+			vscode.window.tabGroups.onDidChangeTabs((e) => XsltSymbolProvider.clearClosedTabs(collection, e.closed));
+			// a folder removed from the workspace: the problems of its files that aren't open in an editor go too
+			vscode.workspace.onDidChangeWorkspaceFolders((e) => XsltSymbolProvider.clearRemovedFolders(collection, e.removed.map((folder) => folder.uri)));
 		}
 	}
 
@@ -136,8 +162,84 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return result ?? [];
 	}
 
+	// the cached symbols of a closed document: an untitled document's URI, e.g. untitled:Untitled-1, is used again for the
+	// next one, which mustn't have these symbols before its own are computed
+	public static forgetDocument(uri: vscode.Uri) {
+		const uriString = uri.toString();
+		[...XsltSymbolProvider.documentSymbols.keys()].filter((cachedUri) => cachedUri.toString() === uriString)
+			.forEach((cachedUri) => XsltSymbolProvider.documentSymbols.delete(cachedUri));
+	}
+
+	// a closed document's problems go when it's a read-only copy, e.g. in a source control diff, or a file that's in no
+	// workspace folder - e.g. one open when its folder was removed. Those of a file in the workspace stay, as it's still
+	// one to fix
+	public static clearClosed(collection: vscode.DiagnosticCollection, uri: vscode.Uri) {
+		if (uri.scheme === 'untitled') {
+			return;
+		}
+		if (uri.scheme !== 'file' || !vscode.workspace.getWorkspaceFolder(uri)) {
+			collection.delete(uri);
+		}
+	}
+
+	// the problems of the files in the folders, e.g. removed from the workspace - except those of a file that's open in an
+	// editor, which is still checked
+	public static clearRemovedFolders(collection: vscode.DiagnosticCollection, folders: vscode.Uri[]) {
+		const prefixes = folders.map((folder) => folder.toString().replace(/\/$/, '') + '/');
+		const open = new Set(vscode.workspace.textDocuments.filter((doc) => XsltSymbolProvider.isOpenInEditor(doc)).map((doc) => doc.uri.toString()));
+		const cleared: vscode.Uri[] = [];
+		collection.forEach((uri) => {
+			if (prefixes.some((prefix) => uri.toString().startsWith(prefix)) && !open.has(uri.toString())) {
+				cleared.push(uri);
+			}
+		});
+		cleared.forEach((uri) => collection.delete(uri));
+	}
+
 	// whether the document is open in an editor tab, shown or not - not one only loaded, e.g. an XML context file read
 	// for completions - so its problems are reported, also after it's changed by an AI agent while another file is active
+	// whether a document's problems are reported: a file to fix - a file, a new untitled document, or a document of a file system
+	// that can be written to, e.g. a remote one (SSH, WSL, a container, a GitHub repository) - not a read-only copy of one,
+	// whatever shows it: an earlier version in a source control diff, or an AI agent's diff, from a content provider or a read-only
+	// file system - so an agent we don't know about is covered too. Not the schemes known to be copies, even if writable; nor the
+	// debugger's view of the output written so far (incomplete while the stylesheet runs, so not well-formed), nor a failed test's
+	// expected or actual result in the Test Results view's diff
+	public static isFileToFix(uri: vscode.Uri): boolean {
+		if (XsltSymbolProvider.historySchemes.includes(uri.scheme) || uri.scheme === XsltDebugOutputs.scheme || uri.scheme === 'vscode-test-data') {
+			return false;
+		}
+		if (uri.scheme === 'file' || uri.scheme === 'untitled') {
+			return true;
+		}
+		try {
+			return vscode.workspace.fs.isWritableFileSystem(uri.scheme) === true;
+		} catch {
+			return false;
+		}
+	}
+
+	// the documents a tab shows: a text editor's, or both sides of a diff's
+	private static tabUris(tab: vscode.Tab): vscode.Uri[] {
+		const input = tab.input;
+		if (input instanceof vscode.TabInputText) {
+			return [input.uri];
+		} else if (input instanceof vscode.TabInputTextDiff) {
+			return [input.original, input.modified];
+		}
+		return [];
+	}
+
+	// a closed tab's documents that aren't files - e.g. a diff's original - and no other tab shows: their problems go now, not when
+	// VS Code closes the document, which can be minutes later - in the meantime clicking one would show the old version again
+	public static clearClosedTabs(collection: vscode.DiagnosticCollection, closed: readonly vscode.Tab[]) {
+		const shown = new Set(vscode.window.tabGroups.all.flatMap((group) => group.tabs).flatMap((tab) => XsltSymbolProvider.tabUris(tab)).map((uri) => uri.toString()));
+		for (const uri of closed.flatMap((tab) => XsltSymbolProvider.tabUris(tab))) {
+			if (uri.scheme !== 'file' && uri.scheme !== 'untitled' && !shown.has(uri.toString())) {
+				collection.delete(uri);
+			}
+		}
+	}
+
 	public static isOpenInEditor(document: vscode.TextDocument) {
 		const uri = document.uri.toString();
 		return vscode.window.visibleTextEditors.some((editor) => editor.document === document) ||
@@ -151,16 +253,26 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private static findMatchingParent(map: Map<string, string[]>, path: string) {
 		let matchingKey: string | undefined;
-		// use last entry
-		for (const entry of map.entries()) {
-			if (entry[1].find((x) => x === path)) {
-				matchingKey = entry[0];
+		// use last entry - not one for a file that's been deleted since, which would be reported as not found - nor one for a
+		// stylesheet that no longer imports or includes the module, e.g. changed to use a package: it's removed, as it
+		// would be until the stylesheet is checked again
+		for (const entry of [...map.entries()]) {
+			if (entry[1].find((x) => x === path) && !XsltSymbolProvider.isDeletedFile(entry[0])) {
+				// the stylesheet itself, remembered with what it imports - not a parent
+				if (entry[0] === path || ImportIndex.reaches(entry[0], path)) {
+					matchingKey = entry[0];
+				} else {
+					map.delete(entry[0]);
+				}
 			}
 		}
 		return matchingKey;
 	}
 
-	public async getDocumentSymbols(document: vscode.TextDocument, onlyActiveDocument: boolean): Promise<vscode.DocumentSymbol[] | undefined> {
+	// topLevel: a top-level stylesheet to check the module with, instead of the one found for it, e.g. given to the MCP
+	// server's lint_file tool - a check that's kept apart from the editor's: its problems aren't shown, nor cached for the
+	// document, and the stylesheet isn't remembered as the module's parent
+	public async getDocumentSymbols(document: vscode.TextDocument, onlyActiveDocument: boolean, topLevel?: string): Promise<vscode.DocumentSymbol[] | undefined> {
 		if (onlyActiveDocument && vscode.window.activeTextEditor) {
 			if (document.fileName !== vscode.window.activeTextEditor.document.fileName) {
 				return [];
@@ -175,14 +287,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.languageConfig['isVersion4'] = isVersion4;
 		const languageConfig = { ...this.languageConfig, isVersion4 };
 		const globalInstructionData = this.xslLexer.globalInstructionData.slice();
-		const prefixBindings = this.xslLexer.prefixBindings;
+		const prefixBindings = SchIncludes.withContext(document, this.xslLexer.prefixBindings);
 		const xsltPackages: XsltPackage[] = XsltPackages.all();
 
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
 		let { importedGlobals1, accumulatedHrefs }:
 			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[] }
-			= await XsltSymbolProvider.processTopLevelImports(true, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
+			= await XsltSymbolProvider.processTopLevelImports(!topLevel, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages, topLevel ?? true);
 
 		let topLevelHrefs = XsltSymbolProvider.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
 
@@ -215,6 +327,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					const problem = HrefPaths.importProblem(data.name, document.fileName);
 					if (problem) {
 						importErrors.push({ data, problem });
+					} else if (this.docType !== DocumentTypes.XSPEC && !XsltSymbolProvider.parentImports.has(data)) {
+						// XTSE0165: an xsl:package module can't be imported or included - as Saxon reports it
+						const target = HrefPaths.toPath(data.name, document.fileName);
+						const pkg = target ? ImportIndex.packageOf(target) : undefined;
+						if (pkg) {
+							const imported = data.type === GlobalInstructionType.Import ? 'imported' : 'included';
+							importErrors.push({ data, problem: { message: `XTSE0165: '${data.name}' is the xsl:package '${pkg.name}', so it can't be ${imported} - use it with xsl:use-package`, warning: false } });
+						}
 					}
 				} else if (data.type === GlobalInstructionType.UsePackage && packagesKnown && !XsltPackages.find(xsltPackages, data.name, data.version)) {
 					packageErrors.push(data);
@@ -246,7 +366,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
-			this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
+			if (!topLevel) {
+				this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
+			}
 			let diagnostics = XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, prefixBindings, xsltPackages, allImportedGlobals,
 				XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols));
 			let importDiagnostics: vscode.Diagnostic[] = [];
@@ -257,17 +379,30 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			importErrors.forEach((importError) => {
 				importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem, document.getText()));
 			});
-			packageErrors.forEach((data) => importDiagnostics.push(XsltTokenDiagnostics.createPackageNotFoundDiagnostic(data, document.getText())));
-			const allDiagnostics = importDiagnostics.concat(diagnostics);
+			packageErrors.forEach((data) => {
+				const diagnostic = XsltTokenDiagnostics.createPackageNotFoundDiagnostic(data, document.getText());
+				if (this.docType === DocumentTypes.XSPEC) {
+					// x:helper's package-name
+					diagnostic.message = diagnostic.message.replace(/^XTSE3000: Package/, 'XSpec: the helper package');
+				}
+				importDiagnostics.push(diagnostic);
+			});
+			const allDiagnostics = XsltTokenDiagnostics.labelled(importDiagnostics.concat(diagnostics));
+			if (topLevel) {
+				// a check with a top-level stylesheet given: only its results, apart from the editor's
+				this.topLevelChecks.set(XsltSymbolProvider.topLevelKey(document, topLevel), { diagnostics: allDiagnostics, own: globalInstructionData, imported: allImportedGlobals });
+				resolve(symbols);
+				return;
+			}
 			// for a document that isn't open in an editor too, e.g. checked by the MCP server's lint_file tool
 			this.lastDiagnostics.set(document.uri.toString(), { version, diagnostics: allDiagnostics });
 			this.lastDeclarations.set(document.uri.toString(), { own: globalInstructionData, imported: allImportedGlobals });
 			if (!XsltSymbolProvider.isOpenInEditor(document) || document.version !== version) {
 
 			} else {
-				// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully
-				if (this.collection && this.docType !== DocumentTypes.SCH) {
-					if (allDiagnostics.length > 0 && this.showDiagnostics()) {
+				if (this.collection) {
+					// only for a file to fix - not a read-only copy of one, e.g. in a diff (see isFileToFix)
+					if (allDiagnostics.length > 0 && this.showDiagnostics() && XsltSymbolProvider.isFileToFix(document.uri)) {
 						this.collection.set(document.uri, allDiagnostics);
 					} else {
 						// only this document's problems - not those of other documents
@@ -297,15 +432,29 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	
 	// the problems of a document, as it is now - whether or not it's open in an editor: checked again, as a module it
 	// imports may have changed since its last check
-	public async diagnosticsFor(document: vscode.TextDocument): Promise<vscode.Diagnostic[]> {
-		await this.getDocumentSymbols(document, false);
-		return this.lastDiagnostics.get(document.uri.toString())?.diagnostics ?? [];
+	// - with the top-level stylesheet given, if there is one, instead of the one found for it (see getDocumentSymbols)
+	public async diagnosticsFor(document: vscode.TextDocument, topLevel?: string): Promise<vscode.Diagnostic[]> {
+		await this.getDocumentSymbols(document, false, topLevel);
+		return (topLevel ? this.takeTopLevelCheck(document, topLevel)?.diagnostics : this.lastDiagnostics.get(document.uri.toString())?.diagnostics) ?? [];
 	}
 
 	// the declarations of a document and of the modules it imports or includes, as it is now (see diagnosticsFor)
-	public async declarationsFor(document: vscode.TextDocument): Promise<{ own: GlobalInstructionData[], imported: GlobalInstructionData[] }> {
-		await this.getDocumentSymbols(document, false);
-		return this.lastDeclarations.get(document.uri.toString()) ?? { own: [], imported: [] };
+	public async declarationsFor(document: vscode.TextDocument, topLevel?: string): Promise<{ own: GlobalInstructionData[], imported: GlobalInstructionData[] }> {
+		await this.getDocumentSymbols(document, false, topLevel);
+		const check = topLevel ? this.takeTopLevelCheck(document, topLevel) : this.lastDeclarations.get(document.uri.toString());
+		return check ? { own: check.own, imported: check.imported } : { own: [], imported: [] };
+	}
+
+	// the results of a check with a top-level stylesheet given - removed, as each check is made again when asked for
+	private takeTopLevelCheck(document: vscode.TextDocument, topLevel: string) {
+		const key = XsltSymbolProvider.topLevelKey(document, topLevel);
+		const check = this.topLevelChecks.get(key);
+		this.topLevelChecks.delete(key);
+		return check;
+	}
+
+	private static topLevelKey(document: vscode.TextDocument, topLevel: string) {
+		return `${document.uri.toString()}\n${topLevel}`;
 	}
 
 	public get diagnosticsArray() : vscode.Diagnostic[] {
@@ -314,9 +463,39 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	// the parent imported with the module: true for the top-level stylesheet importing or including it, directly or
 	// indirectly - one opened recently, or from the index of the workspace's modules - false for none, or a path
+	// for an XSpec file whose tests run in an XSLT test runner - for a stylesheet, a Schematron or an XProc step, not an
+	// XQuery module - the file URI of XSpec's src/common/runtime-utils.xsl, bundled with the extension, which XSpec's
+	// compiler includes in every runner (src/compiler/xslt/main.xsl): common-utils, deep-equal, namespace-vars,
+	// report-sequence, uqname-utils and wrap
+	public static xspecRuntimeUtils(document: vscode.TextDocument): string | undefined {
+		if (document.languageId !== 'xspec' || !SaxonTaskProvider.extensionURI) {
+			return undefined;
+		}
+		const root = /<(?:[\w.-]+:)?description\b[^>]*>/.exec(document.getText())?.[0];
+		if (!root || !/\s(stylesheet|schematron|xproc)\s*=/.test(root)) {
+			return undefined;
+		}
+		const utils = vscode.Uri.joinPath(SaxonTaskProvider.extensionURI, 'xslt-resources', 'xspec', 'src', 'common', 'runtime-utils.xsl').fsPath;
+		return fs.existsSync(utils) ? HrefPaths.fileUri(utils) : undefined;
+	}
+
+	// a path of a file that isn't there now - not a name with no folder, e.g. an untitled document's
+	private static isDeletedFile(fileName: string) {
+		return path.isAbsolute(fileName) && !fs.existsSync(fileName);
+	}
+
 	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[], parent: boolean | string = true) {
 		const inferParent = parent === true;
-		let matchingParent = typeof parent === 'string' ? parent : inferParent ? this.findMatchingParent(localImportedHrefs, document.fileName) : undefined;
+		let matchingParent = typeof parent === 'string' ? parent : inferParent && document.languageId !== 'sch' ? this.findMatchingParent(localImportedHrefs, document.fileName) : undefined;
+		if (inferParent && document.languageId === 'sch' && document.uri.scheme === 'file') {
+			// Schematron: a file sch:include brings in - the schema that includes it, for the XSLT functions it declares or
+			// includes (see SchIncludes) - from an index of the workspace's .sch files, built the first time it's needed
+			const chain = SchIncludes.instance.chain(document.fileName);
+			matchingParent = chain.length > 1 ? chain[0] : undefined;
+			if (!SchIncludes.instance.built) {
+				SchIncludes.instance.whenBuilt();
+			}
+		}
 		if (inferParent && !matchingParent && document.uri.scheme === 'file' && ImportIndex.isEnabled()) {
 			// the top-level stylesheet importing or including the module, from an index of the workspace's modules - built
 			// in the background the first time it's needed, when the open XSLT modules are checked again
@@ -344,14 +523,23 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				idNumber: 0
 			};
 
+			XsltSymbolProvider.parentImports.add(importInstruction);
 			globalInstructionData.push(importInstruction);
+		}
+		// XSpec: the utilities XSpec includes in every XSLT test runner - their functions and variables, e.g. x:UQName()
+		// and $x:apos, can be used in its XPath expressions (see XsltSymbolProvider.xspecRuntimeUtils)
+		const runtimeUtils = XsltSymbolProvider.xspecRuntimeUtils(document);
+		if (runtimeUtils && !globalInstructionData.some((g) => g.type === GlobalInstructionType.Import && g.name === runtimeUtils)) {
+			globalInstructionData.push({ type: GlobalInstructionType.Import, name: runtimeUtils, token: { line: 0, startCharacter: 0, length: 0, value: '', tokenType: 0 }, idNumber: 0 });
 		}
 
 		const importedG = { data: globalInstructionData, href: document.fileName, error: false };
 		accumulatedHrefs = [importedG.href];
 		importedGlobals1 = [importedG];
 		const inheritHrefs = this.getImportHrefs(xsltPackages, importedGlobals1);
-		if (update) {
+		// not an XSpec file, whose x:description stylesheet is read as an import: the stylesheet it tests would be checked
+		// with it as its top-level stylesheet - and once it's deleted, report it as not found
+		if (update && document.languageId !== 'xspec') {
 			if (matchingParent) {
 				const newInheritHres = localImportedHrefs.get(matchingParent)?.concat(inheritHrefs);
 				if (newInheritHres) {
@@ -405,6 +593,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const xslLexer = new XslLexer(languageConfig);
 		xslLexer.provideCharLevelState = true;
 		const allTokens = xslLexer.analyse(document.getText());
+		xslLexer.prefixBindings = SchIncludes.withContext(document, xslLexer.prefixBindings);
 		const globalInstructionData = xslLexer.globalInstructionData;
 		const xsltPackages: XsltPackage[] = XsltPackages.all();
 		const { importedGlobals1, accumulatedHrefs } = await XsltSymbolProvider.processTopLevelImports(false, xslLexer, XsltSymbolProvider.importSymbolHrefs, document, globalInstructionData, xsltPackages, parent);
@@ -603,9 +792,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		if (this.useSourceFile === UseSource.none) {
 			return [eNames, aNames];
 		}
-		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, globalInstructionData, xsltVariables, xpathVariables,index, xpathStack);
+		const {cleanedTokens, hasParentAxis, viaVariable} = XsltSymbolProvider.filterPathTokens(allTokens, globalInstructionData, xsltVariables, xpathVariables,index, xpathStack);
 		// console.log('pathTokens')
 		// console.log(cleanedTokens);
+		// a relative path: from the context set by the template, or by the xsl:for-each or xsl:iterate, it's in - if that gives names
+		if (XsltSymbolProvider.contextElementStack && XsltSymbolProvider.pathStart(cleanedTokens, allTokens[index]) === 'relative' && !viaVariable) {
+			const context = XsltSymbolProvider.contextPathTokens(allTokens, XsltSymbolProvider.contextElementStack, globalInstructionData, xsltVariables, xpathVariables);
+			if (context) {
+				const inContext = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens.concat(context.tokens), symbols, hasParentAxis || context.hasParentAxis);
+				if (inContext[0].length > 0 || inContext[1].length > 0) {
+					return inContext;
+				}
+			}
+		}
 		const result = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens, symbols, hasParentAxis);
 		const [elementNames, attrNames] = result;
 		// console.log('elementNames');
@@ -613,6 +812,83 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// console.log('attrtNames');
 		// console.log(attrNames);
 		return result;
+	}
+
+	// the elements above the cursor, set by the completions: for the context of a relative path
+	public static contextElementStack: ElementData[] | undefined;
+
+	// elements whose content, or whose xsl:sort, has a context other than that of the instruction above it - or none
+	private static readonly contextBreakers = ['xsl:for-each-group', 'xsl:analyze-string', 'xsl:matching-substring', 'xsl:non-matching-substring', 'xsl:merge',
+		'xsl:merge-source', 'xsl:merge-action', 'xsl:accumulator-rule', 'xsl:key', 'xsl:function', 'xsl:copy', 'xsl:source-document', 'xsl:on-completion',
+		'xsl:apply-templates', 'xsl:perform-sort', 'xsl:template'];
+
+	// where a path, as its tokens from filterPathTokens - the last is its first step, begins: 'absolute' for / or //, 'relative' to the
+	// context, or 'unknown' - a variable that isn't resolved. last: the token at the end of the path, for when it has no steps
+	private static pathStart(cleanedTokens: BaseToken[], last: BaseToken | undefined): 'absolute' | 'relative' | 'unknown' {
+		const first = cleanedTokens.length > 0 ? cleanedTokens[cleanedTokens.length - 1] : last;
+		if (!first) {
+			return 'relative';
+		}
+		if (first.tokenType === TokenLevelState.variable) {
+			return 'unknown';
+		}
+		return first.value === '/' || first.value === '//' ? 'absolute' : 'relative';
+	}
+
+	// a path of steps, with predicates, e.g. a/b[c = 1]/@d or $v/e - not a union, a function call or any other expression
+	private static isSimplePath(tokens: BaseToken[], range: ContextRange) {
+		let depth = 0;
+		for (let i = range.start; i <= range.end; i++) {
+			const token = tokens[i];
+			const type = <TokenLevelState>token.tokenType;
+			const char = <CharLevelState>token.charType;
+			if (type === TokenLevelState.operator && char === CharLevelState.lPr) {
+				depth++;
+			} else if (type === TokenLevelState.operator && char === CharLevelState.rPr) {
+				depth--;
+			} else if (depth === 0) {
+				const isStep = type === TokenLevelState.nodeNameTest || type === TokenLevelState.attributeNameTest || type === TokenLevelState.axisName ||
+					type === TokenLevelState.nodeType || type === TokenLevelState.variable;
+				const isSeparator = type === TokenLevelState.operator && ((char === CharLevelState.sep && token.value === '/') ||
+					(char === CharLevelState.dSep && ['//', '::', '()'].includes(token.value)));
+				if (!isStep && !isSeparator) {
+					return false;
+				}
+			}
+		}
+		return depth === 0;
+	}
+
+	// the path to the context node set by the elements above the cursor, in the order of filterPathTokens - the template's match, and
+	// the select of each xsl:for-each and xsl:iterate within it, unless one of them is a absolute path: undefined if that's not known
+	private static contextPathTokens(tokens: BaseToken[], stack: ElementData[], globalInstructionData: GlobalInstructionData[], xsltVariables: VariableData[], xpathVariables: VariableData[]) {
+		let result: TokenWithUnion[] = [];
+		let hasParentAxis = false;
+		for (let i = stack.length - 1; i >= 0; i--) {
+			const element = stack[i];
+			const range = element.contextRange;
+			if (!range) {
+				if (XsltSymbolProvider.contextBreakers.includes(element.symbolName)) {
+					return undefined;
+				}
+				continue;
+			}
+			if (!XsltSymbolProvider.isSimplePath(tokens, range)) {
+				return undefined;
+			}
+			const path = XsltSymbolProvider.filterPathTokens(tokens, globalInstructionData, xsltVariables, xpathVariables, range.end, []);
+			const start = XsltSymbolProvider.pathStart(path.cleanedTokens, tokens[range.end]);
+			if (start === 'unknown' || (start === 'relative' && path.viaVariable)) {
+				return undefined;
+			}
+			result = result.concat(path.cleanedTokens);
+			hasParentAxis = hasParentAxis || path.hasParentAxis;
+			// a pattern, or an absolute path, is where the context begins - else it's relative to that of the element above
+			if (range.isPattern || start === 'absolute') {
+				return { tokens: result, hasParentAxis };
+			}
+		}
+		return undefined;
 	}
 
 	public static filterPathTokens(tokens: BaseToken[], globalInstructionData: GlobalInstructionData[], xsltVariables: VariableData[], xpathVariables: VariableData[], position: number, xpathStack: XPathData[]) {
@@ -627,6 +903,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let lastTokenWasSlash2 = false;
 		let hasParentAxis = false;
 		let foundVariableToken = false;
+		let viaVariable = false;
 		let isNextBracketUnion = false;
 		let collectBracketTokens = false;
 
@@ -743,6 +1020,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							}
 						}
 						if (xpv) {
+							viaVariable = true;
 							const lastTokenIndex = XsltSymbolProvider.fetchXPathVariableTokens(tokens, xpv);
 							// recursive call:
 							if (position === lastTokenIndex) {
@@ -814,7 +1092,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			lastTokenWasSlash = false;
 			saveToken = false;
 		}
-		return {cleanedTokens, hasParentAxis};
+		return {cleanedTokens, hasParentAxis, viaVariable};
 	}
 
 	static fetchXPathVariableTokens(tokens: BaseToken[], xpv: VariableData) {
@@ -955,8 +1233,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				case TokenLevelState.nodeNameTest:
 					if (isDocumentNode) {
 						isDocumentNode = false;
-						// starting point: assume root element
-						if (xpathNameMatchesSymbol(token.value, currentSymbols[0].name)) {
+						// starting point: assume root element - or for an XSpec file, any root of its test data
+						if (XSpecNodeNames.isRoot(currentSymbols[0])) {
+							nextSymbols = currentSymbols[0].children.filter((child) => child.kind !== vscode.SymbolKind.Array && xpathNameMatchesSymbol(token.value, child.name));
+						} else if (xpathNameMatchesSymbol(token.value, currentSymbols[0].name)) {
 							nextSymbols = currentSymbols;
 						}
 					} else if (token.union) {
@@ -1101,8 +1381,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					}
 					if (['*','node','element','item'].indexOf(token.value) !== -1) {
 						if (isDocumentNode) {
-							isDocumentNode = false;								
-							nextSymbols = currentSymbols;
+							isDocumentNode = false;
+							nextSymbols = XSpecNodeNames.isRoot(currentSymbols[0]) ? currentSymbols[0].children.filter((child) => child.kind !== vscode.SymbolKind.Array) : currentSymbols;
 						} else if (currentAxis !== AxisType.Child && currentAxis !== AxisType.Parent) {
 							nextSymbols = currentSymbols;
 						} else {
@@ -1148,7 +1428,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				let elementNames = new Set<string>();
 				let attrNames = new Set<string>();
 
-				if (isDocumentNode) {
+				if (isDocumentNode && XSpecNodeNames.isRoot(currentSymbols[0])) {
+					// an XSpec file's test data: the root of each part of it
+					currentSymbols[0].children.forEach((child) => {
+						if (child.kind !== vscode.SymbolKind.Array) {
+							elementNames.add(child.name);
+						}
+					});
+				} else if (isDocumentNode) {
 					elementNames.add(currentSymbols[0].name);
 				} else if (nextAxis === AxisType.Attribute) {
 					currentSymbols.forEach(current => {
@@ -1159,8 +1446,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					currentSymbols.forEach(current => {
 						if (current.isAttr) {
 							attrNames.add(current.name);
-						} else {
-						elementNames.add(current.name);}
+						} else if (!XSpecNodeNames.isRoot(current)) {
+							elementNames.add(current.name);
+						}
 					});
 				} else {
 					for (let x = 0; x < currentSymbols.length; x++) {
@@ -1339,12 +1627,24 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		};
 		const result = diagnostics.concat(PackageScope.modeProblems(text, prefixBindings, importedGlobals).map((problem) =>
 			withFixes(new vscode.Diagnostic(new vscode.Range(document.positionAt(problem.offset), document.positionAt(problem.offset + problem.length)), problem.message, vscode.DiagnosticSeverity.Error), problem.fixes)));
-		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(text, globalInstructionData, []);
-		if (documentUsePackages.length === 0) {
-			return result;
-		}
+		const { documentUsePackages, documentBindings, all } = PackageScope.usePackagesOf(text, globalInstructionData, importedGlobals);
 		const bindings = prefixBindings ?? documentBindings;
 		const workspace = PackageScope.workspaceFolder();
+		// a reference to a private component of a package the module can use - its own xsl:use-package, or that of the
+		// stylesheet that imports or includes it: not found, as it isn't visible - e.g. once its visibility is narrowed
+		const privates = all.length > 0 ? PackageScope.privatesOf(all, bindings, xsltPackages, workspace) : [];
+		const withPrivates = (diagnostic: vscode.Diagnostic) => {
+			const hidden = privates.find((p) => XsltSymbolProvider.isReferenceTo(diagnostic.message, p));
+			if (!hidden) {
+				return diagnostic;
+			}
+			const label = hidden.kind === 'function' ? `${hidden.name}#${hidden.arity}` : hidden.kind === 'variable' ? '$' + hidden.name : hidden.name;
+			const message = `The ${hidden.kind === 'attribute-set' ? 'attribute set' : hidden.kind} ${label} is private in package '${hidden.packageName}', so it can't be used here - it must be public in the package`;
+			return withFixes(new vscode.Diagnostic(diagnostic.range, message, vscode.DiagnosticSeverity.Error), hidden.fix ? [hidden.fix] : []);
+		};
+		if (documentUsePackages.length === 0) {
+			return privates.length > 0 ? result.map(withPrivates) : result;
+		}
 		// XTSE3008: in a module that's imported - directly, or through xsl:include - as Saxon reports it
 		const importer = document.uri.scheme === 'file' && ImportIndex.isEnabled() && ImportIndex.instance.built ? XsltSymbolProvider.importerOf(document.fileName) : undefined;
 		if (importer) {
@@ -1360,7 +1660,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return result.map((diagnostic) => {
 			const abstract = abstracts.find((a) => XsltSymbolProvider.isReferenceTo(diagnostic.message, a));
 			if (!abstract) {
-				return diagnostic;
+				return withPrivates(diagnostic);
 			}
 			const label = abstract.kind === 'function' ? `${abstract.name}#${abstract.arity}` : abstract.kind === 'variable' ? '$' + abstract.name : abstract.name;
 			const message = `The abstract ${abstract.kind === 'attribute-set' ? 'attribute set' : abstract.kind} ${label} of package '${abstract.packageName}' isn't overridden, so it can't be used here - override it in the xsl:use-package`;
@@ -1395,7 +1695,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	// whether a diagnostic's message is for a reference to the component that isn't found
-	private static isReferenceTo(message: string, component: AbstractComponent) {
+	private static isReferenceTo(message: string, component: { kind: string, name: string, arity?: number }) {
 		const match = (pattern: RegExp) => pattern.exec(message);
 		switch (component.kind) {
 			case 'function': {

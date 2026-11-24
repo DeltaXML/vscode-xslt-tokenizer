@@ -28,6 +28,7 @@ final class XdmView {
     // xdm-view's functions aren't public (it isn't a package), so they're called by one of this stylesheet's, which is
     private static final String NS = "http://deltaxml.com/ns/xslt-debugger";
     private static final QName LOG_TEXT = new QName(NS, "log-text");
+    private static final QName PLAIN_TEXT = new QName(NS, "plain-text");
     private static final QName DEBUG_TEXT = new QName(NS, "debug-text");
     private static final String WRAPPER =
             "<xsl:stylesheet version='3.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform' xmlns:dbg='" + NS + "'" +
@@ -37,6 +38,10 @@ final class XdmView {
             "    <xsl:param name='value'/>" +
             "    <xsl:sequence select='zxd:trace-text($value, (), true())'/>" +
             "  </xsl:function>" +
+            "  <xsl:function name='dbg:plain-text' visibility='public'>" +
+            "    <xsl:param name='value'/>" +
+            "    <xsl:sequence select='zxd:trace-text($value, (), false())'/>" +
+            "  </xsl:function>" +
             "  <xsl:function name='dbg:debug-text' visibility='public'>" +
             "    <xsl:param name='title'/>" +
             "    <xsl:param name='labels'/>" +
@@ -44,18 +49,37 @@ final class XdmView {
             "  </xsl:function>" +
             "</xsl:stylesheet>";
 
+    // xdm-view's parameter: each map entry, array member and sequence item on a line of its own
+    private static final QName ONE_PER_LINE = new QName("http://deltaxignia.com/ns/xdm-persistence", "VIEW-ONE-PER-LINE");
+
     private final Configuration config;
+    private final boolean onePerLine;
     private Xslt30Transformer transformer;
     // why it can't be used, once that's known
     private String problem;
 
+    /** as xdm-view writes a value for a log of many: a map, array or sequence of atomic values on one line */
     XdmView(Configuration config) {
+        this(config, false);
+    }
+
+    /**
+     * with onePerLine, each map entry, array member and sequence item on a line of its own - for one value at a
+     * time, e.g. a query's result
+     */
+    XdmView(Configuration config, boolean onePerLine) {
         this.config = config;
+        this.onePerLine = onePerLine;
     }
 
     /** the value rendered - null if xdm-view can't be used (see problem()), or rendering it failed */
     String render(XdmValue value) {
         return call(LOG_TEXT, value);
+    }
+
+    /** the value rendered as render() does it, but without color - e.g. for VS Code's Output panel. Null as for render() */
+    String renderPlain(XdmValue value) {
+        return call(PLAIN_TEXT, value);
     }
 
     /**
@@ -116,6 +140,9 @@ final class XdmView {
                     new File(stylesheet.getParentFile(), "xslt-debugger-log.xsl").toURI().toString());
             Xslt30Transformer compiled = compiler.compile(source).load30();
             compiled.getUnderlyingController().setTraceListener(null);
+            if (onePerLine) {
+                compiled.setStylesheetParameters(java.util.Collections.singletonMap(ONE_PER_LINE, new net.sf.saxon.s9api.XdmAtomicValue(true)));
+            }
             transformer = compiled;
         } catch (Exception | LinkageError e) {
             problem = "xdm-view couldn't be compiled: " + e.getMessage();

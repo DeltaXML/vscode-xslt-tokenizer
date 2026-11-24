@@ -82,20 +82,25 @@ export class XSpecTaskSettingsFinder {
 		return parts.length > 0 ? parts.join(' · ') : 'no Saxon settings';
 	}
 
-	// the settings of the task for the stylesheet the XSpec file tests: undefined if it has none, or with several tasks
-	// whose settings differ, those of the one the user picks - 'cancelled' if they didn't
-	public static async find(xsltFsPath: string): Promise<XSpecTaskSettings | undefined | 'cancelled'> {
+	// the Saxon settings of each task for the stylesheet, in tasks.json - none if it has none
+	public static candidates(xsltFsPath: string): XSpecTaskSettings[] {
 		const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(xsltFsPath)) ?? vscode.workspace.workspaceFolders?.[0];
 		if (!folder) {
-			return undefined;
+			return [];
 		}
 		let tasks: vscode.TaskDefinition[];
 		try {
 			tasks = jsc.parse(fs.readFileSync(path.join(folder.uri.fsPath, '.vscode', 'tasks.json'), 'utf8'))?.tasks || [];
 		} catch {
-			return undefined;
+			return [];
 		}
-		const settings = XSpecTaskSettingsFinder.tasksFor(tasks, xsltFsPath, folder.uri.fsPath).map(XSpecTaskSettingsFinder.settingsOf);
+		return XSpecTaskSettingsFinder.tasksFor(tasks, xsltFsPath, folder.uri.fsPath).map(XSpecTaskSettingsFinder.settingsOf);
+	}
+
+	// the settings of the task for the stylesheet the XSpec file tests: undefined if it has none, or with several tasks
+	// whose settings differ, those of the one the user picks - 'cancelled' if they didn't
+	public static async find(xsltFsPath: string): Promise<XSpecTaskSettings | undefined | 'cancelled'> {
+		const settings = XSpecTaskSettingsFinder.candidates(xsltFsPath);
 		if (settings.length === 0) {
 			return undefined;
 		}

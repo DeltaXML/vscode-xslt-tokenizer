@@ -56,10 +56,21 @@ export interface PackageProblem {
 	fixes?: PackageFix[];
 }
 
-// a fix: edits of the module's text (see PackageEdits)
+// a fix: edits of the module's text (see PackageEdits) - or, with a path, of that file's, e.g. a module of the package
 export interface PackageFix {
 	title: string;
 	edits: TextEdit[];
+	path?: string;
+}
+
+// a private component of a used package, which the module can't refer to - named with the module's prefixes, as it's
+// referred to - with a fix that makes it public in the package, where the visibility is on its declaration
+export interface PrivateComponent {
+	kind: string;
+	name: string;
+	arity?: number;
+	packageName: string;
+	fix?: PackageFix;
 }
 
 // an abstract component of a used package that the module doesn't override - named with the module's prefixes, as
@@ -302,6 +313,22 @@ export class PackageScope {
 		return components.map((component) => ({ component, overrides: overrides.filter((o) => PackageScope.overrides(o.declaration, component)) }));
 	}
 
+	// for the module of a package (its xsl:package module): the modules in the workspace that use it with xsl:use-package -
+	// those whose name and version find this package - from the index
+	public static usersOf(packagePath: string): string[] {
+		const module = PackageScope.module(packagePath);
+		const declaration = module ? ImportIndex.packageDeclaration(module.text) : undefined;
+		if (!module || !declaration || !ImportIndex.isEnabled()) {
+			return [];
+		}
+		const packages = XsltPackages.all();
+		const workspace = PackageScope.workspaceFolder();
+		return ImportIndex.instance.usersOf(declaration.name).filter((user) => (PackageScope.module(user)?.data ?? []).some((g) => {
+			const found = g.type === GlobalInstructionType.UsePackage && g.name === declaration.name ? XsltPackages.find(packages, g.name, g.version) : undefined;
+			return found !== undefined && HrefPaths.settingsPath(found.path, workspace ?? path.dirname(packagePath)) === packagePath;
+		}));
+	}
+
 	// for the name of a public or abstract component of a package (the module at packagePath) at the position, the
 	// declarations in the workspace that override it - undefined if the position isn't on one
 	public static overridersAt(packagePath: string, position: { line: number, character: number }) {
@@ -348,6 +375,26 @@ export class PackageScope {
 		return usePackages.flatMap((usePackage) => {
 			const used = PackageScope.usedPackage(usePackage, xsltPackages, workspace, 0, new Set(), true);
 			return used ? PackageScope.abstractComponents(text, usePackage, used.abstracts, moduleBindings) : [];
+		});
+	}
+
+	// the private functions, templates, variables and attribute sets of the packages the module uses - for a reference
+	// to one, which isn't found, to be reported as private, e.g. after its visibility is narrowed. The fix sets
+	// visibility="public" on its declaration in the package - one it declares itself, not one it accepts from another
+	public static privatesOf(usePackages: GlobalInstructionData[], moduleBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[], workspace: string | undefined): PrivateComponent[] {
+		const kinds = ['function', 'template', 'variable', 'attribute-set'];
+		return usePackages.flatMap((usePackage) => {
+			const used = PackageScope.usedPackage(usePackage, xsltPackages, workspace, 0, new Set(), true);
+			return (used?.all ?? []).filter((c) => c.packageVisibility === 'private' && kinds.includes(PackageScope.componentKind(c.type) ?? '')).map((component) => {
+				const kind = PackageScope.componentKind(component.type)!;
+				const name = ModulePrefixes.nameIn(component, moduleBindings);
+				const module = component.href && component.packageName === usePackage.name ? PackageScope.module(component.href) : undefined;
+				const declared = module?.data.some((g) => g.token.line === component.token.line && g.token.startCharacter === component.token.startCharacter);
+				const tagStart = module && declared ? module.text.lastIndexOf('<', XdocNotes.offsetAt(module.text, component.token.line, component.token.startCharacter)) : -1;
+				const edit = module && tagStart >= 0 ? PackageEdits.withAttributes(module.text, RecordTypes.blankMarkup(module.text), tagStart, [['visibility', 'public']]) : undefined;
+				const fix = edit ? { title: `Make ${PackageScope.label(component, moduleBindings)} public in package '${usePackage.name}'`, edits: [edit], path: module!.path } : undefined;
+				return { kind, name, arity: kind === 'function' ? component.idNumber : undefined, packageName: usePackage.name, fix };
+			});
 		});
 	}
 
@@ -775,7 +822,7 @@ export class PackageScope {
 		}
 		const lineStart = text.lastIndexOf('\n', rootElement.endTagStart - 1) + 1;
 		const ownLine = text.substring(lineStart, rootElement.endTagStart).trim() === '';
-		const step = PackageScope.indentStep(text, rootElement.startTagEnd);
+		const step = PackageEdits.contentIndent(text, rootElement.startTagEnd);
 		return ownLine ? { start: lineStart, end: lineStart, text: `${step}${declaration}\n` } : { start: rootElement.endTagStart, end: rootElement.endTagStart, text: `\n${step}${declaration}\n` };
 	}
 
@@ -924,6 +971,15 @@ export class PackageScope {
 			}
 		}
 		return components;
+	}
+
+	// what a package makes public that a stylesheet can start from: its named templates and its modes, by name - as the package
+	// declares them, after its xsl:expose elements, and including those it accepts from the packages it uses
+	public static entryPoints(packagePath: string, name: string, version: string | undefined): { templates: string[], modes: string[] } {
+		const components = PackageScope.packageComponents({ name, version, path: packagePath }, packagePath, XsltPackages.all(), PackageScope.workspaceFolder(), 0, new Set([packagePath]));
+		const isPublic = (c: PackageComponent) => c.packageVisibility === 'public' || c.packageVisibility === 'final';
+		const names = (type: GlobalInstructionType) => [...new Set(components.filter((c) => c.type === type && isPublic(c) && c.name).map((c) => c.name))];
+		return { templates: names(GlobalInstructionType.Template), modes: names(GlobalInstructionType.ModeInstruction) };
 	}
 
 	// the modules of the package: its xsl:package module, then those it imports or includes, directly or indirectly

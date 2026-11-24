@@ -58,6 +58,10 @@ final class Evaluator {
                 engineWorks = false;
             }
         }
+        if (XPathEngine.SANDBOXED.get()) {
+            // the fallback has the configuration's function libraries, which can't be limited
+            throw new IllegalStateException("an assistant's expression can't be evaluated with this Saxon version");
+        }
         return selector(instruction, context, xpath).evaluate();
     }
 

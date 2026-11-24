@@ -645,7 +645,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         let isXSLT40 = false;
         let useSaxonTextEmitter = isPriorToSaxon9902 && !altSaxonJarPath;
         // options that would conflict with the debugger's own tracing
-        const debugExcluded = ['traceOutFilename', 'traceListener', 'timing', 'TPfilename', 'TPxslFilename'];
+        const debugExcluded = ['traceOutFilename', 'traceListener', 'timing', 'TPfilename', 'TPxslFilename', 'profileRepeat'];
 
         for (const propName in xsltTask) {
             if (forDebug && debugExcluded.includes(propName)) {
@@ -720,6 +720,10 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                     break;
                 case 'TPxslFilename':
                     commandLineArgs.push('-TPxsl:' + propValue);
+                    break;
+                case 'profileRepeat':
+                    // set by Profile Stylesheet only, from the XSLT.tasks.profileRuns setting - not a tasks.json property
+                    commandLineArgs.push('-repeat:' + propValue);
                     break;
                 case 'allowSyntaxExtensions40':
                     isXSLT40 = true;

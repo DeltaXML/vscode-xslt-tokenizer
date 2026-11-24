@@ -7,6 +7,7 @@ import { DCPSnippets } from './dcpSnippets';
 import { XSLTSnippets } from './xsltSnippets';
 import { XMLSnippets } from './xmlSnippets';
 import { SchSchema } from './schSchema';
+import { SchSnippets } from './schSnippets';
 import { XSpecSchema } from './xspecSchema';
 
 export class XSLTConfiguration {
@@ -51,7 +52,7 @@ export class XPathConfiguration {
 export class DCPConfiguration {
 	// initial configuration is for basic DCP support only
 	public static configuration: LanguageConfiguration = {
-		expressionAtts: ['attributeXpath', 'classXpath', 'elemXpath', 'when', 'xpath', 'childXpath', 'keyXpath', 'ignoreXpath', 'imageXpath'],
+		expressionAtts: ['attributeXpath', 'classXpath', 'elemXpath', 'when', 'xpath', 'childXpath', 'keyXpath', 'ignoreXpath'],
 		variableElementNames: ['stringParameter', 'booleanParameter'],
 		linkElementAttrNames: ['file', 'path'],
 		nativePrefix: '',
@@ -85,17 +86,24 @@ export class DCPConfiguration {
 }
 
 export class SchConfiguration {
-	// initial configuration is for basic Schematron support only
+	// ISO Schematron, as SchXslt2 - the Schematron processor bundled with XSpec - implements it (see SchSchema)
 	public static configuration: LanguageConfiguration = {
-		expressionAtts: ['context', 'test', 'subject', 'path', 'select', 'value'],
-		variableElementNames: ['stringParameter', 'booleanParameter'],
-		linkElementAttrNames: ['file', 'path'],
+		// with ISO Schematron 2025's visit-each (rule), documents (pattern) and from and when (phase)
+		expressionAtts: ['context', 'test', 'subject', 'path', 'select', 'value', 'visit-each', 'documents', 'from', 'when'],
+		// SchXslt2 copies role, flag and severity into the SVRL report as attribute value templates, e.g. role="{$level}"
+		// (a variable on its own, e.g. severity="$level", also works)
+		avtAtts: ['role', 'flag', 'severity'],
+		// as the linter compares them, with the prefix sch (see XsltTokenDiagnostics.xsltElementName) - and those of its XSLT,
+		// e.g. in an xsl:function
+		variableElementNames: ['sch:let', 'sch:param', 'xsl:variable', 'xsl:param'],
+		// its XSLT elements, e.g. xsl:function and xsl:key, which SchXslt2 copies into its validation stylesheet
+		embeddedXslt: { expressionAtts: XSLTConfiguration.expressionAtts, avtAtts: XSLTConfiguration.avtAtts },
 		nativePrefix: '',
 		tvtAttributes: [],
 		nonNativeAvts: false,
 		schemaData: new SchSchema(),
 		docType: DocumentTypes.SCH,
-		rootElementSnippets: DCPSnippets.xsltRootTags
+		rootElementSnippets: SchSnippets.rootTags
 	}; 
 }
 

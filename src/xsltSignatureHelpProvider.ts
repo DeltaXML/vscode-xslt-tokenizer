@@ -6,6 +6,7 @@ import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
 import { RecordTypes } from "./recordTypes";
 import { XdocNotes } from "./xdocNote";
 import { declarationParamLabels } from "./declarationParams";
+import { XPathVersion } from "./xpathVersion";
 
 interface EnclosingCall {
 	functionName: string;
@@ -44,7 +45,7 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		let fnName = enclosingCall.functionName;
 		fnName = fnName.startsWith('fn:') ? fnName.substring(3) : fnName;
 
-		const matchingData = this.getFunctionData().find((item) => item.name === fnName);
+		const matchingData = this.getFunctionData(document).find((item) => item.name === fnName);
 		const signatureInfo = matchingData ? this.getSignatureInformation(matchingData.name, matchingData.signature, matchingData.description) :
 			this.userFunctionSignature(document, enclosingCall.functionName, await this.allGlobals(document, localGlobals, token));
 		if (!signatureInfo || token.isCancellationRequested) {
@@ -202,9 +203,10 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 	}
 
 	// call after getTokens(), which sets the lexer's isXSLT40 property
-	private getFunctionData() {
+	private getFunctionData(document: TextDocument) {
 		if (this.isXPath) {
-			return XPathFunctionDetails.xpathDataPlus40;
+			// 4.0 - but the query file may be set to XPath 3.1 (see XPathVersion)
+			return XPathVersion.isXPath40(document) ? XPathFunctionDetails.xpathDataPlus40 : XPathFunctionDetails.xpathData;
 		}
 		return this.xslLexer!.isXSLT40 ? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlusIxsl;
 	}

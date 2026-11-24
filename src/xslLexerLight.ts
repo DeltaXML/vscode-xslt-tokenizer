@@ -12,6 +12,7 @@ import { XslLexer, XMLCharState, GlobalInstructionType, XSLTokenLevelState, Enti
 import { BaseToken, XPathLexer } from "./xpLexer";
 import { RecordTypes } from "./recordTypes";
 import { ModulePrefixes } from "./modulePrefixes";
+import { StaticHrefs } from "./staticHrefs";
 import { XSLTLightConfiguration } from "./languageConfigurations";
 import * as vscode from 'vscode';
 
@@ -506,7 +507,7 @@ export class XslLexerLight extends XslLexer {
             } 
             currentChar = nextChar;
         } 
-        const globals = this.globalInstructionData.concat(this.globalModeData);
+        const globals = StaticHrefs.withDeclarations(this.globalInstructionData, xsl).concat(this.globalModeData);
         this.prefixBindings = ModulePrefixes.fromRootAttributes(rootAttributes);
         ModulePrefixes.resolve(globals, this.prefixBindings);
         // the names in xsl:expose, xsl:accept and xsl:override are the module's

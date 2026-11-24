@@ -70,4 +70,13 @@
   two"}</select>
 </xsl:variable>
 
+  <!-- an escaped quote just after a reference, or at the start of a new line -->
+  <xsl:variable name="string21" select="'&#xa;''' || 'x'"/>
+  <xsl:variable name="string22" select="'a&amp;''b'''"/>
+  <xsl:variable name="string23" select='"a&amp;""b"'/>
+  <xsl:variable name="string24" select="'a
+''b'"/>
+  <!-- expect an error: a 2nd string literal -->
+  <xsl:variable name="string25" select="'a&amp;' 'b'"/>
+
 </xsl:stylesheet>

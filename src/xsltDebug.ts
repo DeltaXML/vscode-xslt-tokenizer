@@ -4,7 +4,12 @@
  *  Contributors:
  *  DeltaXML Ltd. - XSLT debugger
  */
+import { NodeRulesEvent, XsltNodeRules } from './xsltNodeRules';
+import { parseXml, descendants } from './xspecXml';
 import { XSpecSourceMap } from './xspecSourceMap';
+import { SchematronSourceMap } from './schematronSourceMap';
+import { DebugSourceMap } from './debugSourceMap';
+import { XsltEmptySteps } from './xsltEmptySteps';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -326,7 +331,7 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 
 	// configurationForActiveEditor: for F5 with no launch.json, or a "quickRun" configuration - the configuration to
 	// debug the active stylesheet as Quick Run would run it, or undefined (having said why) if it can't be debugged
-	constructor(private configurationForActiveEditor: () => Promise<vscode.DebugConfiguration | undefined>) { }
+	constructor(private configurationForActiveEditor: (xmlSource?: string) => Promise<vscode.DebugConfiguration | undefined>) { }
 
 	// for 'create a launch.json file' (Initial) and the Run and Debug view's 'XSLT (Saxon)' configurations with no
 	// launch.json (Dynamic): the active stylesheet, as Quick Run runs it, and each 'xslt' task in tasks.json
@@ -342,12 +347,21 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 	}
 
 	public async resolveDebugConfiguration(folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): Promise<vscode.DebugConfiguration | undefined> {
+		// the last session's output view and problems are cleared as soon as debugging is asked for - not only when the
+		// adapter starts, after the result file is chosen and Java has started, while they'd still show the last session's
+		XsltDebugOutputs.get().startSession();
+		XsltDebugProblems.clear();
 		if ((!config.type && !config.request && !config.name) || config.quickRun) {
-			const forActiveEditor = await this.configurationForActiveEditor();
+			// a source given with a "quickRun" configuration, e.g. by an AI assistant's request to run it (see RunRequest)
+			const forActiveEditor = await this.configurationForActiveEditor(config.quickRun && typeof config.xmlSource === 'string' ? config.xmlSource : undefined);
 			if (!forActiveEditor) {
 				return undefined;
 			}
-			config = { ...forActiveEditor, ...(config.stopOnEntry !== undefined ? { stopOnEntry: config.stopOnEntry } : {}) };
+			// with what VS Code adds: e.g. noDebug, for Run Without Debugging
+			// and a source given with it, e.g. by an AI assistant's request to run the stylesheet on an input (see RunRequest)
+			config = { ...forActiveEditor, ...(config.stopOnEntry !== undefined ? { stopOnEntry: config.stopOnEntry } : {}), ...(config.noDebug ? { noDebug: true } : {}),
+				...(config.xmlSource ? { xmlSource: config.xmlSource } : {}), ...(config.resultPath ? { resultPath: config.resultPath } : {}),
+				...(config.name ? { name: config.name } : {}) };
 		}
 		const tasksObject = config.task !== undefined ? await SaxonJsTaskProvider.getTasksObject() : { tasks: [] };
 		const withTask = XsltDebug.withTaskProperties(config, tasksObject.tasks || []);
@@ -489,12 +503,23 @@ export interface XsltOutputLocation {
 	kind?: 'instruction' | 'source' | 'text';
 }
 
+// the input each part of an XML output was written for - the context item, when it was a node of an input file (from the
+// adapter's OutputCapture): runs of [offset, input id, ...], -1 for none, and the inputs, [file, line, column, node, ...]
+// - the position where its element's start tag ends, the file and node (e.g. 'element:order', 'attribute:id', 'text')
+// as indexes into the tables of them
+interface OutputInputs {
+	runs: number[];
+	inputs: number[];
+	files: string[];
+	nodes: string[];
+}
+
 export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vscode.DefinitionProvider, vscode.InlayHintsProvider {
 	public static readonly scheme = 'xslt-debug-output';
 	private static instance: XsltDebugOutputs | undefined;
 	private readonly changed = new vscode.EventEmitter<vscode.Uri>();
 	public readonly onDidChange = this.changed.event;
-	private readonly outputs = new Map<string, { text: string; method: string; truncated: boolean; uri?: string; runs: number[]; locations: Map<number, XsltOutputLocation> }>();
+	private readonly outputs = new Map<string, { text: string; method: string; truncated: boolean; uri?: string; runs: number[]; locations: Map<number, XsltOutputLocation>; inputs: OutputInputs }>();
 	// the output being written to at the last pause, and whether the output has been opened this session
 	private current: string | undefined;
 	private openedThisSession = false;
@@ -533,6 +558,28 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		return this.outputs.get(name)?.text;
 	}
 
+	// when an output was last added to, for telling an assistant how recent the outputs are
+	public updatedAt: Date | undefined;
+
+	// an output's method, whether only its first part is kept, and the URI it's written to
+	public info(name: string): { method: string; truncated: boolean; uri?: string } | undefined {
+		const output = this.outputs.get(name);
+		return output ? { method: output.method, truncated: output.truncated, uri: output.uri } : undefined;
+	}
+
+	// the offsets in the output's text from start to end where a run of text from one location starts: start, then
+	// each run's start after it - for the parts of a line written by different instructions
+	public runStarts(name: string, start: number, end: number): number[] {
+		const runs = this.outputs.get(name)?.runs ?? [];
+		const starts = [start];
+		for (let i = 0; i < runs.length; i += 2) {
+			if (runs[i] > start && runs[i] < end) {
+				starts.push(runs[i]);
+			}
+		}
+		return starts;
+	}
+
 	public names(): string[] {
 		return [...this.outputs.keys()];
 	}
@@ -543,14 +590,16 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 			this.changed.fire(XsltDebugOutputs.uri(name));
 		}
 		this.outputs.clear();
+		this.updatedAt = undefined;
 		this.current = undefined;
 		this.openedThisSession = false;
 	}
 
 	// an 'xsltOutputs' event from the adapter: each output's text from an offset
-	public update(body: { outputs?: { name: string; method: string; offset: number; text: string; truncated?: boolean; uri?: string; runs?: number[]; locations?: XsltOutputLocation[] }[]; current?: string }) {
+	public update(body: { outputs?: { name: string; method: string; offset: number; text: string; truncated?: boolean; uri?: string; runs?: number[]; locations?: XsltOutputLocation[];
+		inputRuns?: number[]; inputs?: number[]; inputFiles?: string[]; inputNodes?: string[] }[]; current?: string }) {
 		for (const update of body.outputs ?? []) {
-			const output = this.outputs.get(update.name) ?? { text: '', method: update.method, truncated: false, runs: [], locations: new Map<number, XsltOutputLocation>() };
+			const output = this.outputs.get(update.name) ?? { text: '', method: update.method, truncated: false, runs: [], locations: new Map<number, XsltOutputLocation>(), inputs: { runs: [], inputs: [], files: [], nodes: [] } };
 			const isReplaced = !(update.offset > 0 && update.offset <= output.text.length);
 			output.text = isReplaced ? update.text : output.text.substring(0, update.offset) + update.text;
 			// the runs within the text that's been replaced no longer apply
@@ -560,10 +609,24 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 			}
 			output.runs.push(...(update.runs ?? []));
 			(update.locations ?? []).forEach((location) => output.locations.set(location.id, location));
+			// the input runs too: those within the replaced text no longer apply - the inputs are only added to
+			const keptInputs = output.inputs.runs.findIndex((offset, i) => i % 2 === 0 && offset >= (isReplaced ? 0 : update.offset));
+			if (keptInputs > -1) {
+				output.inputs.runs.length = keptInputs;
+			}
+			for (const value of update.inputRuns ?? []) {
+				output.inputs.runs.push(value);
+			}
+			for (const value of update.inputs ?? []) {
+				output.inputs.inputs.push(value);
+			}
+			output.inputs.files = update.inputFiles ?? output.inputs.files;
+			output.inputs.nodes = update.inputNodes ?? output.inputs.nodes;
 			output.method = update.method;
 			output.truncated = !!update.truncated;
 			output.uri = update.uri ?? output.uri;
 			this.outputs.set(update.name, output);
+			this.updatedAt = new Date();
 			this.changed.fire(XsltDebugOutputs.uri(update.name));
 		}
 		// the output being written to - by its URI, as in the event (a name is decoded, e.g. a space for %20)
@@ -663,6 +726,12 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 
 	// the source location for the offset in the named output's text
 	public async sourceLocationAt(name: string, offset: number): Promise<vscode.Location | undefined> {
+		return (await this.originAt(name, offset))?.location;
+	}
+
+	// the source location for the offset in the named output's text, with what's there: an instruction, a node copied from
+	// a source document, or literal text
+	public async originAt(name: string, offset: number): Promise<{ location: vscode.Location, kind?: XsltOutputLocation['kind'] } | undefined> {
 		const output = this.outputs.get(name);
 		const found = output && offset < output.text.length ? XsltDebugOutputs.locationAt(output.text, output.runs, output.locations, offset) : undefined;
 		if (!output || !found) {
@@ -676,10 +745,80 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		try {
 			const source = await vscode.workspace.openTextDocument(vscode.Uri.file(location.path!));
 			const sourceOffset = XsltDebugOutputs.sourceOffset(source.getText(), location, (line, character) => source.offsetAt(new vscode.Position(line, character)), outputText);
-			return new vscode.Location(source.uri, source.positionAt(sourceOffset));
+			return { location: new vscode.Location(source.uri, source.positionAt(sourceOffset)), kind: location.kind };
 		} catch {
 			return undefined;
 		}
+	}
+
+	// the input the output at the offset was written for: the start tag of the element that was the context item - or
+	// whose attribute or text was - in the file as it is now. With the node, e.g. 'element:order'
+	public async inputLocationAt(name: string, offset: number): Promise<{ location: vscode.Location, node: string } | undefined> {
+		const output = this.outputs.get(name);
+		const input = output && offset < output.text.length ? XsltDebugOutputs.inputAt(output.text, output.inputs, offset) : undefined;
+		if (!input) {
+			return undefined;
+		}
+		try {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(input.path));
+			const text = document.getText();
+			const tagEnd = (XsltNodeRules.lineStarts(text)[input.line - 1] ?? text.length) + input.column - 1;
+			const root = parseXml(text);
+			const element = root ? [root, ...descendants(root)].find((e) => e.contentStart === tagEnd) : undefined;
+			const start = element ? element.start : Math.max(0, text.lastIndexOf('<', tagEnd - 1));
+			return { location: new vscode.Location(document.uri, new vscode.Range(document.positionAt(start), document.positionAt(element ? element.contentStart : tagEnd))), node: input.node };
+		} catch {
+			return undefined;
+		}
+	}
+
+	// the input the output at the offset was written for - for the end of a tag ('>' or '/>'), the tag's, as for locationAt
+	public static inputAt(text: string, inputs: OutputInputs, offset: number): { path: string; line: number; column: number; node: string } | undefined {
+		const tagStart = text.lastIndexOf('<', offset);
+		const isTagEnd = text.charAt(offset) === '>' || text.startsWith('/>', offset);
+		const at = isTagEnd && tagStart > text.lastIndexOf('>', offset - 1) ? tagStart : offset;
+		let low = 0;
+		let high = inputs.runs.length / 2 - 1;
+		let found = -1;
+		while (low <= high) {
+			const mid = (low + high) >> 1;
+			if (inputs.runs[mid * 2] <= at) {
+				found = mid;
+				low = mid + 1;
+			} else {
+				high = mid - 1;
+			}
+		}
+		const id = found > -1 ? inputs.runs[found * 2 + 1] : -1;
+		const file = id > -1 ? inputs.inputs[id * 4] : undefined;
+		if (file === undefined || file < 0 || !inputs.files[file]) {
+			return undefined;
+		}
+		return { path: inputs.files[file], line: inputs.inputs[id * 4 + 1], column: inputs.inputs[id * 4 + 2], node: inputs.nodes[inputs.inputs[id * 4 + 3]] ?? '' };
+	}
+
+	// e.g. 'order', '@id', 'text()'
+	public static inputNodeName(node: string): string {
+		const colon = node.indexOf(':');
+		const kind = colon < 0 ? node : node.substring(0, colon);
+		const name = node.substring(colon + 1);
+		return kind === 'element' ? name : kind === 'attribute' ? `@${name}` : kind === 'text' || kind === 'whitespace' ? 'text()' : kind === 'comment' ? 'comment()' : `processing-instruction(${name})`;
+	}
+
+	// the 'Go to XSLT Input' command: shows the input the output at the cursor was written for - the element that was the
+	// context item, or whose attribute or text was - in another editor group from the output's
+	public async goToInput() {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor || editor.document.uri.scheme !== XsltDebugOutputs.scheme) {
+			return;
+		}
+		const found = await this.inputLocationAt(XsltDebugOutputs.nameOf(editor.document.uri), editor.document.offsetAt(editor.selection.active));
+		if (!found) {
+			vscode.window.showInformationMessage('XSLT debugger: this part of the output wasn\'t written for a node of an input file - e.g. the context item was a node the stylesheet constructed, or wasn\'t a node.');
+			return;
+		}
+		const column = XsltDebugOutputs.otherGroup(found.location.uri.toString(), editor.viewColumn) ?? vscode.ViewColumn.Beside;
+		await vscode.window.showTextDocument(found.location.uri, { viewColumn: column, selection: found.location.range, preview: false });
 	}
 
 	// go to definition: the source of the output at the position. VS Code opens it in the output's editor group - so if
@@ -790,9 +929,12 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		if (!location) {
 			return [];
 		}
-		const hint = new vscode.InlayHint(line.range.end, `→ ${path.basename(location.uri.fsPath)}:${location.range.start.line + 1}`);
+		// and the input it was written for, if any: e.g. '· input: order, orders.xml:12'
+		const input = await this.inputLocationAt(XsltDebugOutputs.nameOf(document.uri), offset);
+		const inputText = input ? ` · input: ${XsltDebugOutputs.inputNodeName(input.node)}, ${path.basename(input.location.uri.fsPath)}:${input.location.range.start.line + 1}` : '';
+		const hint = new vscode.InlayHint(line.range.end, `→ ${path.basename(location.uri.fsPath)}:${location.range.start.line + 1}${inputText}`);
 		hint.paddingLeft = true;
-		hint.tooltip = 'Jump to XSLT source with: ' + XsltDebugOutputs.goToSourceKeys();
+		hint.tooltip = 'Jump to XSLT source with: ' + XsltDebugOutputs.goToSourceKeys() + (input ? ' - and to the input with \'Go to XSLT Input\', on the context menu' : '');
 		return [hint];
 	}
 
@@ -896,18 +1038,44 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	private disconnected = false;
 	// the requests sent to the adapter that it hasn't answered, by seq
 	private readonly pending = new Map<number, string>();
-	// debugging an XSpec file's test runner: the lines of the XSpec file for the runner's (see XSpecSourceMap) - and
-	// for a breakpoint request for the XSpec file, by seq, its response's breakpoints, from the runner's
-	private readonly xspecMap: XSpecSourceMap | undefined;
-	private readonly xspecResponses = new Map<number, (breakpoints: DebugBreakpoint[]) => DebugBreakpoint[]>();
+	// debugging a stylesheet generated from source files - an XSpec file's test runner (see XSpecSourceMap), or a
+	// Schematron schema's compiled stylesheet (see SchematronSourceMap): the source files' lines for its lines - and for a
+	// breakpoint request for a source file, by seq, its response's breakpoints, from the generated stylesheet's
+	private readonly sourceMap: DebugSourceMap | undefined;
+	private readonly mappedResponses = new Map<number, (breakpoints: DebugBreakpoint[]) => DebugBreakpoint[]>();
+	// each source file's breakpoints, as last asked for: the generated stylesheet's breakpoints are those of all of them,
+	// as a request for its breakpoints replaces them all
+	private readonly sourceBreakpoints = new Map<string, DebugBreakpoint[]>();
+	// for hiding the generated stylesheet's own variables (see DebugSourceMap.isHiddenVariable): the frames paused in a
+	// source file, the scopes and variables requests for them, by seq, and their Locals' and Globals' references
+	private readonly sourceFrames = new Map<number, number>();
+	// values shown in a scope of their own, e.g. an abstract pattern's parameters (see DebugSourceMap.parametersAt): by
+	// their scope's reference, which the adapter doesn't know - so their variables requests are answered here
+	private readonly ownScopes = new Map<number, { name: string, value: string }[]>();
+	private nextOwnScope = 0x40000000;
+	private readonly scopesRequests = new Map<number, number>();
+	private readonly variablesRequests = new Map<number, number>();
+	private readonly filteredReferences = new Set<number>();
+	// pausing on outcomes, e.g. a Schematron schema's failed assertions (see DebugSourceMap.outcomes): the options turned
+	// on, with the roles in each one's condition (none: all) - and, paused at one, what the exception widget says
+	private readonly outcomeFilters = new Map<string, string[]>();
+	private outcomePause: { exceptionId: string, description: string } | undefined;
+	// the source line of the last pause at one of VS Code's breakpoints, while outcomes are paused on - and how execution
+	// was last resumed ('continue', 'next', ...)
+	private breakpointAt: string | undefined;
+	private resumedBy: string | undefined;
+	// requests of the proxy's own, by seq: their responses aren't VS Code's
+	private ownSeq = 1000000000;
+	private readonly ownResponses = new Map<number, (message: any) => void>();
 
 	constructor(private session: vscode.DebugSession, command: string, args: string[], cwd: string | undefined) {
 		const quote = (arg: string) => /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
 		XsltDebugLog.info(`Debug session '${session.name}': ${command} ${args.map(quote).join(' ')}${cwd ? `\n    in ${cwd}` : ''}`);
 		XsltDebugProblems.clear();
 		XsltDebugOutputs.get().startSession();
-		const { xspecFile, xsltFile } = session.configuration;
-		this.xspecMap = typeof xspecFile === 'string' && typeof xsltFile === 'string' ? XSpecSourceMap.load(xspecFile, xsltFile) : undefined;
+		const { xspecFile, xsltFile, schematronFile, schematronPhase } = session.configuration;
+		this.sourceMap = typeof xsltFile !== 'string' ? undefined : typeof xspecFile === 'string' ? XSpecSourceMap.load(xspecFile, xsltFile) :
+			typeof schematronFile === 'string' ? SchematronSourceMap.load(schematronFile, xsltFile, typeof schematronPhase === 'string' ? schematronPhase : undefined) : undefined;
 		this.process = cp.spawn(command, args, { cwd });
 		this.process.stdout?.on('data', (data: Buffer) => this.receive(data));
 		this.process.stderr?.on('data', (data: Buffer) => {
@@ -935,7 +1103,22 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	}
 
 	public handleMessage(message: vscode.DebugProtocolMessage): void {
-		message = this.xspecRequest(message);
+		const own = message as { type?: string; command?: string; seq: number; arguments?: { variablesReference?: number } };
+		if (own.type === 'request' && own.command === 'variables' && own.arguments?.variablesReference !== undefined && this.ownScopes.has(own.arguments.variablesReference)) {
+			// a scope of the proxy's own: its values, as variables
+			const variables = this.ownScopes.get(own.arguments.variablesReference)!.map((v) => ({ name: v.name, value: v.value, variablesReference: 0 }));
+			this.messages.fire({ seq: 0, type: 'response', request_seq: own.seq, success: true, command: 'variables', body: { variables } } as vscode.DebugProtocolMessage);
+			return;
+		}
+		if (own.type === 'request' && ['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue'].includes(own.command ?? '')) {
+			this.resumedBy = own.command;
+		}
+		if (own.type === 'request' && own.command === 'exceptionInfo' && this.outcomePause) {
+			// paused at an outcome, e.g. a failed assertion: it, and its message
+			this.messages.fire({ seq: 0, type: 'response', request_seq: own.seq, success: true, command: 'exceptionInfo', body: { ...this.outcomePause, breakMode: 'always' } } as vscode.DebugProtocolMessage);
+			return;
+		}
+		message = this.mappedRequest(message);
 		const request = message as { type?: string; command?: string; seq: number };
 		if (request.type === 'request') {
 			if (this.disconnected || (this.exited && this.endedByVsCode)) {
@@ -960,53 +1143,198 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		}
 	}
 
-	// for an XSpec file's breakpoints: the runner's breakpoints for them - a line with no step in the runner, e.g. in
-	// an x:context's content, has none, and isn't verified
-	private xspecRequest(message: vscode.DebugProtocolMessage): vscode.DebugProtocolMessage {
-		const request = message as { type?: string; command?: string; seq: number; arguments?: { source?: { path?: string }, breakpoints?: DebugBreakpoint[], lines?: number[] } };
-		const map = this.xspecMap;
-		if (map && request.type === 'request' && request.command === 'launch') {
-			// a step in the runner stops only at its lines for the XSpec file's steps (with stepSkip, from the launch
-			// configuration, the runner's and XSpec's own files a step doesn't otherwise stop in)
-			return { ...request, arguments: { ...request.arguments, stepStops: { [map.runnerPath]: map.stepLines() } } } as vscode.DebugProtocolMessage;
-		}
-		const sourcePath = request.arguments?.source?.path;
-		if (!map || request.type !== 'request' || request.command !== 'setBreakpoints' || !sourcePath || !XSpecSourceMap.samePath(sourcePath, map.xspecPath)) {
-			return message;
-		}
-		const requested = request.arguments?.breakpoints ?? [];
-		const mapped = requested.map((breakpoint) => map.runnerLine(breakpoint.line));
-		this.xspecResponses.set(request.seq, (breakpoints) => {
-			let next = 0;
-			return requested.map((breakpoint, i) => {
-				if (mapped[i] === undefined) {
-					return { verified: false, line: breakpoint.line, message: 'XSpec: no step here - set a breakpoint on an x:scenario, x:call, x:context or x:expect' };
-				}
-				const response = breakpoints[next++] ?? { verified: false };
-				return { ...response, line: breakpoint.line, source: { path: map.xspecPath } };
-			});
-		});
-		const breakpoints = requested.filter((_breakpoint, i) => mapped[i] !== undefined).map((breakpoint, i) => ({ ...breakpoint, line: mapped.filter((line) => line !== undefined)[i]! }));
-		return { ...request, arguments: { ...request.arguments, source: { path: map.runnerPath }, breakpoints, lines: breakpoints.map((breakpoint) => breakpoint.line) } } as vscode.DebugProtocolMessage;
+	// an expression with an abstract pattern's parameters ($name) replaced by their values, as SchXslt2 replaces them in its
+	// copy of the pattern: as text, the longest name first, with no check of what follows the name. A parameter with no
+	// value isn't replaced, as SchXslt2 leaves it
+	public static withParameters(expression: string, parameters: { name: string, value: string }[]) {
+		return parameters.filter((p) => p.value !== '(not supplied)').sort((a, b) => b.name.length - a.name.length)
+			.reduce((result, p) => result.split(p.name).join(p.value), expression);
 	}
 
-	// for the runner's breakpoints and stack frames: the XSpec file's
-	private xspecResponse(message: any): any {
-		const map = this.xspecMap;
+	// for a source file's breakpoints: the generated stylesheet's breakpoints for them - with those of the other source
+	// files - and a line with no step in it, e.g. in an x:context's content, has none, and isn't verified
+	private mappedRequest(message: vscode.DebugProtocolMessage): vscode.DebugProtocolMessage {
+		const request = message as { type?: string; command?: string; seq: number; arguments?: { source?: { path?: string }, breakpoints?: DebugBreakpoint[], lines?: number[], mapInputs?: boolean } };
+		if (request.type === 'request' && request.command === 'launch' && request.arguments?.mapInputs === undefined) {
+			// the input nodes mapped, unless the setting is off - or the configuration says otherwise
+			message = { ...request, arguments: { ...request.arguments, mapInputs: vscode.workspace.getConfiguration('XSLT.debug').get<boolean>('mapInputNodes', true) } } as vscode.DebugProtocolMessage;
+			return this.mappedRequest(message);
+		}
+		const map = this.sourceMap;
+		if (map && request.type === 'request' && request.command === 'launch') {
+			// a step in the generated stylesheet stops only at its lines for the source files' steps (with stepSkip, from
+			// the launch configuration, other files a step doesn't otherwise stop in)
+			return { ...request, arguments: { ...request.arguments, stepStops: { [map.generatedPath]: map.stepLines() } } } as vscode.DebugProtocolMessage;
+		}
+		if (map?.isHiddenVariable && request.type === 'request') {
+			const args = (request as { arguments?: { frameId?: number, variablesReference?: number } }).arguments;
+			if (request.command === 'scopes' && args?.frameId !== undefined && this.sourceFrames.has(args.frameId)) {
+				this.scopesRequests.set(request.seq, args.frameId);
+			} else if (request.command === 'variables' && args?.variablesReference !== undefined && this.filteredReferences.has(args.variablesReference)) {
+				this.variablesRequests.set(request.seq, args.variablesReference);
+			}
+		}
+		if (map?.parametersAt && request.type === 'request' && request.command === 'evaluate') {
+			// paused in a rule of an abstract pattern's instance: its parameters, replaced as text - as in the rule's copy, where
+			// they aren't variables - e.g. for Watch, the Debug Console and a hover
+			const args = (request as { arguments?: { expression?: string, frameId?: number } }).arguments;
+			const line = args?.frameId !== undefined ? this.sourceFrames.get(args.frameId) : undefined;
+			const parameters = line !== undefined ? map.parametersAt(line) : undefined;
+			if (parameters && args?.expression) {
+				const expression = XsltDebugAdapterProcess.withParameters(args.expression, parameters.variables);
+				if (expression !== args.expression) {
+					return { ...request, arguments: { ...args, expression } } as vscode.DebugProtocolMessage;
+				}
+			}
+		}
+		if (map?.outcomes && request.type === 'request' && request.command === 'setExceptionBreakpoints') {
+			// the outcomes' options are the proxy's: breakpoints at their lines, if any are on
+			const args = (request as { arguments?: { filters?: string[], filterOptions?: { filterId: string, condition?: string }[] } }).arguments ?? {};
+			const ids = new Set(map.outcomes.map((o) => o.filter));
+			const before = JSON.stringify([...this.outcomeFilters]);
+			this.outcomeFilters.clear();
+			(args.filters ?? []).filter((f) => ids.has(f)).forEach((f) => this.outcomeFilters.set(f, []));
+			(args.filterOptions ?? []).filter((o) => ids.has(o.filterId)).forEach((o) =>
+				this.outcomeFilters.set(o.filterId, (o.condition ?? '').toLowerCase().split(/[\s,]+/).filter((role) => role)));
+			if (JSON.stringify([...this.outcomeFilters]) !== before) {
+				this.ownRequest('setBreakpoints', this.generatedBreakpointsArguments(map, this.generatedBreakpoints(map)), () => undefined);
+			}
+			// the adapter's own options, as filters: it doesn't take conditions (filterOptions, which VS Code sends as the
+			// proxy says it supports them)
+			const filters = [...new Set([...(args.filters ?? []), ...(args.filterOptions ?? []).map((o) => o.filterId)])].filter((f) => !ids.has(f));
+			return { ...request, arguments: { filters } } as vscode.DebugProtocolMessage;
+		}
+		const sourcePath = request.arguments?.source?.path;
+		if (!map || request.type !== 'request' || request.command !== 'setBreakpoints' || !sourcePath || !map.isSource(sourcePath)) {
+			return message;
+		}
+		const key = [...this.sourceBreakpoints.keys()].find((file) => XSpecSourceMap.samePath(file, sourcePath)) ?? sourcePath;
+		this.sourceBreakpoints.set(key, request.arguments?.breakpoints ?? []);
+		const generated = this.generatedBreakpoints(map);
+		const requested = this.sourceBreakpoints.get(key)!;
+		this.mappedResponses.set(request.seq, (breakpoints) => requested.map((breakpoint, index) => {
+			const responses = generated.map((g, i) => ({ g, response: breakpoints[i] })).filter(({ g }) => g.file === key && g.index === index).map(({ response }) => response);
+			if (responses.length === 0) {
+				return { verified: false, line: breakpoint.line, message: map.noStepMessageFor?.(key, breakpoint.line) ?? map.noStepMessage };
+			}
+			const verified = responses.find((response) => response?.verified);
+			return { ...(verified ?? responses[0] ?? {}), verified: !!verified, line: breakpoint.line, source: { path: sourcePath } };
+		}));
+		return { ...request, arguments: { ...request.arguments, ...this.generatedBreakpointsArguments(map, generated) } } as vscode.DebugProtocolMessage;
+	}
+
+	// the generated stylesheet's breakpoints, for each source file's - one source line may have more than one
+	private generatedBreakpoints(map: DebugSourceMap) {
+		const generated: { file: string, index: number, breakpoint: DebugBreakpoint }[] = [];
+		this.sourceBreakpoints.forEach((breakpoints, file) => breakpoints.forEach((breakpoint, index) =>
+			(map.generatedLines(file, breakpoint.line) ?? []).forEach((line) => generated.push({ file, index, breakpoint: { ...breakpoint, line } }))));
+		return generated;
+	}
+
+	// a setBreakpoints request's arguments for the generated stylesheet: those breakpoints, then those at the lines of
+	// the outcomes paused on, e.g. failed assertions - after them, so the responses for the source files' come first
+	private generatedBreakpointsArguments(map: DebugSourceMap, generated: { breakpoint: DebugBreakpoint }[]) {
+		const outcomeLines = (map.outcomes ?? []).filter((o) => this.outcomeFilters.has(o.filter)).flatMap((o) => o.lines);
+		const breakpoints = [...generated.map((g) => g.breakpoint), ...outcomeLines.map((line) => ({ line }))];
+		return { source: { path: map.generatedPath }, breakpoints, lines: breakpoints.map((breakpoint) => breakpoint.line) };
+	}
+
+	// a request of the proxy's own to the adapter, with what to do with its response
+	private ownRequest(command: string, args: object, onResponse: (message: any) => void) {
+		if (this.disconnected || this.exited) {
+			return;
+		}
+		const seq = this.ownSeq++;
+		this.ownResponses.set(seq, onResponse);
+		const json = JSON.stringify({ seq, type: 'request', command, arguments: args });
+		this.process.stdin?.write(`Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`, 'utf8');
+	}
+
+	// paused at a breakpoint, with outcomes paused on: if it's at one - not a breakpoint of VS Code's - a pause for it,
+	// e.g. 'Failed assertion', with its message - or, if its role isn't one of those asked for, carrying on
+	private pausedAtOutcome(stopped: any) {
+		const map = this.sourceMap!;
+		const threadId = stopped.body?.threadId;
+		this.ownRequest('stackTrace', { threadId, startFrame: 0, levels: 1 }, (response) => {
+			const frame = response.body?.stackFrames?.[0];
+			const outcome = frame?.source?.path && XSpecSourceMap.samePath(frame.source.path, map.generatedPath) ?
+				(map.outcomes ?? []).find((o) => this.outcomeFilters.has(o.filter) && o.id(frame.line) !== undefined) : undefined;
+			const source = frame?.source?.path && XSpecSourceMap.samePath(frame.source.path, map.generatedPath) ? map.sourceOf(frame.line) : undefined;
+			const at = source ? `${source.path}:${source.line}` : undefined;
+			if (!outcome) {
+				this.breakpointAt = at;
+				this.messages.fire(stopped);
+				return;
+			}
+			// continuing from a breakpoint on the assertion, at its test: not paused again for its outcome - stepping from
+			// it is, to show it
+			if (at !== undefined && at === this.breakpointAt && this.resumedBy === 'continue') {
+				this.breakpointAt = undefined;
+				this.ownRequest('continue', { threadId }, () => undefined);
+				return;
+			}
+			this.breakpointAt = undefined;
+			this.ownRequest('evaluate', { expression: `${outcome.role} || ' ' || ${outcome.message}`, frameId: frame.id, context: 'watch' }, (evaluated) => {
+				const text = evaluated.success ? XsltEmptySteps.stringValue(String(evaluated.body?.result ?? '')) : ' ';
+				const space = text.indexOf(' ');
+				const role = (space < 0 ? text : text.substring(0, space)).toLowerCase() || 'error';
+				const messageText = space < 0 ? '' : text.substring(space + 1);
+				const roles = this.outcomeFilters.get(outcome.filter) ?? [];
+				if (roles.length > 0 && !roles.includes(role)) {
+					this.ownRequest('continue', { threadId }, () => undefined);
+					return;
+				}
+				const label = outcome.label.replace(/s$/, '');
+				const kind = label.charAt(0) + label.substring(1).toLowerCase();
+				const id = outcome.id(frame.line)!;
+				this.outcomePause = { exceptionId: id.startsWith('vscode-') ? kind : `${kind}: ${id}`, description: messageText };
+				this.messages.fire({ ...stopped, body: { ...stopped.body, reason: 'exception', description: kind, text: messageText } });
+			});
+		});
+	}
+
+	// for the generated stylesheet's breakpoints and stack frames: the source files' - and not its own variables
+	private mappedResponse(message: any): any {
+		const map = this.sourceMap;
 		if (!map || message.type !== 'response' || !message.body) {
 			return message;
 		}
-		const breakpoints = message.request_seq !== undefined ? this.xspecResponses.get(message.request_seq) : undefined;
+		if (message.command === 'initialize' && map.outcomes) {
+			const filters = map.outcomes.map((o) => ({ filter: o.filter, label: o.label, description: o.description, default: false, supportsCondition: true,
+				conditionDescription: 'Roles or severities to pause for, e.g. error fatal - all, if none' }));
+			return { ...message, body: { ...message.body, supportsExceptionFilterOptions: true, exceptionBreakpointFilters: [...(message.body.exceptionBreakpointFilters ?? []), ...filters] } };
+		}
+		const breakpoints = message.request_seq !== undefined ? this.mappedResponses.get(message.request_seq) : undefined;
 		if (breakpoints) {
-			this.xspecResponses.delete(message.request_seq!);
+			this.mappedResponses.delete(message.request_seq!);
 			return { ...message, body: { ...message.body, breakpoints: breakpoints(message.body.breakpoints ?? []) } };
 		}
 		if (message.command === 'stackTrace' && message.body.stackFrames) {
-			const stackFrames = message.body.stackFrames.map((frame: { line: number, source?: { path?: string } }) => {
-				const xspecLine = frame.source?.path && XSpecSourceMap.samePath(frame.source.path, map.runnerPath) ? map.xspecLine(frame.line) : undefined;
-				return xspecLine === undefined ? frame : { ...frame, line: xspecLine, column: 1, source: { name: path.basename(map.xspecPath), path: map.xspecPath } };
+			const stackFrames = message.body.stackFrames.map((frame: { id: number, line: number, source?: { path?: string } }) => {
+				const source = frame.source?.path && XSpecSourceMap.samePath(frame.source.path, map.generatedPath) ? map.sourceOf(frame.line) : undefined;
+				if (source !== undefined) {
+					this.sourceFrames.set(frame.id, frame.line);
+				}
+				return source === undefined ? frame : { ...frame, line: source.line, column: 1, source: { name: path.basename(source.path), path: source.path }, ...(source.name ? { name: source.name } : {}) };
 			});
 			return { ...message, body: { ...message.body, stackFrames } };
+		}
+		if (message.command === 'scopes' && message.body.scopes && this.scopesRequests.has(message.request_seq)) {
+			const frameId = this.scopesRequests.get(message.request_seq)!;
+			this.scopesRequests.delete(message.request_seq);
+			message.body.scopes.filter((scope: { name: string }) => scope.name === 'Locals' || scope.name === 'Globals')
+				.forEach((scope: { variablesReference: number }) => this.filteredReferences.add(scope.variablesReference));
+			// and a scope of the proxy's own, e.g. for an abstract pattern's parameters
+			const parameters = map.parametersAt?.(this.sourceFrames.get(frameId)!);
+			if (parameters) {
+				const reference = this.nextOwnScope++;
+				this.ownScopes.set(reference, parameters.variables);
+				return { ...message, body: { ...message.body, scopes: [...message.body.scopes, { name: parameters.scope, variablesReference: reference, expensive: false }] } };
+			}
+		}
+		if (message.command === 'variables' && message.body.variables && map.isHiddenVariable && this.variablesRequests.has(message.request_seq)) {
+			this.variablesRequests.delete(message.request_seq);
+			return { ...message, body: { ...message.body, variables: message.body.variables.filter((v: { name: string }) => !map.isHiddenVariable!(v.name)) } };
 		}
 		return message;
 	}
@@ -1036,9 +1364,32 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			}
 			const body = this.buffer.subarray(headerEnd + 4, headerEnd + 4 + Number(length)).toString('utf8');
 			this.buffer = this.buffer.subarray(headerEnd + 4 + Number(length));
-			const message = this.xspecResponse(JSON.parse(body));
+			const raw = JSON.parse(body);
+			if (raw.type === 'response' && this.ownResponses.has(raw.request_seq)) {
+				const onResponse = this.ownResponses.get(raw.request_seq)!;
+				this.ownResponses.delete(raw.request_seq);
+				onResponse(raw);
+				continue;
+			}
+			if (raw.type === 'event' && raw.event === 'stopped') {
+				// kept until the next pause: VS Code may ask for it after carrying on
+				this.outcomePause = undefined;
+				// the adapter's references are its paused state's - numbered again at each pause - so a scope's reference
+				// at the last pause may now be, e.g., an evaluated sequence's, whose items aren't to be filtered
+				this.filteredReferences.clear();
+				this.sourceFrames.clear();
+				if (raw.body?.reason === 'breakpoint' && this.outcomeFilters.size > 0) {
+					this.pausedAtOutcome(raw);
+					continue;
+				}
+				this.breakpointAt = undefined;
+			}
+			const message = this.mappedResponse(raw);
 			if (message.type === 'response') {
 				this.pending.delete(message.request_seq);
+			}
+			if (message.type === 'event' && message.event === 'xsltNodeRules' && this.sourceMap && message.body) {
+				message.body = XsltDebugAdapterProcess.mappedNodeRules(message.body, this.sourceMap);
 			}
 			if (message.type === 'event' && message.event === 'xsltDebugLaunch') {
 				const { saxon, java, javaHome, saxonArgs } = message.body ?? {};
@@ -1070,6 +1421,45 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			}
 			this.messages.fire(message);
 		}
+	}
+
+	// the template rules each input node was processed by (see XsltNodeRules), with those of the generated stylesheet at
+	// their source - e.g. a Schematron rule - and without those it has no source for, e.g. its own catch-all templates
+	public static mappedNodeRules(body: NodeRulesEvent, map: DebugSourceMap): NodeRulesEvent {
+		const rules = (body.rules ?? []).map((rule) => {
+			if (rule.builtIn) {
+				return map.hidesBuiltInRules ? undefined : rule;
+			}
+			if (!rule.path || !rule.line || !XSpecSourceMap.samePath(rule.path, map.generatedPath)) {
+				return rule;
+			}
+			// not the generated stylesheet's own xsl:for-each etc.: e.g. within a Schematron rule's template
+			const source = rule.instruction ? undefined : map.sourceOf(rule.line);
+			return source ? { path: source.path, line: source.line, column: 1, label: source.name } : undefined;
+		});
+		const files: { [path: string]: number[] } = {};
+		for (const [file, flat] of Object.entries(body.files ?? {})) {
+			const kept: number[] = [];
+			for (let i = 0; i < flat.length;) {
+				const [line, column, n] = flat.slice(i, i + 3);
+				const triples: number[] = [];
+				for (let k = 0; k < n; k++) {
+					const at = i + 3 + 3 * k;
+					if (rules[flat[at + 1]]) {
+						triples.push(flat[at], flat[at + 1], flat[at + 2]);
+					}
+				}
+				i += 3 + 3 * n;
+				if (triples.length > 0) {
+					kept.push(line, column, triples.length / 3, ...triples);
+				}
+			}
+			if (kept.length > 0) {
+				files[file] = kept;
+			}
+		}
+		// the rules' ids are kept: those left out stay as built-in rules, which nothing refers to now
+		return { ...body, rules: rules.map((rule) => rule ?? { builtIn: 'none' }), files };
 	}
 
 	// how long the response to 'disconnect' is held back: at least, and at most while requests are unanswered

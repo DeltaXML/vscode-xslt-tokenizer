@@ -6,7 +6,13 @@
 		"sourceMap": true,
 		"rootDir": ".",
 		"strict": true,
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		"baseUrl": ".",
+		"paths": {
+			"@modelcontextprotocol/server": ["node_modules/@modelcontextprotocol/server/dist/index.d.mts"],
+			"@modelcontextprotocol/server/ext/skills/node": ["node_modules/@modelcontextprotocol/server/dist/ext/skills/node.d.mts"],
+			"@modelcontextprotocol/node": ["node_modules/@modelcontextprotocol/node/dist/index.d.mts"]
+		}
 	},
 	"include": ["src", "test", "__tests__"],
 	"exclude": ["node_modules", ".vscode-test"]

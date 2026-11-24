@@ -150,7 +150,9 @@ suite('XSLT debugger: from the output to its source', () => {
 		const isStylesheet = (uri?: vscode.Uri) => uri?.fsPath === vscode.Uri.file(file).fsPath;
 		const tabsInOutputGroup = () => vscode.window.tabGroups.all.find((g) => g.viewColumn === vscode.ViewColumn.Two)?.tabs
 			.filter((tab) => tab.input instanceof vscode.TabInputText && isStylesheet(tab.input.uri)).length;
-		const isDone = () => isStylesheet(vscode.window.activeTextEditor?.document.uri) && (!openStylesheetFirst || tabsInOutputGroup() === 0);
+		// moved to the group where it's open already, then the cursor put at the definition - when the machine is busy, after a delay
+		const isDone = () => isStylesheet(vscode.window.activeTextEditor?.document.uri) && (!openStylesheetFirst || tabsInOutputGroup() === 0) &&
+			vscode.window.activeTextEditor?.selection.start.line === definition.range.start.line;
 		for (let i = 0; i < 100 && !isDone(); i++) {
 			await new Promise((resolve) => setTimeout(resolve, 50));
 		}
@@ -174,7 +176,11 @@ suite('XSLT debugger: from the output to its source', () => {
 	// a menu id VS Code doesn't know is ignored, without a warning - e.g. 'debug/toolbar' for 'debug/toolBar'
 	test('the menus: the debug toolbar button, and the output view\'s context menu item', () => {
 		const contributes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8')).contributes;
-		const knownMenus = ['editor/context', 'editor/title', 'editor/title/run', 'view/title', 'view/item/context', 'commandPalette', 'debug/toolBar', 'debug/variables/context'];
+		const knownMenus = ['editor/context', 'editor/title', 'editor/title/run', 'view/title', 'view/item/context', 'commandPalette', 'debug/toolBar', 'debug/variables/context',
+			// the clear-timeline commands (see TimelineCommands)
+			'timeline/title', 'timeline/item/context',
+			// Check Problems in Folder (see WorkspaceCheck)
+			'explorer/context'];
 		const submenus = (contributes.submenus ?? []).map((s: { id: string }) => s.id);
 		assert.deepEqual(Object.keys(contributes.menus).filter((id) => !knownMenus.includes(id) && !submenus.includes(id)), []);
 		assert.deepEqual(contributes.menus['debug/toolBar'], [{ command: 'xslt-xpath.showDebugOutput', when: 'debugType == \'xslt-saxon\'' }]);
@@ -252,6 +258,45 @@ suite('XSLT debugger: from the output to its source', () => {
 		// not for an output that isn't XML
 		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'text', offset: 0, text: output }] });
 		assert.deepEqual(await hintsAt('by', 1), []);
+		await closeOwnTabs();
+	}).timeout(10000);
+
+	test('the input it was written for: the start tag of the element that was the context item - in the hint, and Go to XSLT Input', async () => {
+		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+		await closeOwnTabs();
+		// an element whose start tag spans lines: the debugger gives where it ends
+		const inputFile = path.join(path.dirname(file), 'orders.xml');
+		const inputText = '<orders>\n  <order id="A1"\n    date="x">\n  </order>\n</orders>';
+		fs.writeFileSync(inputFile, inputText);
+		const name = 'inputs.xml';
+		// as the adapter sends them: <made> and its content written for the order (input 0) - the rest for none
+		const inputRuns = [0, -1, output.indexOf('<made'), 0, output.indexOf('</made>') + '</made>'.length, -1];
+		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'xml', offset: 0, text: output, runs, locations: locations(file),
+			inputRuns, inputs: [0, 3, 14, 0], inputFiles: [inputFile], inputNodes: ['element:order'] }] });
+		const found = await XsltDebugOutputs.get().inputLocationAt(name, output.indexOf('<made') + 1);
+		assert.strictEqual(found?.node, 'element:order');
+		assert.strictEqual(found?.location.uri.fsPath, vscode.Uri.file(inputFile).fsPath);
+		assert.strictEqual(`${found!.location.range.start.line + 1}:${found!.location.range.start.character + 1}-${found!.location.range.end.line + 1}:${found!.location.range.end.character + 1}`, '2:3-3:14');
+		// none where it wasn't written for an input node
+		assert.isUndefined(await XsltDebugOutputs.get().inputLocationAt(name, output.indexOf('<report') + 1));
+		// in the hint, after the source
+		const editor = await vscode.window.showTextDocument(XsltDebugOutputs.uri(name), { preview: false });
+		const at = editor.document.positionAt(output.indexOf('<made') + 1);
+		editor.selection = new vscode.Selection(at, at);
+		const hints = await vscode.commands.executeCommand<vscode.InlayHint[]>('vscode.executeInlayHintProvider', editor.document.uri, new vscode.Range(0, 0, editor.document.lineCount, 0));
+		assert.deepEqual(hints.map((hint) => hint.label), ['→ report.xsl:4 · input: order, orders.xml:2']);
+		// Go to XSLT Input: in another editor group, at the start tag
+		await vscode.commands.executeCommand('xslt-xpath.goToDebugOutputInput');
+		// the active editor can change after the command's done, when the machine is busy
+		for (let i = 0; i < 100 && vscode.window.activeTextEditor?.document.uri.fsPath !== vscode.Uri.file(inputFile).fsPath; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		const shown = vscode.window.activeTextEditor;
+		assert.strictEqual(shown?.document.uri.fsPath, vscode.Uri.file(inputFile).fsPath);
+		assert.strictEqual(shown?.selection.start.line, 1);
+		assert.notStrictEqual(shown?.viewColumn, editor.viewColumn);
+		const own = vscode.window.tabGroups.all.flatMap((g) => g.tabs).filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === vscode.Uri.file(inputFile).fsPath);
+		await vscode.window.tabGroups.close(own);
 		await closeOwnTabs();
 	}).timeout(10000);
 

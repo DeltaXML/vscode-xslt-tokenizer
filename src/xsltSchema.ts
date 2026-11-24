@@ -4,6 +4,8 @@ import { DocumentTypes } from './xslLexer';
 export interface SimpleType {
     base?: string[];
     enum?: string[];
+    // the enum values are offered by auto-completion, but others are allowed too
+    open?: boolean;
     list?: string;
     detail?: {[name: string]: string};
 }

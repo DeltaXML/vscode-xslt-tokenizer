@@ -59,6 +59,18 @@ export class PackageEdits {
 		return /^[ \t]*/.exec(text.substring(text.lastIndexOf('\n', offset - 1) + 1, offset))![0];
 	}
 
+	// the indentation of the content of an element - e.g. the root - whose start tag ends at the offset: that of the line of its
+	// first child, comment or processing instruction. Not that of the line the start tag ends on, which for one over several
+	// lines is its last attribute's. If the content isn't indented, the first indentation after the start tag, else a tab
+	public static contentIndent(text: string, startTagEnd: number): string {
+		const after = text.substring(startTagEnd);
+		const child = /\n([ \t]*)<(?!\/)/.exec(after);
+		if (child && child[1] !== '') {
+			return child[1];
+		}
+		return /\n([ \t]+)\S/.exec(after)?.[1] ?? '\t';
+	}
+
 	// removes the element - with its line, if nothing else is on it
 	public static removeElement(text: string, markup: string, tagStart: number): TextEdit | undefined {
 		const extent = PackageEdits.elementExtent(markup, tagStart);

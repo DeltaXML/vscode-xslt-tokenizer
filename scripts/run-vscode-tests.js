@@ -20,6 +20,10 @@ if (process.stdout.isTTY && env.NO_COLOR === undefined && env.FORCE_COLOR === un
 const child = spawn(bin, process.argv.slice(2), { stdio: ['inherit', 'pipe', 'pipe'], shell: process.platform === 'win32', env });
 const showWarnings = !!process.env.SHOW_LEAK_WARNINGS;
 let hidden = 0;
+let hiddenHostNoise = 0;
+// log lines of VS Code's own agent, chat and sign-in features, written by the test copy of VS Code - nothing to do with
+// the extension, and with no account signed in they're repeated throughout a run
+const hostNoise = /^\s*\[(AgentHost\w*|ChatModelSelection)\]|^Settings Sync: Account status changed|^Unknown channel: agentHost/;
 
 function filter(stream, output) {
 	let inWarning = false;
@@ -29,6 +33,10 @@ function filter(stream, output) {
 		if (!showWarnings && /potential .*LEAK detected/i.test(line)) {
 			inWarning = true;
 			hidden++;
+			return;
+		}
+		if (!showWarnings && hostNoise.test(line)) {
+			hiddenHostNoise++;
 			return;
 		}
 		if (inWarning && /^\s+at\s/.test(line)) {
@@ -45,6 +53,9 @@ filter(child.stderr, process.stderr);
 child.on('close', (code) => {
 	if (hidden > 0) {
 		process.stdout.write(`(${hidden} VS Code 'potential LEAK' warnings from the test documents were hidden - set SHOW_LEAK_WARNINGS=1 to see them)\n`);
+	}
+	if (hiddenHostNoise > 0) {
+		process.stdout.write(`(${hiddenHostNoise} log lines of VS Code's own agent and chat features were hidden - set SHOW_LEAK_WARNINGS=1 to see them)\n`);
 	}
 	process.exit(code ?? 1);
 });

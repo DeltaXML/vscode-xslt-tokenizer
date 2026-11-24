@@ -12,6 +12,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { HrefPaths } from './hrefPaths';
 import { RecordTypes } from './recordTypes';
+import { StaticHrefs } from './staticHrefs';
+import { GlobalInstructionType } from './xslLexer';
 
 // an xsl:import or xsl:include of a module: its resolved path
 // an xsl:use-package: the name of the package it uses, and its package-version, if any
@@ -32,8 +34,8 @@ const maxFiles = 20000;
 // each file - without the lexer - so that for a module opened on its own, the top-level stylesheet that imports or
 // includes it, directly or indirectly, can be found without that stylesheet being opened first. The index is built in
 // the background the first time it's needed, and is updated by a file watcher.
-// Only literal hrefs are found, not those from shadow attributes, e.g. _href="{$dir}/a.xsl" - an href the XML catalog
-// maps to a file is found as that file.
+// Literal hrefs are found, and those of shadow attributes whose values are static parameters with string literal values,
+// e.g. _href="{$dir}/a.xsl" (see StaticHrefs) - an href the XML catalog maps to a file is found as that file.
 export class ImportIndex {
 	public static readonly instance = new ImportIndex();
 
@@ -53,6 +55,10 @@ export class ImportIndex {
 	private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
 	// fired when the index is built, and when it's updated for a changed file
 	public readonly onDidChange = this.onDidChangeEmitter.event;
+	private readonly onDidChangePackagesEmitter = new vscode.EventEmitter<void>();
+	// fired when a file is changed, created or deleted and the packages in the workspace change: its xsl:package name or version -
+	// the modules that use packages are then checked again, as they were checked with the packages known before
+	public readonly onDidChangePackages = this.onDidChangePackagesEmitter.event;
 
 	public static isEnabled() {
 		return vscode.workspace.getConfiguration('XSLT.resources').get<boolean>('inferParentFromWorkspace', true);
@@ -71,6 +77,13 @@ export class ImportIndex {
 			}
 			references.push({ path: referencePath, isInclude: match[1] === 'include' });
 		}
+		// and those of _href shadow attributes, with the values of static parameters (see StaticHrefs)
+		StaticHrefs.resolve(text).forEach((href) => {
+			const referencePath = HrefPaths.toPath(href.href, modulePath);
+			if (referencePath !== undefined) {
+				references.push({ path: referencePath, isInclude: href.type === GlobalInstructionType.Include });
+			}
+		});
 		return references;
 	}
 
@@ -138,6 +151,21 @@ export class ImportIndex {
 		return [...this.packageDeclarations].map(([path, declaration]) => ({ path, ...declaration }));
 	}
 
+	// the package a module declares, if it's an xsl:package module: from the index, for a file in it - else from the
+	// file's text, as open in an editor, else as saved - undefined for a file that isn't found
+	public static packageOf(file: string): { name: string; version: string } | undefined {
+		const normalized = path.normalize(file);
+		if (ImportIndex.instance.has(normalized)) {
+			return ImportIndex.instance.packageDeclarations.get(normalized);
+		}
+		const open = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'file' && path.normalize(d.uri.fsPath) === normalized);
+		try {
+			return ImportIndex.packageDeclaration(open ? open.getText() : fs.readFileSync(normalized, 'utf8'));
+		} catch {
+			return undefined;
+		}
+	}
+
 	// the packages the module uses - with xsl:use-package
 	public usedPackagesOf(file: string): UsedPackage[] {
 		return this.usedPackages.get(file) ?? [];
@@ -203,19 +231,32 @@ export class ImportIndex {
 			if (uri.scheme !== 'file') {
 				return;
 			}
+			let text: string | undefined;
 			try {
-				this.index(uri.fsPath, await fs.promises.readFile(uri.fsPath, 'utf8'));
+				text = await fs.promises.readFile(uri.fsPath, 'utf8');
 			} catch {
-				this.forget(uri.fsPath);
+				// unreadable, e.g. deleted: forgotten
 			}
-			this.onDidChangeEmitter.fire();
+			this.update(uri.fsPath, text);
 		};
 		this.watcher.onDidChange(update);
 		this.watcher.onDidCreate(update);
-		this.watcher.onDidDelete((uri) => {
-			this.forget(uri.fsPath);
-			this.onDidChangeEmitter.fire();
-		});
+		this.watcher.onDidDelete((uri) => this.update(uri.fsPath, undefined));
+	}
+
+	// a file is changed or created, with its text - or deleted, with none: the index is updated, and onDidChangePackages fired if the
+	// package it declares changed - public for testing, as the test host has no workspace folder for the watcher
+	public update(file: string, text: string | undefined) {
+		const packageBefore = JSON.stringify(this.packageDeclarations.get(file));
+		if (text === undefined) {
+			this.forget(file);
+		} else {
+			this.index(file, text);
+		}
+		this.onDidChangeEmitter.fire();
+		if (JSON.stringify(this.packageDeclarations.get(file)) !== packageBefore) {
+			this.onDidChangePackagesEmitter.fire();
+		}
 	}
 
 	public dispose() {
@@ -239,6 +280,43 @@ export class ImportIndex {
 	// the module is in the index
 	public has(file: string) {
 		return this.references.has(file);
+	}
+
+	// whether the stylesheet imports or includes the module now - directly or indirectly. From the index, for a file in it, else
+	// from the file's text: as open in an editor, else as saved. For a stylesheet remembered as a module's parent, which may
+	// have been changed since, e.g. to use a package instead
+	public static reaches(stylesheet: string, module: string): boolean {
+		const index = ImportIndex.isEnabled() && ImportIndex.instance.built ? ImportIndex.instance : undefined;
+		const seen = new Set<string>([stylesheet]);
+		const pending = [stylesheet];
+		while (pending.length > 0) {
+			const file = pending.pop()!;
+			let references: ModuleReference[];
+			if (index?.has(file)) {
+				references = index.referencesOf(file);
+			} else {
+				const open = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'file' && d.fileName === file);
+				let text: string | undefined = open?.getText();
+				if (text === undefined) {
+					try {
+						text = fs.readFileSync(file, 'utf8');
+					} catch {
+						continue;
+					}
+				}
+				references = ImportIndex.moduleReferences(text, file);
+			}
+			for (const reference of references) {
+				if (reference.path === module) {
+					return true;
+				}
+				if (!seen.has(reference.path)) {
+					seen.add(reference.path);
+					pending.push(reference.path);
+				}
+			}
+		}
+		return false;
 	}
 
 	public referencesOf(file: string): ModuleReference[] {

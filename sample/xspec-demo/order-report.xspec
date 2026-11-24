@@ -98,7 +98,7 @@
       <x:expect label="the result">
          <section>
             <para>paragraph: 1</para>
-            <para>paragraph: 2</para>
+            <para class="middle">paragraph: 2</para>
             <para>paragraph: 3</para>
          </section>
       </x:expect>

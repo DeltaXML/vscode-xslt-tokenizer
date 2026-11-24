@@ -130,7 +130,7 @@ async function testBreakpointsAndInspection(saxonJar) {
     assert.strictEqual(context['position()'].value, '2');
     assert.strictEqual(context['last()'].value, '3');
     const item = byName((await dap.request('variables', { variablesReference: context['.'].variablesReference })).variables);
-    assert.strictEqual(item['@n'].value, 'n="2"');
+    assert.strictEqual(item['@n'].value, '@n="2"');
     // an attribute or text node: its path in the summary; an element's child nodes, without
     let atPath = await dap.request('evaluate', { expression: '@n', frameId: 0, context: 'watch' });
     assert.strictEqual(atPath.result, '/items/item[2]/@n="2"');
@@ -139,10 +139,33 @@ async function testBreakpointsAndInspection(saxonJar) {
     assert.strictEqual(item['text()[1]'].value, '"two"');
 
     const globals = byName(await dap.variables(0, 'Globals'));
-    assert.strictEqual(globals.$greeting.value, '"hello"');
-    assert.strictEqual(globals.$config.value, 'map{2 entries}');
+    assert.strictEqual(globals.$greeting.value, "'hello'");
+    // a map or array written out, as xdm:debug() writes it, when it fits on a line - its entries' keys as names
+    assert.strictEqual(globals.$config.value, "{'a': 1, 'b': [1, 2]}");
     const config = byName((await dap.request('variables', { variablesReference: globals.$config.variablesReference })).variables);
-    assert.strictEqual(config['"b"'].value, 'array{2 members}');
+    assert.strictEqual(config["'b'"].value, '[1, 2]');
+    // else how many entries or members there are; a string as an XPath literal, a boolean as true() or false()
+    const watched = async (expression) => (await dap.request('evaluate', { expression, frameId: 0, context: 'watch' })).result;
+    assert.strictEqual(await watched('Q{http://www.w3.org/2005/xpath-functions/map}merge((1 to 20) ! map{.: .})'), 'map{20 entries}');
+    assert.strictEqual(await watched('array{1 to 40}'), 'array{40 members}');
+    assert.strictEqual(await watched('map{}, []'), '({}, [])');
+    assert.strictEqual(await watched('[(), (1, 2), "it\'s"]'), "[(), (1, 2), 'it''s']");
+    assert.strictEqual(await watched('1 = 1'), 'true()');
+
+    // an assistant's expression (sandbox): Saxon-HE's functions only, whatever the edition - the standard ones and the
+    // stylesheet's own - not Saxon-PE/EE's extension functions, nor functions that run other code
+    const sandboxed = (expression) => dap.request('evaluate', { expression, frameId: 0, context: 'watch', sandbox: true });
+    assert.strictEqual((await sandboxed('count(//item) + f:square(2)')).result, '7');
+    for (const expression of ['Q{http://expath.org/ns/file}exists("/")', 'Q{java:java.lang.System}getProperty("java.version")', 'Q{http://saxon.sf.net/}line-number(.)']) {
+        await assert.rejects(sandboxed(expression), /evaluate: /, expression);
+    }
+    for (const expression of ['transform(map{})', 'fn:function-lookup(xs:QName("fn:true"), 0)', 'load-xquery-module#1']) {
+        await assert.rejects(sandboxed(expression), /isn't allowed in an assistant's expression: it can run other code/, expression);
+    }
+    // the Debug Console's own expressions: as before - with Saxon-PE or EE, the EXPath file module
+    if (/-(pe|ee)-/i.test(path.basename(saxonJar))) {
+        assert.strictEqual(await watched('Q{http://expath.org/ns/file}exists("/")'), 'true()');
+    }
 
     let result = await dap.request('evaluate', { expression: '$doubled + @n', frameId: 0, context: 'watch' });
     assert.strictEqual(result.result, '6');
@@ -152,7 +175,7 @@ async function testBreakpointsAndInspection(saxonJar) {
     result = await dap.request('evaluate', { expression: 'f:square($doubled)', frameId: 0, context: 'repl' });
     assert.strictEqual(result.result, '16');
     result = await dap.request('evaluate', { expression: 'current()/@n = 2', frameId: 0, context: 'watch' });
-    assert.strictEqual(result.result, 'true');
+    assert.strictEqual(result.result, 'true()');
     result = await dap.request('evaluate', { expression: 'f:nonexistent(1)', frameId: 0, context: 'repl' }).catch((e) => e);
     assert.ok(result instanceof Error && /nonexistent/.test(result.message), String(result));
 
@@ -240,7 +263,7 @@ async function testBreakpointVerification(saxonJar) {
     await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
     const requested = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 23, 24, 27, 28, 32, 33, 34];
     const expected = {
-        1: 'x', 2: 'x', 3: 'x', 4: 'x', 5: 'x', 6: 'x', 7: 7, 8: 8, 9: 9, 10: 10, 11: 8, 12: 12, 13: 13, 14: 13,
+        1: 'x', 2: 'x', 3: 'x', 4: 'x', 5: 'x', 6: 7, 7: 7, 8: 8, 9: 9, 10: 10, 11: 8, 12: 12, 13: 13, 14: 13,
         15: 'x', 16: 'x', 17: 'x', 19: 19, 20: 20, 21: 21, 23: 'x', 24: 24, 27: 27, 28: 28, 32: 32, 33: 'x', 34: 34
     };
     const verify = async (file, variant) => {
@@ -269,11 +292,54 @@ async function testBreakpointVerification(saxonJar) {
     const message = (line) => breakpoints[requested.indexOf(line)].message;
     assert.match(message(3), /xsl:output isn't an instruction/);
     assert.match(message(4), /top-level data element/);
-    assert.match(message(6), /No XSLT instruction/);
+    assert.match(message(5), /No XSLT instruction/);
+    assert.match(message(6), /Moved from line 6, in a comment/);
     assert.match(message(17), /isn't executed/);
     // xsl:sort with a select is stopped at as its sort key is computed (see testSort)
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
+}
+
+// a breakpoint in an XML comment is moved to the first instruction after it, within the comment's parent element -
+// keeping its condition - but not out of the parent (a comment at the end of an element or template), not from a
+// comment that isn't executed (in xsl:note), and '<!--' in a CDATA section isn't a comment
+async function testCommentBreakpoints(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    const file = path.join(fixtures, 'comment-breakpoints.xsl');
+    const requested = [2, 3, 4, 7, 11, 12, 13, 16, 19, 21, 25];
+    const { breakpoints } = await dap.request('setBreakpoints', { source: { path: file }, breakpoints: requested.map((line) => ({ line })) });
+    const actual = Object.fromEntries(requested.map((line, i) => [line, breakpoints[i].verified ? breakpoints[i].line : 'x']));
+    assert.deepStrictEqual(actual, { 2: 8, 3: 8, 4: 8, 7: 8, 11: 14, 12: 14, 13: 14, 16: 'x', 19: 'x', 21: 'x', 25: 'x' });
+    const message = (line) => breakpoints[requested.indexOf(line)].message;
+    assert.match(message(3), /Moved from line 3, in a comment, to the next instruction/);
+    assert.match(message(16), /No XSLT instruction/);
+    assert.match(message(19), /No XSLT instruction/);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+
+    // run: a moved breakpoint stops at the instruction, with its condition - one whose condition is false doesn't
+    const stops = async (condition) => {
+        const run = new DapClient(saxonJar);
+        let stopped = run.stopped();
+        const terminated = run.event('terminated');
+        await run.start({ saxonArgs: [`-xsl:${file}`, `-s:${path.join(fixtures, 'basic.xml')}`] }, { 'comment-breakpoints.xsl': [{ line: 12, condition }] });
+        const lines = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            lines.push(stop.frames[0].line);
+            stopped = run.stopped();
+            await run.request('continue', { threadId: 1 });
+        }
+        await run.request('disconnect', {}).catch(() => undefined);
+        await run.exited;
+        return lines;
+    };
+    assert.deepStrictEqual(await stops('$g eq 1'), [14]);
+    assert.deepStrictEqual(await stops('$g eq 2'), []);
 }
 
 // a breakpoint on the first line of a multi-line start tag stops there, at its instruction - Saxon reports it at the
@@ -390,7 +456,7 @@ async function testBreakpointInXPath(saxonJar) {
         await dap.request('continue', { threadId: 1 });
     }
     if (values.length !== 3) { console.log(dap.output); }
-    assert.deepStrictEqual(values, ['"1"', '"2"', '"3"']);
+    assert.deepStrictEqual(values, ["'1'", "'2'", "'3'"]);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
 }
@@ -446,7 +512,7 @@ async function testInlineFunctions(saxonJar) {
         assert.match(locals.$item ? locals.$item.value : '(no $item)', /^<item n="[123]"/);
         scaled.push(`${(await dap.request('evaluate', { expression: 'string($item/@n)', frameId: 0, context: 'watch' })).result}*${locals.$factor ? locals.$factor.value : '?'}`);
     }
-    assert.deepStrictEqual(scaled, ['"1"*3', '"2"*3', '"3"*3']);
+    assert.deepStrictEqual(scaled, ["'1'*3", "'2'*3", "'3'*3"]);
     assert.match(require('fs').readFileSync(path.join(outDir, 'result.xml'), 'utf8'), /<sum>6<\/sum><scaled>3 6 9<\/scaled>/);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
@@ -511,15 +577,36 @@ async function testLazyLet(saxonJar) {
     assert.ok(steppedInto.some((line, i) => line === '7' && ['9', '7'].includes(steppedInto[i - 1])), steppedInto.join(' '));
 }
 
+// a variable with a single item (as="xs:integer") is a SingletonClosure: not evaluated yet until the stylesheet reads it,
+// then its value - kept by Saxon - in the Variables view (and so in the inline values)
+async function testSingletonVariable(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    const outDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'singleton-variable.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'result.xml')}`] },
+        { 'singleton-variable.xsl': [{ line: 6 }, { line: 7 }] });
+    const values = [];
+    for (let i = 0; i < 2; i++) {
+        const stop = await stopped;
+        values.push(`${stop.frames[0].line}:${byName(await dap.variables(0, 'Locals')).$total.value}`);
+        stopped = dap.stopped();
+        stopped.catch(() => undefined);
+        await dap.request('continue', { threadId: 1 });
+    }
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    assert.deepStrictEqual(values, ['6:(not evaluated yet)', '7:12']);
+}
+
 // 'Find Nodes with XPath' (XPathQuery, a main class of the adapter's jar): the nodes an expression finds, by where they
 // are among the document's elements - unprefixed names in the document's default namespace, the document element's
 // prefixes and any given - atomic values as they are, and Saxon's error, with where it is in the expression
 function testXPathQuery(saxonJar) {
     const xml = '<orders xmlns="urn:orders" xmlns:x="urn:extra">\n  <order id="A1" status="late"><item>pen</item><x:note>urgent</x:note></order>\n' +
         '  <order id="B2" status="ok"><item>ink</item></order>\n</orders>';
-    const query = (xpath, namespaces) => {
+    const query = (xpath, namespaces, xpathVersion) => {
         const result = require('child_process').spawnSync('java', ['-cp', [adapterJar, saxonJar].join(path.delimiter), 'com.deltaxml.xslt.debug.XPathQuery'],
-            { input: JSON.stringify({ xpath, xml, systemId: 'file:///tmp/orders.xml', namespaces }), encoding: 'utf8' });
+            { input: JSON.stringify({ xpath, xml, systemId: 'file:///tmp/orders.xml', namespaces, xpathVersion }), encoding: 'utf8' });
         return JSON.parse(result.stdout);
     };
     assert.deepStrictEqual(query("//order[@status = 'late']/item").items, [{ kind: 'node', nodeKind: 'element', path: '/orders/order[1]/item', positions: [1, 1, 1] }]);
@@ -530,9 +617,78 @@ function testXPathQuery(saxonJar) {
     // a map, array or function: as the adaptive output method writes it
     assert.deepStrictEqual(query("[89], map{'a':[1,'two',true()]}, count#1, [(//item)[1]]").items.map((item) => item.value),
         ['[89]', 'map{"a":[1,"two",true()]}', 'fn:count#1', '[<item xmlns="urn:orders" xmlns:x="urn:extra">pen</item>]']);
+    // and the whole result as xdm:debug() writes it, without color, for the Output panel - with each map entry, array
+    // member and sequence item on a line of its own, even where all are atomic values (xdm:VIEW-ONE-PER-LINE)
+    // (its entries in any order: Saxon 12's maps don't keep it)
+    const map = query("map{'name':'Ada','orders':array{map{'id':1},map{'id':2}}}").text;
+    assert.match(map, /^\{\n[^]*\n\}$/, map);
+    assert.ok(map.includes("  'name': 'Ada'"), map);
+    assert.ok(map.includes("  'orders': [\n    {\n      'id': 1\n    },\n    {\n      'id': 2\n    }\n  ]"), map);
+    assert.doesNotMatch(map, /\u001b/);
+    assert.strictEqual(query('[1, 2], []').text, '(\n  [\n    1,\n    2\n  ],\n  []\n)');
+    // a sequence in parentheses: nodes as their paths above a copy, atomic values with their types where needed
+    const sequence = query("//order/@id, 'x y', 42, xs:date('2026-11-07'), //order[1]/item").text;
+    assert.match(sequence, /^\(\n[^]*\n\)$/, sequence);
+    for (const part of ['@id="A1",', '@id="B2",', "'x y',", '42,', '2026-11-07 (xs:date)', 'pen</item>']) {
+        assert.ok(sequence.includes(part), `${part} in ${sequence}`);
+    }
+    // the first 100 items only
+    const many = query('1 to 150').text;
+    assert.ok(many.includes('100') && !many.includes('101'), many);
+    // not with a function item, which xdm-view doesn't show yet: the items are still there
+    const withFunction = query('count#1, 1');
+    assert.strictEqual(withFunction.text, undefined);
+    assert.deepStrictEqual(withFunction.items.map((item) => item.value), ['fn:count#1', '1']);
+    // the XPath version asked for: 3.1 strictly, without syntax extensions, so a 4.0 bare map constructor is a syntax
+    // error - and 4.0 with Saxon-PE or EE, but 3.1 with Saxon-HE, which the result says
+    const isHE = /saxon-he/i.test(path.basename(saxonJar.split(path.delimiter)[0]));
+    const strict = query("{ 'a': 1 }?a", undefined, '3.1');
+    assert.deepStrictEqual([strict.error?.code, strict.xpathVersion], ['XPST0003', '3.1']);
+    assert.deepStrictEqual(query("map { 'a': 1 }?a", undefined, '3.1').items.map((item) => item.value), ['1']);
+    const as40 = query("{ 'a': 1 }?a", undefined, '4.0');
+    assert.strictEqual(as40.xpathVersion, isHE ? '3.1' : '4.0');
+    assert.deepStrictEqual(isHE ? as40.error.code : as40.items.map((item) => item.value), isHE ? 'XPST0003' : ['1']);
     const error = query('//order[').error;
     assert.strictEqual(error.code, 'XPST0003');
     assert.deepStrictEqual([error.line, error.column], [1, 8]);
+}
+
+// XPathQuery --server, as the extension runs it (out/src/xpathQueryServer.js - compile first): queries in one Java process,
+// each result as a one-shot run gives it; a query while one is running (here, one that never ends) stops the process,
+// the earlier query fails with 'superseded' and the newer one runs in a new process; a changed command restarts it,
+// and one that can't run fails with Java's reason
+async function testXPathQueryServer(saxonJar) {
+    const { XPathQueryServer } = require(path.join(root, 'out', 'src', 'xpathQueryServer.js'));
+    const server = new XPathQueryServer();
+    // absolute, as it's run in another folder too
+    const classPath = [adapterJar, ...saxonJar.split(path.delimiter).map((jar) => path.resolve(jar))].join(path.delimiter);
+    const args = ['-cp', classPath, 'com.deltaxml.xslt.debug.XPathQuery'];
+    const xml = '<orders><order id="A1"/><order id="B2"/></orders>';
+    try {
+        const first = await server.request('java', args, undefined, { xpath: '//order/@id', xml });
+        assert.deepStrictEqual(first.items.map((item) => item.value), ['A1', 'B2']);
+        const started = Date.now();
+        const second = await server.request('java', args, undefined, { xpath: "map{'a':[1,2]}, 'x\ny'", xml });
+        assert.deepStrictEqual(second.items.map((item) => item.value), ['map{"a":[1,2]}', 'x\ny']);
+        assert.ok(second.text.includes("  {\n    'a': [\n      1,\n      2\n    ]\n  },"), second.text);
+        const third = await server.request('java', args, undefined, { xpath: '//order[', xml });
+        assert.strictEqual(third.error.code, 'XPST0003');
+        // warm: well under a new JVM's start
+        assert.ok(Date.now() - started < 2000, `${Date.now() - started}ms`);
+
+        const endless = server.request('java', args, undefined, { xpath: 'sum((1 to 2000000000) ! (. mod 7))', xml });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const after = server.request('java', args, undefined, { xpath: 'count(//order)', xml });
+        after.catch(() => undefined);
+        await assert.rejects(endless, /superseded/);
+        assert.deepStrictEqual((await after).items.map((item) => item.value), ['2']);
+
+        const changed = await server.request('java', [...args.slice(0, 2), 'com.deltaxml.xslt.debug.XPathQuery'], require('os').tmpdir(), { xpath: '1 + 1', xml });
+        assert.deepStrictEqual(changed.items.map((item) => item.value), ['2']);
+        await assert.rejects(server.request('java', ['-cp', adapterJar, 'com.deltaxml.xslt.debug.NoSuchClass'], undefined, { xpath: '1', xml }), /NoSuchClass/);
+    } finally {
+        server.dispose();
+    }
 }
 
 // an inline function that a stylesheet function returns, called later elsewhere - its compiled body, traced (not
@@ -640,10 +796,10 @@ async function testJavaExtensionFunctions(saxonJar) {
     const javac = require('child_process').spawnSync('javac', ['--release', '8', '-Xlint:-options', '-cp', saxonJar, '-d', classes,
         path.join(sources, 'Greeter.java'), path.join(sources, 'Shout.java')], { encoding: 'utf8' });
     assert.strictEqual(javac.status, 0, javac.stderr);
-    const cases = [['java-integrated.xsl', [`-config:${path.join(fixtures, 'java-ext', 'config.xml')}`], "d:shout('watch')", '"WATCH!"',
+    const cases = [['java-integrated.xsl', [`-config:${path.join(fixtures, 'java-ext', 'config.xml')}`], "d:shout('watch')", "'WATCH!'",
         'ITEM 1!, ITEM 2!, ITEM 3!']];
     if (/saxon-(pe|ee)/i.test(saxonJar)) {
-        cases.push(['java-reflexive.xsl', [], "g:greet('watch') || ' ' || math:sqrt(9)", '"Hello, watch 3"',
+        cases.push(['java-reflexive.xsl', [], "g:greet('watch') || ' ' || math:sqrt(9)", "'Hello, watch 3'",
             'Hello, 1 2, Hello, 2 2.8284271247461903, Hello, 3 3.4641016151377544']);
     }
     for (const [file, extraArgs, watch, watched, result] of cases) {
@@ -671,7 +827,7 @@ async function testJavaExtensionFunctions(saxonJar) {
             }
             await dap.request('disconnect', {}).catch(() => undefined);
             await dap.exited;
-            assert.deepStrictEqual(stops, command === 'continue' ? ['8:"1"', '8:"2"', '8:"3"'] : ['5', '6', '8:"1"', '8:"2"', '8:"3"', '9'], file);
+            assert.deepStrictEqual(stops, command === 'continue' ? ["8:'1'", "8:'2'", "8:'3'"] : ['5', '6', "8:'1'", "8:'2'", "8:'3'", '9'], file);
             assert.strictEqual(fs.readFileSync(outFile, 'utf8').replace(/<\?xml[^>]*>/, '').trim(), `<out>${result}</out>`);
         }
     }
@@ -704,7 +860,7 @@ async function testGroupsInContext(saxonJar) {
     assert.match(stops[1]['current-group()'], /^<item n="2">/);
     // matches of ([a-z]+)(\d) in 'item1 item2 item3' - the groups in xsl:for-each-group are no longer current
     assert.deepStrictEqual([2, 3, 4].map((i) => [stops[i]['regex-group(0)'], stops[i]['regex-group(1)'], stops[i]['regex-group(2)']]),
-        [['"item1"', '"item"', '"1"'], ['"item2"', '"item"', '"2"'], ['"item3"', '"item"', '"3"']]);
+        [["'item1'", "'item'", "'1'"], ["'item2'", "'item'", "'2'"], ["'item3'", "'item'", "'3'"]]);
     assert.strictEqual(stops[2]['current-group()'], undefined);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
@@ -750,7 +906,7 @@ async function testGlobalsWhileEvaluatingGlobal(saxonJar) {
     const stop = await stopped;
     assert.strictEqual(stop.frames[0].line, 5);
     const globals = (await dap.variables(0, 'Globals')).map((v) => `${v.name}=${v.value}`).sort();
-    assert.deepStrictEqual(globals, ['$a=(not evaluated yet)', '$b=true', '$c=3', '$d=(not evaluated yet)', '$e=(not evaluated yet)']);
+    assert.deepStrictEqual(globals, ['$a=(not evaluated yet)', '$b=true()', '$c=3', '$d=(not evaluated yet)', '$e=(not evaluated yet)']);
     const result = await dap.request('evaluate', { expression: '$d', frameId: 0, context: 'watch' }).catch((e) => e);
     assert.ok(result instanceof Error && /isn't evaluated yet/.test(result.message), String(result.message || result.result));
     assert.strictEqual((await dap.request('evaluate', { expression: '$c + 1', frameId: 0, context: 'watch' })).result, '4');
@@ -845,7 +1001,7 @@ async function testSeparateEvaluationStaticContext(saxonJar) {
     await terminated;
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
-    assert.match(dap.output, /\u25B8 \$formatted \(xsl:variable\/@select, lines 7-9\) returned \("1,5", "2,0"\)/);
+    assert.match(dap.output, /\u25B8 \$formatted \(xsl:variable\/@select, lines 7-9\) returned \('1,5', '2,0'\)/);
     assert.match(dap.output, /<out>1,5 2,0<\/out>/);
 }
 
@@ -1093,7 +1249,7 @@ async function testPartialApplication(saxonJar) {
     await stopped;
     assert.strictEqual(byName(await dap.variables(0, 'Locals')).$add10.value, 'f:add(?, 10)');
     const watch = async (expression) => (await dap.request('evaluate', { expression, frameId: 0, context: 'watch' })).result;
-    assert.strictEqual(await watch('concat(?, "!")'), 'fn:concat(?, "!")');
+    assert.strictEqual(await watch('concat(?, "!")'), "fn:concat(?, '!')");
     assert.strictEqual(await watch('function($a) { $a }'), 'function#1');
     assert.strictEqual(await watch('f:add#2'), 'f:add#2');
     await dap.request('disconnect', {}).catch(() => undefined);
@@ -1126,7 +1282,7 @@ async function testFixedNamespaces(saxonJar) {
     const watch = async (expression) => dap.request('evaluate', { expression, frameId: 0, context: 'watch' }).then((r) => r.result, (e) => 'error: ' + e.message);
     let stop = await stopped;
     assert.strictEqual(stop.frames[0].line, 6);
-    for (const [expression, value] of [['f:twice(2)', '4'], ['map:size($m)', '2'], ['xs:integer("4")', '4'], ['math:pi() gt 3', 'true'], ['g:three()', '3'], ['d:name()', '"d"']]) {
+    for (const [expression, value] of [['f:twice(2)', '4'], ['map:size($m)', '2'], ['xs:integer("4")', '4'], ['math:pi() gt 3', 'true()'], ['g:three()', '3'], ['d:name()', "'d'"]]) {
         assert.strictEqual(await watch(expression), value, expression);
     }
     stopped = dap.stopped();
@@ -1135,7 +1291,7 @@ async function testFixedNamespaces(saxonJar) {
     assert.strictEqual(stop.frames[0].name, 'xsl:sequence/@select (XPath)');
     assert.ok(stop.frames[0].source.path.endsWith('fixed-ns-lib.xsl'));
     assert.strictEqual(await watch('h:three()'), '3');
-    assert.strictEqual(await watch('d:name()'), '"d"');
+    assert.strictEqual(await watch('d:name()'), "'d'");
     assert.match(await watch('f:twice(1)'), /Namespace prefix 'f' has not been declared/);
     await dap.request('continue', { threadId: 1 });
     await terminated;
@@ -1212,7 +1368,7 @@ async function testXslt40Instructions(saxonJar) {
     assert.deepStrictEqual(result.stops, ['7x', '13', '14x', '15x']);
     result = await runStops(saxonJar, 'x40-array-record.xsl', [4], 'stepIn', ext);
     assert.deepStrictEqual(tMessages(result), ['t 1', 't 2', 't 3', 't Ada', 't xslt']);
-    assert.match(result.output, /\u25B8 xsl:record\/@name \(lines 13-14\) returned "Ada"/);
+    assert.match(result.output, /\u25B8 xsl:record\/@name \(lines 13-14\) returned 'Ada'/);
     assert.match(result.output, /<out size="3" name="Ada" langs="xslt xpath"\/>/);
 
     // xsl:note
@@ -1242,7 +1398,7 @@ async function testOneLineLoop(saxonJar) {
         }
         // the instruction, at its start tag's '<', then its body - at the body's first instruction - for each item;
         // stepping over, then on to the next line
-        const expected = ['4:7 ""', '4:41 "1"', '4:41 "2"', '4:41 "3"'].concat(command === 'next' ? ['5:7 ""'] : []);
+        const expected = ["4:7 ''", "4:41 '1'", "4:41 '2'", "4:41 '3'"].concat(command === 'next' ? ["5:7 ''"] : []);
         assert.deepStrictEqual(stops, expected, command);
         await dap.request('disconnect', {}).catch(() => undefined);
         await dap.exited;
@@ -1292,15 +1448,15 @@ async function testFunctionBreakpoints(saxonJar) {
         'xsl:template name="cell" function-breakpoints.xsl:14 $n=1',
         'xsl:template name="cell" function-breakpoints.xsl:14 $n=2',
         'xsl:template name="cell" function-breakpoints.xsl:14 $n=3',
-        'f:total#2 function-breakpoints-lib.xsl:11 $values=(n="1", n="2", n="3") $extra=0',
-        'f:total#2 function-breakpoints-lib.xsl:11 $values=(n="1", n="2", n="3") $extra=10']);
+        'f:total#2 function-breakpoints-lib.xsl:11 $values=(@n="1", @n="2", @n="3") $extra=0',
+        'f:total#2 function-breakpoints-lib.xsl:11 $values=(@n="1", @n="2", @n="3") $extra=10']);
 
     // a condition, a hit count, '()' after the name, and an EQName
     ({ stops } = await run([{ name: 'cell', condition: '$n = 2' }, { name: 'f:square()', hitCondition: '3' }, { name: 'Q{urn:f}total#1' }]));
     assert.deepStrictEqual(stops, [
         'xsl:template name="cell" function-breakpoints.xsl:14 $n=2',
         'f:square#1 function-breakpoints-lib.xsl:3 $x=3',
-        'f:total#1 function-breakpoints-lib.xsl:7 $values=(n="1", n="2", n="3")']);
+        'f:total#1 function-breakpoints-lib.xsl:7 $values=(@n="1", @n="2", @n="3")']);
 }
 
 // within a multi-line XPath expression being stepped through: Locals has the instruction's local variables and the
@@ -1397,15 +1553,15 @@ async function testXslt40Structures(saxonJar) {
         if (n === 1) {
             const locals = byName(await dap.variables(0, 'Locals'));
             // its path, as xdm:debug() shows it, and its value
-            assert.strictEqual(locals.$order.value, '/orders/*[1] map{2 entries}');
+            assert.strictEqual(locals.$order.value, "/orders/*[1] {'id': 'A-100', 'total': 33.3}");
             assert.strictEqual(locals.$order.type, 'jnode()');
             const order = byName((await dap.request('variables', { variablesReference: locals.$order.variablesReference })).variables);
-            assert.strictEqual(order['"id"'].value, '"A-100"');
-            assert.strictEqual(order['"total"'].value, '33.3');
+            assert.strictEqual(order["'id'"].value, "'A-100'");
+            assert.strictEqual(order["'total'"].value, '33.3');
             const globals = byName(await dap.variables(0, 'Globals'));
-            assert.strictEqual(globals.$tree.value, '/ map{1 entry}');
+            assert.strictEqual(globals.$tree.value, "/ {'orders': [{'id': 'A-100', 'total': 33.3}, {'id': 'B-200', 'total': 17.1}]}");
             const tree = byName((await dap.request('variables', { variablesReference: globals.$tree.variablesReference })).variables);
-            assert.strictEqual(tree['"orders"'].value, 'array{2 members}');
+            assert.strictEqual(tree["'orders'"].value, "[{'id': 'A-100', 'total': 33.3}, {'id': 'B-200', 'total': 17.1}]");
         }
     });
     assert.deepStrictEqual(breakpoints.map((b) => [b.line, b.verified]), [[10, true], [11, true], [12, true], [14, false], [15, true], [19, true], [20, true], [21, false]]);
@@ -1414,7 +1570,7 @@ async function testXslt40Structures(saxonJar) {
     assert.deepStrictEqual(stops, [`10 ${loop}`, `11 ${loop}`, `12 ${loop}`, `19 ${loop}`, '20 xsl:select (XPath)',
         `10 ${loop}`, `11 ${loop}`, `15 ${loop}`, `19 ${loop}`, '20 xsl:select (XPath)']);
     // the xsl:select's result, for the variable it's the value of
-    assert.match(output, /\u25B8 \$band \(xsl:select, lines 20-22\) returned "high"/);
+    assert.match(output, /\u25B8 \$band \(xsl:select, lines 20-22\) returned 'high'/);
 
     // stepping into: xsl:switch's branch, and xsl:select's expression
     ({ stops } = await run([10], 'stepIn'));
@@ -1511,10 +1667,10 @@ async function testIterateAndEvaluate(saxonJar) {
         /^9 xsl:iterate/.test(stops[9]) ? stops[9] : '9 xsl:iterate', '11 xsl:on-completion/@select (XPath) $total=6',
         // after the xsl:iterate: not its parameter
         '19 xsl:template match="/"',
-        '21 xsl:evaluate/@xpath (XPath) $use-sum=true']);
+        '21 xsl:evaluate/@xpath (XPath) $use-sum=true()']);
     assert.match(stops[9], /^9 xsl:iterate( select="items\/item \[@n ne '0'\]")? \$total=6$/);
     assert.match(dap.output, /\u25B8 \$total \(xsl:with-param\/@select, lines 14-16\) returned 6/);
-    assert.match(dap.output, /\u25B8 xsl:on-completion\/@select \(lines 9-11\) returned "total: 6"/);
+    assert.match(dap.output, /\u25B8 xsl:on-completion\/@select \(lines 9-11\) returned 'total: 6'/);
     assert.match(dap.output, /total: 6 60<\/out>/);
 }
 
@@ -1545,11 +1701,11 @@ async function testSort(saxonJar) {
     await dap.exited;
     // not xsl:perform-sort itself
     assert.deepStrictEqual(breakpoints.map((b) => [b.line, b.verified]), [[6, true], [7, true], [11, true], [12, false], [14, true], [19, true]]);
-    const keys = (line, frame, keyLine) => ['1', '2', '3'].flatMap((n) => [`${line} ${frame} "${n}"`].concat(keyLine ? [`${keyLine} xsl:sort/@select (XPath) "${n}"`] : []));
+    const keys = (line, frame, keyLine) => ['1', '2', '3'].flatMap((n) => [`${line} ${frame} '${n}'`].concat(keyLine ? [`${keyLine} xsl:sort/@select (XPath) '${n}'`] : []));
     assert.deepStrictEqual(stops, [
         // the items in their original order, as their keys are computed
         ...keys(6, 'xsl:for-each', 7),
-        '11 xsl:template ""',
+        "11 xsl:template ''",
         ...keys(12, 'xsl:template', 14).filter((s) => !s.startsWith('12 ')),
         ...keys(19, 'xsl:template')]);
     assert.match(dap.output, /<for-each n="3"\/><for-each n="2"\/><for-each n="1"\/><perform-sort>1 2 3<\/perform-sort><applied n="3"\/><applied n="2"\/><applied n="1"\/>/);
@@ -1592,21 +1748,21 @@ async function testWhenAndMapEntry(saxonJar) {
     // the xsl:when's test lines that start a part of it - not one with only a literal
     assert.deepStrictEqual(breakpoints.map((b) => [b.line, b.verified]),
         [[7, true], [8, true], [7, true], [12, true], [22, true], [25, true], [26, false], [27, true], [28, true]]);
-    const when = (n, test, xpath) => [`${test} xsl:for-each "${n}"`].concat(xpath ? [`${xpath} xsl:when/@test (XPath) "${n}"`] : []);
-    const entry = (n) => [`25 xsl:template "${n}"`, `27 xsl:map-entry/@key (XPath) "${n}"`, `28 xsl:map-entry/@select (XPath) "${n}"`];
+    const when = (n, test, xpath) => [`${test} xsl:for-each '${n}'`].concat(xpath ? [`${xpath} xsl:when/@test (XPath) '${n}'`] : []);
+    const entry = (n) => [`25 xsl:template '${n}'`, `27 xsl:map-entry/@key (XPath) '${n}'`, `28 xsl:map-entry/@select (XPath) '${n}'`];
     assert.deepStrictEqual(stops, [
         // item 1: its first test is true, so the second isn't evaluated
         ...when(1, 7, 8),
         ...when(2, 7, 8), ...when(2, 12),
         ...when(3, 7, 8), ...when(3, 12),
-        '22 xsl:template ""',
+        "22 xsl:template ''",
         ...entry(1), ...entry(2), ...entry(3)]);
     assert.match(output, /<one\/><two\/><other\/><totals>10 20 30<\/totals><show v="6"\/>/);
     assert.match(output, /\u25B8 xsl:map-entry\/@select \(lines 27-29\) returned 10/);
 
     // stepping into a test: then to the branch taken, not back to the test
     ({ stops } = await run([7], 'stepIn', 8));
-    assert.deepStrictEqual(stops.slice(0, 3), ['7 xsl:for-each "1"', '8 xsl:when/@test (XPath) "1"', '10 xsl:for-each "1"']);
+    assert.deepStrictEqual(stops.slice(0, 3), ["7 xsl:for-each '1'", "8 xsl:when/@test (XPath) '1'", "10 xsl:for-each '1'"]);
 }
 
 // multi-line XPath in xsl:number's value, xsl:try's select (whose error is its result, not a failure to evaluate it),
@@ -1647,11 +1803,11 @@ async function testInstructions(saxonJar) {
     assert.deepStrictEqual(stops, [
         '8 xsl:number/@value (XPath)', '8 xsl:number/@value (XPath)', '8 xsl:number/@value (XPath)',
         '14 xsl:try/@select (XPath)', '16 xsl:template', '18 xsl:catch/@select (XPath)', '28 xsl:break/@select (XPath)']);
-    assert.strictEqual(watched, '(err:FOAR0001, "Integer division by zero")');
+    assert.strictEqual(watched, "(err:FOAR0001, 'Integer division by zero')");
     // the error xsl:try catches: the result of its select, stepped through
     assert.match(output, /\u25B8 xsl:try\/@select \(lines 13-15\) raised FOAR0001: Integer division by zero/);
     assert.doesNotMatch(output, /couldn't be evaluated separately/);
-    assert.match(output, /\u25B8 xsl:catch\/@select \(lines 16-18\) returned "caught: err:FOAR0001"/);
+    assert.match(output, /\u25B8 xsl:catch\/@select \(lines 16-18\) returned 'caught: err:FOAR0001'/);
     assert.match(output, /<num>2<\/num><pos>1<\/pos>.*caught: err:FOAR0001<i n="1"\/>broke at 2<\/out>/);
 
     // with assertions enabled
@@ -1691,8 +1847,8 @@ async function testKeys(saxonJar) {
     await dap.exited;
     // not a line with only a literal
     assert.deepStrictEqual(breakpoints.map((b) => [b.line, b.verified]), [[3, true], [4, true], [5, false], [10, true]]);
-    assert.deepStrictEqual(stops, ['1', '2', '3'].flatMap((n) => [`3 xsl:template "${n}"`, `4 xsl:key/@use (XPath) "${n}"`]).concat(['10 xsl:template ""']));
-    assert.strictEqual(watched, '("1", "3")');
+    assert.deepStrictEqual(stops, ['1', '2', '3'].flatMap((n) => [`3 xsl:template '${n}'`, `4 xsl:key/@use (XPath) '${n}'`]).concat(["10 xsl:template ''"]));
+    assert.strictEqual(watched, "('1', '3')");
     assert.match(dap.output, /<odd>1 3<\/odd><even>2<\/even>/);
 }
 
@@ -1723,14 +1879,14 @@ async function testAnalyzeString(saxonJar) {
     await dap.exited;
     // not xsl:matching-substring or xsl:non-matching-substring themselves
     assert.deepStrictEqual(breakpoints.map((b) => [b.line, b.verified]), [[6, true], [8, false], [9, true], [11, false], [12, true], [18, true]]);
-    const match = (n, position) => `9 xsl:analyze-string .="${n}" position()=${position} last()=6 regex-group(0)="${n}" regex-group(1)="${n}"`;
-    const other = (text, position) => `12 xsl:analyze-string .="${text}" position()=${position} last()=6`;
+    const match = (n, position) => `9 xsl:analyze-string .='${n}' position()=${position} last()=6 regex-group(0)='${n}' regex-group(1)='${n}'`;
+    const other = (text, position) => `12 xsl:analyze-string .='${text}' position()=${position} last()=6`;
     assert.deepStrictEqual(stops, [
         '6 xsl:analyze-string/@select (XPath) position()=1 last()=1',
         match(1, 1), other('-', 2), match(2, 3), other('-', 4), match(3, 5), other('-x', 6),
         // a regex with no groups, from an attribute value template
-        '18 xsl:analyze-string .="two" position()=1 last()=1 regex-group(0)="two"']);
-    assert.match(dap.output, /\u25B8 xsl:analyze-string\/@select \(lines 5-7\) returned "1-2-3-x"/);
+        "18 xsl:analyze-string .='two' position()=1 last()=1 regex-group(0)='two'"]);
+    assert.match(dap.output, /\u25B8 xsl:analyze-string\/@select \(lines 5-7\) returned '1-2-3-x'/);
     assert.match(dap.output, /<d>1<\/d><s>-<\/s><d>2<\/d><s>-<\/s><d>3<\/d><s>-x<\/s><w>two<\/w>/);
 }
 
@@ -1978,7 +2134,7 @@ async function testHitCounts(saxonJar) {
         await dap.request('continue', { threadId: 1 });
     }
     // line 10's 2nd hit; line 11's 2nd hit where @n != 2 - item 3
-    assert.deepStrictEqual(stops, ['10:"2"', '11:"3"']);
+    assert.deepStrictEqual(stops, ["10:'2'", "11:'3'"]);
     // the logpoint logs on every 2nd hit
     assert.deepStrictEqual(dap.output.match(/hit at \d/g), ['hit at 2']);
     await dap.request('disconnect', {}).catch(() => undefined);
@@ -2050,7 +2206,7 @@ async function testXPathLoopArrivals(saxonJar) {
         if (breakpoint.logMessage) {
             assert.deepStrictEqual(dap.output.match(/item \d/g), ['item 1', 'item 2', 'item 3']);
         } else {
-            assert.deepStrictEqual(items, ['"1"', '"2"', '"3"']);
+            assert.deepStrictEqual(items, ["'1'", "'2'", "'3'"]);
         }
         assert.match(dap.output, /<out>2 4 6<\/out>/);
         await dap.request('disconnect', {}).catch(() => undefined);
@@ -2083,7 +2239,7 @@ async function testPauseOnError(saxonJar) {
     // shown below the code in VS Code's exception widget
     assert.strictEqual(info.description, info.details.message);
     const locals = byName(await dap.variables(0, 'Locals'));
-    assert.strictEqual(locals.$input.value, '"abc"');
+    assert.strictEqual(locals.$input.value, "'abc'");
 
     const terminated = dap.event('terminated');
     const exited = dap.event('exited');
@@ -2189,15 +2345,15 @@ async function testVariableScopes(saxonJar) {
         await dap.request('continue', { threadId: 1 });
     }
     assert.deepStrictEqual(stops, [
-        '10: $p="param" $x="outer" | watch $x="outer"',
-        '13: $p="param" $later="later-1" $x="inner-1" | watch $x="inner-1"',
-        '10: $p="param" $x="outer" | watch $x="outer"',
-        '13: $p="param" $later="later-2" $x="inner-2" | watch $x="inner-2"',
-        '10: $p="param" $x="outer" | watch $x="outer"',
-        '13: $p="param" $later="later-3" $x="inner-3" | watch $x="inner-3"',
-        '15: $p="param" $x="outer" | watch $x="outer"',
-        '19: $p="param" $x=1 | watch $x=1',
-        '19: $p="param" $x=2 | watch $x=2',
+        "10: $p='param' $x='outer' | watch $x='outer'",
+        "13: $p='param' $later='later-1' $x='inner-1' | watch $x='inner-1'",
+        "10: $p='param' $x='outer' | watch $x='outer'",
+        "13: $p='param' $later='later-2' $x='inner-2' | watch $x='inner-2'",
+        "10: $p='param' $x='outer' | watch $x='outer'",
+        "13: $p='param' $later='later-3' $x='inner-3' | watch $x='inner-3'",
+        "15: $p='param' $x='outer' | watch $x='outer'",
+        "19: $p='param' $x=1 | watch $x=1",
+        "19: $p='param' $x=2 | watch $x=2",
     ]);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
@@ -2428,6 +2584,77 @@ async function testOutputMap(saxonJar) {
     await dap.exited;
 }
 
+// the output map's input: for each part of the output, the node that was the context item when it was written - at its
+// element's position, as for the template rules each node was processed by - not one constructed by the stylesheet
+async function testOutputMapInput(saxonJar) {
+    const { input } = await outputInputs(saxonJar, 'node-rules.xsl', 'node-rules.xml');
+    assert.strictEqual(input('<o>'), 'node-rules.xml:4:28 element:order');
+    assert.strictEqual(input('<o>', 2), 'node-rules.xml:8:18 element:order');
+    assert.strictEqual(input('<l>'), 'node-rules.xml:5:38 element:line');
+    // text written for a text node: at its element's position
+    assert.strictEqual(input('Blue pens'), 'node-rules.xml:5:38 text');
+    // a node of a document read with doc()
+    assert.strictEqual(input('P'), 'node-rules-products.xml:2:22 element:product');
+    // a node of a temporary tree: none
+    assert.strictEqual(input('T</o>'), 'none');
+
+    // a start tag written once its first content is - by which time another template, for another node, may be running:
+    // its instruction's context item. Nested in itself, by a recursive template - and an instruction that wrote to a
+    // temporary tree first, for another node
+    const nested = await outputInputs(saxonJar, 'output-input-nested.xsl', 'output-input-nested.xml');
+    assert.strictEqual(nested.input('<div>'), 'output-input-nested.xml:2:20 element:section');
+    assert.strictEqual(nested.input('<div>', 2), 'output-input-nested.xml:3:22 element:section');
+    assert.strictEqual(nested.input('<para>'), 'output-input-nested.xml:4:10 element:p');
+    assert.strictEqual(nested.input('<m/>'), 'output-input-nested.xml:3:22 element:section');
+    assert.strictEqual(nested.input('<m/>', 2), 'output-input-nested.xml:2:20 element:section');
+
+    // with mapInputs false: none
+    const off = await outputInputs(saxonJar, 'node-rules.xsl', 'node-rules.xml', { mapInputs: false });
+    assert.deepStrictEqual(off.inputRuns, []);
+}
+
+// a run's output text, and for the nth occurrence of a text in it, the input it was written for: from the input runs,
+// [offset, input id, ...], and the inputs, [file, line, column, node, ...] - indexes into the files and nodes
+async function outputInputs(saxonJar, xsl, xml, launch = {}) {
+    const dap = new DapClient(saxonJar);
+    const terminated = dap.event('terminated');
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, xsl)}`, `-s:${path.join(fixtures, xml)}`], ...launch }, {});
+    await terminated;
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    let text = '';
+    const inputRuns = [];
+    const inputs = [];
+    let files = [];
+    let nodes = [];
+    for (const e of dap.events.filter((e) => e.event === 'xsltOutputs')) {
+        for (const o of e.body.outputs) {
+            text = text.substring(0, o.offset) + o.text;
+            inputRuns.push(...(o.inputRuns ?? []));
+            inputs.push(...(o.inputs ?? []));
+            files = o.inputFiles ?? files;
+            nodes = o.inputNodes ?? nodes;
+        }
+    }
+    const input = (found, nth = 1) => {
+        let offset = -1;
+        for (let i = 0; i < nth; i++) {
+            offset = text.indexOf(found, offset + 1);
+        }
+        assert.ok(offset > -1, `${found} in ${text}`);
+        let id = -1;
+        for (let i = 0; i < inputRuns.length && inputRuns[i] <= offset; i += 2) {
+            id = inputRuns[i + 1];
+        }
+        if (id < 0 || inputs[id * 4] < 0) {
+            return 'none';
+        }
+        const [file, line, column, node] = inputs.slice(id * 4, id * 4 + 4);
+        return `${path.basename(files[file])}:${line}:${column} ${nodes[node]}`;
+    };
+    return { text, input, inputRuns };
+}
+
 // with no xsl:output, Saxon decides the output method from the first element (an 'uncommitted' serializer): the copy's
 // XML emitter is made then, and records where the output came from too
 async function testOutputMapWithoutXslOutput(saxonJar) {
@@ -2563,6 +2790,86 @@ async function testStepBackReplaysSteps(saxonJar) {
 // with the 'No Template Matched' filter: a pause at the first element of each name (in each mode) that no template
 // rule matched, in a frame of its own with the element as the context item - at the xsl:apply-templates, if any - and
 // a summary at the end. Not for modes whose on-no-match is e.g. shallow-copy - and for deep-skip, only in the summary
+// the template rules each input node was processed by, sent when the run ends: an element at the end of its start tag,
+// other nodes at their element's, with their kind and name - by xsl:apply-templates, xsl:next-match and the built-in
+// rules - and nodes of a document doc() reads, in that file
+// the xsltNodeRules event of a run without debugging, as 'line:column name -> rule ×count' for each file - with the rules
+async function nodeRulesOf(saxonJar, xsl, xml, launch = {}) {
+    const dap = new DapClient(saxonJar);
+    const event = dap.event('xsltNodeRules');
+    const terminated = dap.event('terminated');
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { noDebug: true, saxonArgs: [`-xsl:${path.join(fixtures, xsl)}`, `-s:${path.join(fixtures, xml)}`], ...launch });
+    await dap.request('configurationDone', {});
+    const body = await event;
+    await terminated;
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    const decoded = {};
+    for (const [file, flat] of Object.entries(body.files)) {
+        const entries = [];
+        for (let i = 0; i < flat.length;) {
+            const [line, column, n] = flat.slice(i, i + 3);
+            i += 3;
+            for (let k = 0; k < n; k++, i += 3) {
+                const rule = body.rules[flat[i + 1]];
+                // a template by its line: its label (the frame's name) is in Saxon's form for some match patterns, and has no
+                // mode with Saxon 12
+                const ruleText = rule.builtIn ? `built-in ${rule.builtIn} (${rule.mode})` : `${path.basename(rule.path)}:${rule.line}`;
+                entries.push(`${line}:${column} ${body.names[flat[i]]} -> ${ruleText} ×${flat[i + 2]}`);
+            }
+        }
+        decoded[path.basename(file)] = entries.sort();
+    }
+    return { decoded, rules: body.rules };
+}
+
+async function testNodeRules(saxonJar) {
+    const { decoded } = await nodeRulesOf(saxonJar, 'node-rules.xsl', 'node-rules.xml');
+    const orders = decoded['node-rules.xml'];
+    // order A1's start tag ends on line 4: the template, and its attributes, at its position, by built-in rules
+    assert.ok(orders.includes('4:28 element:order -> node-rules.xsl:3 ×1'), orders.join('\n'));
+    assert.ok(orders.some((e) => /^4:28 attribute:id -> built-in shallow-skip/.test(e)), orders.join('\n'));
+    // the line: both templates - the second by xsl:next-match - and its text and attribute at its position
+    assert.ok(orders.includes('5:38 element:line -> node-rules.xsl:6 ×1'), orders.join('\n'));
+    assert.ok(orders.includes('5:38 element:line -> node-rules.xsl:11 ×1'), orders.join('\n'));
+    assert.ok(orders.includes('5:38 text -> node-rules.xsl:15 ×1'), orders.join('\n'));
+    assert.ok(orders.includes('5:38 attribute:product -> node-rules.xsl:14 ×1'), orders.join('\n'));
+    // an empty element: where its tag ends
+    assert.ok(orders.some((e) => /^6:12 element:note -> built-in shallow-skip/.test(e)), orders.join('\n'));
+    // a document read with doc(): its own file - once for each line
+    assert.deepStrictEqual(decoded['node-rules-products.xml'], ['2:22 element:product -> node-rules.xsl:16 ×2']);
+    // not the nodes of a temporary tree, which have the location of the instructions that constructed them
+    assert.deepStrictEqual(Object.keys(decoded).sort(), ['node-rules-products.xml', 'node-rules.xml']);
+}
+
+// the items xsl:for-each and xsl:iterate processed, and each member of each group of xsl:for-each-group, recorded as a
+// template rule's nodes are - at the instruction's line
+async function testNodeRulesIterations(saxonJar) {
+    const { decoded, rules } = await nodeRulesOf(saxonJar, 'node-rules-focus.xsl', 'node-rules.xml');
+    const orders = decoded['node-rules.xml'];
+    const all = orders.join('\n');
+    // xsl:for-each: each order once
+    assert.ok(orders.includes('4:28 element:order -> node-rules-focus.xsl:4 ×1'), all);
+    assert.ok(orders.includes('8:18 element:order -> node-rules-focus.xsl:4 ×1'), all);
+    // xsl:for-each-group: each member of each group - each line is in its product's group and the 'all' group
+    assert.ok(orders.includes('5:38 element:line -> node-rules-focus.xsl:7 ×2'), all);
+    assert.ok(orders.includes('8:39 element:line -> node-rules-focus.xsl:7 ×2'), all);
+    // xsl:iterate over attributes: at their element's position
+    assert.ok(orders.includes('5:38 attribute:product -> node-rules-focus.xsl:12 ×1'), all);
+    assert.ok(orders.includes('8:39 attribute:product -> node-rules-focus.xsl:12 ×1'), all);
+    // the same node twice: twice - and the template xsl:apply-templates within it called isn't counted as an item
+    assert.ok(orders.includes('4:28 element:order -> node-rules-focus.xsl:15 ×2'), all);
+    assert.ok(orders.includes('4:28 element:order -> node-rules-focus.xsl:20 ×2'), all);
+    // the xsl:for-each over current-group(), as its first instruction: its items - Saxon 13 rewrites it as an
+    // xsl:for-each at the xsl:value-of within it (the extension drops it, as no xsl:for-each is there)
+    assert.ok(orders.includes('5:38 element:line -> node-rules-focus.xsl:8 ×2') || orders.includes('5:38 element:line -> node-rules-focus.xsl:9 ×2'), all);
+    const instructions = rules.filter((r) => r.instruction).map((r) => r.line);
+    assert.ok([4, 7, 12, 15].every((line) => instructions.includes(line)), JSON.stringify(rules));
+    // templates aren't instructions
+    assert.ok(rules.filter((r) => r.line === 20 || r.line === 2).every((r) => !r.instruction), JSON.stringify(rules));
+}
+
 async function testNoTemplateMatched(saxonJar) {
     let dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -2697,7 +3004,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
+        for (const test of [testDeepRecursion, testNodeRules, testNodeRulesIterations, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testCommentBreakpoints, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testSingletonVariable, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapInput, testOutputMapWithoutXslOutput, testXSpecStepping]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;

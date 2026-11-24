@@ -24,6 +24,9 @@ export class DocumentChangeHandler {
 	// true when the user deliberately chose 'None' as the XML context file - unlike the initial unset state,
 	// this is not replaced by the next XML file viewed
 	public static contextFileIsNone = false;
+	// Schematron: the status bar item for a Schematron file - its schema's XML context file (set by the extension, see
+	// SchematronContext.showIn)
+	public static schematronStatus: ((item: vscode.StatusBarItem, document: vscode.TextDocument) => void) | undefined;
 	// the XML context file last picked (or 'None') - or the first XML file viewed, when none has been picked yet. It's
 	// used for a stylesheet with no context file of its own, and for XPath and DCP files
 	private static lastPickedUri: vscode.Uri | null = null;
@@ -104,7 +107,7 @@ export class DocumentChangeHandler {
 	// the XML context file for the stylesheet: the one picked for it (or its top-level stylesheet), else the source
 	// of its Quick Run task, else the last one picked. A null uri with isNone for 'None' - starting from
 	// xsl:initial-template - or with !isNone, when there's no context file yet
-	public static async contextFor(document: vscode.TextDocument | undefined): Promise<{ uri: vscode.Uri | null; isNone: boolean; stylesheet?: string }> {
+	public static async contextFor(document: vscode.TextDocument | undefined): Promise<{ uri: vscode.Uri | null; isNone: boolean; stylesheet?: string; fromLastPicked?: boolean }> {
 		if (document && DocumentChangeHandler.isStylesheetFile(document)) {
 			const stylesheet = DocumentChangeHandler.stylesheetKey(document);
 			const picked = FileSelection.instance?.getStylesheetContextFile(stylesheet);
@@ -116,7 +119,7 @@ export class DocumentChangeHandler {
 				return { uri: vscode.Uri.file(fsPath), isNone: false, stylesheet };
 			}
 		}
-		return { uri: DocumentChangeHandler.lastPickedUri, isNone: DocumentChangeHandler.lastPickedIsNone };
+		return { uri: DocumentChangeHandler.lastPickedUri, isNone: DocumentChangeHandler.lastPickedIsNone, fromLastPicked: true };
 	}
 
 	// makes the stylesheet's context file the one in use - e.g. when its editor becomes active
@@ -222,6 +225,15 @@ export class DocumentChangeHandler {
 			triggerSuggest = !!noteTag && !textBefore.substring(noteStart + noteTag[0].length).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '').includes('<');
 		}
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<' || activeChange.text.endsWith('::')) {
+			// suggestions opened as a character is typed - VS Code's setting for that, for the document's language, e.g.
+			// "[xml]": { "editor.suggestOnTriggerCharacters": false } - Ctrl+Space still shows them
+			if (!vscode.workspace.getConfiguration('editor', e.document).get<boolean>('suggestOnTriggerCharacters', true)) {
+				skipTrigger = true;
+			}
+			// not '<' in an XML file: with no schema, only general element snippets follow it - Ctrl+Space still shows them
+			if (activeChange.text === '<' && !triggerSuggest && e.document.languageId === 'xml') {
+				skipTrigger = true;
+			}
 			let isCloseTagFeature = false;
 			if (activeChange.text === '/') {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
@@ -395,7 +407,7 @@ export class DocumentChangeHandler {
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.getXPathDocumentChangeHandler().onDocumentChange(e));
 		}
 		let isDCPDocument = document.languageId === 'dcp';
-		if (isXPathDocument || isXSLTDocument || isDCPDocument) {
+		if (isXPathDocument || isXSLTDocument || isDCPDocument || document.languageId === 'sch') {
 			DocumentChangeHandler.refreshStatusBarItem();
 		} else {
 			DocumentChangeHandler.updateStatusBarItem(false);
@@ -422,6 +434,8 @@ export class DocumentChangeHandler {
 					'XML context file - used for XPath auto-completion and as the source for Quick Run';
 			DocumentChangeHandler.contextStatusBarItem.tooltip = DocumentChangeHandler.statusBarTooltip(tooltip, isXslt);
 			DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
+			// the item is a Schematron file's too, which chooses its schema's context file
+			DocumentChangeHandler.contextStatusBarItem.command = 'xslt-xpath.pickXsltContextFile';
 			DocumentChangeHandler.contextStatusBarItem.show();
 			// the context file isn't shared by a stylesheet that runs on itself: shown for that stylesheet alone
 			if (!docUri && isXslt && DocumentChangeHandler.selfSourceTask) {
@@ -455,6 +469,10 @@ export class DocumentChangeHandler {
 	public static refreshStatusBarItem(): void {
 		const document = vscode.window.activeTextEditor?.document;
 		const languageId = document?.languageId;
+		if (languageId === 'sch' && DocumentChangeHandler.schematronStatus) {
+			DocumentChangeHandler.schematronStatus(DocumentChangeHandler.contextStatusBarItem, document!);
+			return;
+		}
 		const show = languageId === 'xslt' || languageId === 'xpath' || languageId === 'dcp';
 		// an XPath or DCP file uses the last one picked
 		const lookup = show ? DocumentChangeHandler.useContextFor(languageId === 'xslt' ? document : undefined) : Promise.resolve();

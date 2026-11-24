@@ -1,0 +1,17 @@
+{
+	"title": "Video 2: Step through XSLT and XPath",
+	"steps": [
+		"Set a breakpoint on the variable's line, and click Debug",
+		{ "caption": "Step Into: through a multi-line XPath expression, line by line", "note": "F11, or the Step Into button" },
+		"…and into the functions it calls",
+		{ "caption": "Hover over a variable or a path to see its value", "note": "Or watch it in the Variables view" },
+		"Continue to a fold-left with an inline function",
+		"Step Into: even into inline functions",
+		"Step Over: watch $largest change for each line",
+		{ "caption": "A conditional breakpoint: pause only when it matters", "note": "Right-click in the margin: Add Conditional Breakpoint, e.g. @customer = 'Grace'" },
+		{ "caption": "A logpoint: print debugging without changing the stylesheet", "note": "{$line/@product} costs {f:line-total($line)}" },
+		"Each line logged in the Debug Console, without pausing",
+		{ "caption": "Step Back: go back to where you were", "note": "Or Reverse Continue to the last breakpoint" },
+		"Step through XSLT and XPath, with any SaxonJ edition"
+	]
+}

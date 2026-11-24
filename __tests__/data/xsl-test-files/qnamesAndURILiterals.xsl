@@ -34,7 +34,7 @@
   <!-- following tests SHOULD be highlighted as errors - but are not currently -->
   <xsl:variable name="bracedURILiteral3" select="Q{name"/>
   <xsl:variable name="bracedURILiteral4" select="Q{name}"/>
-  <xsl:variable name="bracedURILiteral5-PENDING" select="EQ{name}"/>
+  <xsl:variable name="bracedURILiteral5" select="EQ{name}"/>
   <xsl:variable name="bracedURILiteral6" select="Q{urn:com.example}ct:name"/>
   <xsl:variable name="bracedURILiteral7" select="Q{name} name"/>
   <xsl:variable name="bracedURILiteral8" select="9 Q{name}name"/>

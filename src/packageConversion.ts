@@ -20,6 +20,11 @@ import { XdocNotes } from './xdocNote';
 import { HrefPaths } from './hrefPaths';
 import { PackageEdits, TextEdit } from './packageEdits';
 import { PackageScope } from './packageScope';
+import { FunctionData } from './functionData';
+import { FixedNamespaces } from './fixedNamespaces';
+import { CodeActionDocument } from './codeActionDocument';
+import { XSpecRunner } from './xspecRunner';
+import { XSpecHrefs } from './xspecHrefs';
 
 // a line of a module (0-based) - and the offset of the element there, where it's known
 export interface Place {
@@ -32,7 +37,7 @@ export interface Place {
 // package - or can't be made until the item is reworked
 export type ConversionSeverity = 'change' | 'decision' | 'blocker';
 
-export type ConversionSection = 'visibility' | 'override' | 'abstract' | 'modes' | 'not-shared' | 'blockers';
+export type ConversionSection = 'library' | 'visibility' | 'override' | 'abstract' | 'included' | 'modes' | 'not-shared' | 'tests' | 'blockers';
 
 export interface ConversionItem {
 	section: ConversionSection;
@@ -45,8 +50,12 @@ export interface ConversionItem {
 
 export interface ConversionAnalysis {
 	library: string;
-	// the library: the module, and those it imports or includes, directly or indirectly
+	// the library: the module, and those it imports or includes, directly or indirectly - with the modules it uses that
+	// are shared by the stylesheets, which the package includes (see absorbed)
 	libraryModules: string[];
+	// the shared modules the package includes, with those they import or include: the library uses what they declare, which
+	// a package can't take from the stylesheets except as an abstract component, copied into each of them
+	absorbed: string[];
 	// the top-level stylesheets that import or include the library, directly or indirectly - and their other modules
 	topLevels: string[];
 	userModules: string[];
@@ -68,12 +77,18 @@ export interface ConversionPlan {
 	publicDeclarations: Declaration[];
 	overrides: { declaration: Declaration, top: string }[];
 	callbacks: Declaration[];
+	// the shared modules, not in `absorbed` yet, that declare what the library uses: another round of the analysis has them
+	// in the library (see PackageConversion.analyse)
+	absorb: string[];
 	// the library's named modes made public - with their xsl:mode, if they have one - and the stylesheets' template rules
 	// in them, moved into xsl:override
 	publicModes: { mode: string, declaration?: Declaration }[];
 	movedRules: { rule: ModeUse, top: string }[];
 	// the library's declarations copied into each top-level stylesheet: keys, xsl:strip-space, xsl:output etc.
 	copies: { place: Place, kind: string, name?: string }[];
+	// the XSpec files that test a module that used the library: each gets an x:helper for the package, as the module doesn't reach
+	// it any more (see xspecHelperEdit)
+	xspecHelpers: string[];
 	// the conversion waits for these: what has to be reworked first
 	preventing: ConversionItem[];
 	// the library shares the unnamed mode with the stylesheets: it becomes a named, public mode of the package
@@ -164,10 +179,24 @@ export interface ModuleScan {
  */
 export class PackageConversion {
 
-	// undefined, with the reason, if the module can't be analysed as a library
+	// undefined, with the reason, if the module can't be analysed as a library. What the library uses that only a module
+	// shared by the stylesheets declares is part of the package: the module is included in it - and what that uses, in turn -
+	// so the analysis is made again with them in the library, until there's no more
 	public static async analyse(libraryPath: string): Promise<ConversionAnalysis | string> {
+		let absorbed: string[] = [];
+		for (let round = 0; round < 20; round++) {
+			const result = await PackageConversion.analyseWith(libraryPath, absorbed);
+			if (typeof result === 'string' || result.plan.absorb.length === 0) {
+				return result;
+			}
+			absorbed = absorbed.concat(result.plan.absorb.filter((module) => !absorbed.includes(module)));
+		}
+		return PackageConversion.analyseWith(libraryPath, absorbed);
+	}
+
+	private static async analyseWith(libraryPath: string, absorbed: string[]): Promise<ConversionAnalysis | string> {
 		const library = path.normalize(libraryPath);
-		const libraryModules = PackageConversion.tree(library);
+		const libraryModules = [...new Set([library, ...absorbed].flatMap((root) => PackageConversion.tree(root)))];
 		const scans = new Map<string, ModuleScan>();
 		const scan = (file: string) => {
 			let result = scans.get(file);
@@ -194,7 +223,7 @@ export class PackageConversion {
 		const userUses = userScans.flatMap((s) => s.uses);
 		const libraryUses = libraryScans.flatMap((s) => s.uses);
 		const components: Kind[] = ['function', 'template', 'variable', 'attribute-set'];
-		const plan: ConversionPlan = { scans, trees, publicDeclarations: [], overrides: [], callbacks: [], publicModes: [], movedRules: [], copies: [], preventing: [], renameUnnamed: false };
+		const plan: ConversionPlan = { scans, trees, publicDeclarations: [], overrides: [], callbacks: [], absorb: [], publicModes: [], movedRules: [], copies: [], xspecHelpers: [], preventing: [], renameUnnamed: false };
 		// a module whose code moves into xsl:override is changed: it must be in the workspace, and used only by the top-level
 		// stylesheets that use the library - each gets the code moved, in its own xsl:override
 		const topsOf = (file: string) => topLevels.filter((top) => trees.get(top)!.has(file));
@@ -204,6 +233,21 @@ export class PackageConversion {
 			text: `it would move into xsl:override from ${path.basename(place.path)} - which ${ImportIndex.instance.has(place.path) ? 'stylesheets that don\'t use the library use too' : 'isn\'t in the workspace'}, so they'd lose it`,
 			places: [place]
 		});
+
+		// a module that imports or includes the library, and others, and isn't a top-level stylesheet, is likely to be the
+		// library: converting only a part of it leaves the rest as imports, which the stylesheets still have - a decision, so
+		// that the one converted is known
+		for (const importer of ImportIndex.instance.importersOf(library).filter((file) => !topLevels.includes(file) && !libraryModules.includes(file))) {
+			const siblings = (ImportIndex.instance.has(importer) ? ImportIndex.instance.referencesOf(importer) : []).map((r) => r.path)
+				.filter((file, index, all) => file !== library && !libraryModules.includes(file) && all.indexOf(file) === index);
+			if (siblings.length > 0) {
+				items.push({
+					section: 'library', severity: 'decision', subject: `${path.basename(library)} is a part of ${path.basename(importer)}`,
+					text: `${path.basename(importer)} imports or includes it, and ${siblings.length} other ${siblings.length === 1 ? 'module' : 'modules'} (${siblings.slice(0, 4).map((f) => path.basename(f)).join(', ')}${siblings.length > 4 ? ', ...' : ''}): only ${path.basename(library)}${libraryModules.length > 1 ? ' and what it imports' : ''} becomes a package, and the others stay imports of the stylesheets. To convert all of them, convert ${path.basename(importer)}`,
+					places: [{ path: importer, line: 0 }]
+				});
+			}
+		}
 
 		// the library's components that the stylesheets use - a global parameter is public anyway
 		for (const declaration of libraryDeclarations.filter((d) => components.includes(d.kind) && !d.isParam)) {
@@ -287,7 +331,19 @@ export class PackageConversion {
 			text: `the library uses it, but it isn't declared in the library or the stylesheets found to use it - a package must declare all it uses, as abstract if a stylesheet provides it${notFound}`,
 			places: uses.map((u) => u.place)
 		}));
+		// a module that several of the stylesheets share, that declares what the library uses, and doesn't import the library:
+		// it belongs with the library - the package includes it, and so what it uses - not an abstract component for each
+		// stylesheet to override, which would give each a copy of its code. Not one stylesheet's own module, which provides
+		// what the library calls: that's a callback, as it was, moved into the stylesheet's xsl:override. Nor a module that
+		// stylesheets that don't use the library import too: it can't be taken out of them
+		const absorbable = (file: string) => !topLevels.includes(file) && !PackageConversion.tree(file).includes(library) && movable(file) && topsOf(file).length > 1;
 		callbacks.forEach(({ declaration }) => {
+			if (absorbable(declaration.place.path)) {
+				if (!plan.absorb.includes(declaration.place.path)) {
+					plan.absorb.push(declaration.place.path);
+				}
+				return;
+			}
 			plan.callbacks.push(declaration);
 			if (movable(declaration.place.path)) {
 				topsOf(declaration.place.path).forEach((top) => plan.overrides.push({ declaration, top }));
@@ -295,11 +351,36 @@ export class PackageConversion {
 				notMovable(PackageConversion.label(declaration), declaration.place);
 			}
 		});
-		callbacks.forEach(({ declaration, uses }) => items.push({
-			section: 'abstract', severity: 'change', subject: PackageConversion.label(declaration),
-			text: 'declared in the package as abstract, as the library uses it - the stylesheet\'s declaration is moved into xsl:override',
-			places: [declaration.place, ...uses.map((u) => u.place)]
-		}));
+		callbacks.forEach(({ declaration, uses }) => {
+			if (absorbable(declaration.place.path)) {
+				return;
+			}
+			// moved into the xsl:override of each stylesheet that uses the library: with more than one, each has a copy of it
+			const copies = movable(declaration.place.path) ? topsOf(declaration.place.path).length : 0;
+			const module = path.basename(declaration.place.path);
+			items.push({
+				section: 'abstract', severity: copies > 1 ? 'decision' : 'change', subject: PackageConversion.label(declaration),
+				text: copies > 1 ?
+					`declared in the package as abstract, as the library uses it - its declaration is moved out of ${module}, which imports the library, into the xsl:override of each of the ${copies} stylesheets that use it, so each has a copy. If ${module} belongs with the library, convert ${module} to a package instead` :
+					'declared in the package as abstract, as the library uses it - the stylesheet\'s declaration is moved into xsl:override',
+				places: [declaration.place, ...uses.map((u) => u.place)]
+			});
+		});
+		// the modules the package includes - and that they don't bring a module in twice, as the library and they both import it
+		absorbed.forEach((root) => {
+			const uses = libraryUses.filter((u) => scan(root).declarations.some((d) => PackageConversion.refersTo(u, d)));
+			items.push({
+				section: 'included', severity: 'change', subject: path.basename(root),
+				text: `included in the package - the library uses ${uses.length === 1 ? 'a declaration' : 'declarations'} in it, which the stylesheets that import it get from the package instead. It's removed from their imports`,
+				places: [{ path: root, line: 0 }, ...uses.map((u) => u.place)]
+			});
+			const others = [...new Set([library, ...absorbed.filter((a) => a !== root)].flatMap((other) => PackageConversion.tree(other)))];
+			PackageConversion.tree(root).filter((module) => module !== root && others.includes(module)).forEach((module) => items.push({
+				section: 'blockers', severity: 'blocker', subject: `${path.basename(module)} would be in the package twice`,
+				text: `both ${path.basename(library)} and ${path.basename(root)}, which the package includes, import or include it - its declarations would be duplicated: have only one of them use it`,
+				places: [{ path: module, line: 0 }]
+			}));
+		});
 
 		// modes: the library's named modes the stylesheets use are made public, and the stylesheets' template rules in
 		// them moved into xsl:override - the unnamed mode can't be shared
@@ -386,14 +467,142 @@ export class PackageConversion {
 		}));
 
 		plan.preventing.push(...items.filter((i) => i.severity === 'blocker'));
-		const packageName = PackageConversion.proposedName(library, libraryDeclarations);
+		const packageName = PackageConversion.proposedName(library, libraryDeclarations, items.some((i) => i.section === 'library'), ImportIndex.instance.packages().map((p) => p.name));
 		// with the library's prefix for the package's namespace, if it has one
-		const prefix = [...(scan(library).bindings ?? new Map<string, string>())].find(([, uri]) => uri === packageName)?.[0];
+		// else with the first prefix it declares for a namespace of its own
+		const xspec = await PackageConversion.xspecItems(library, topLevels, userModules, packageName, '1.0', PackageConversion.tree);
+		items.push(...xspec.items);
+		plan.xspecHelpers.push(...xspec.helperFiles);
+		const bindings = [...(scan(library).bindings ?? new Map<string, string>())];
+		const prefix = bindings.find(([, uri]) => uri === packageName)?.[0] ??
+			bindings.find(([name, uri]) => name !== '' && !PackageConversion.isStandardNamespace(uri))?.[0];
 		return {
-			library, libraryModules, topLevels, userModules, packageName, packageVersion: '1.0',
+			library, libraryModules, absorbed, topLevels, userModules, packageName, packageVersion: '1.0',
 			unnamedModeName: prefix ? `${prefix}:default` : 'default',
 			items, plan
 		};
+	}
+
+	// The XSpec tests the conversion affects, in every workspace folder: XSpec imports the stylesheet it tests into its test runner,
+	// and neither a package nor a stylesheet with an xsl:use-package at its top level can be imported (XTSE3008). So after the
+	// conversion, the tests of the library - now a package - and of a top-level stylesheet that now uses it stop, and the tests of
+	// a module that imported or included the library have no package for the runner: the module no longer reaches it. A test
+	// with run-as="external" doesn't import what it tests, so it's left out. A report only: what's needed is for the user to decide
+	// (see the text of each item)
+	// the XSpec files in the workspace - replaced for testing
+	public static xspecFiles = async (): Promise<string[]> => (await vscode.workspace.findFiles('**/*.xspec', '**/node_modules/**', 2000)).map((uri) => uri.fsPath);
+
+	private static async xspecItems(library: string, topLevels: string[], userModules: string[], packageName: string, packageVersion: string,
+		tree: (file: string) => string[]): Promise<{ items: ConversionItem[]; helperFiles: string[] }> {
+		const normal = (file: string) => path.normalize(file);
+		const affected: { library: Place[]; topLevel: Place[]; module: Place[] } = { library: [], topLevel: [], module: [] };
+		for (const xspecPath of await PackageConversion.xspecFiles()) {
+			let text: string;
+			let tested: string[];
+			try {
+				text = fs.readFileSync(xspecPath, 'utf8');
+				tested = XSpecRunner.testedModules(xspecPath, text).stylesheets.map(normal);
+			} catch {
+				continue;
+			}
+			if (/<(?:[\w.-]+:)?description\b[^>]*\srun-as\s*=\s*["']\s*external\s*["']/.test(text)) {
+				continue;
+			}
+			// the line of the stylesheet attribute that names it
+			const place = (module: string): Place => {
+				const href = XSpecHrefs.find(text, xspecPath).find((h) => h.attribute === 'stylesheet' && HrefPaths.toPath(h.value, h.basePath) !== undefined && normal(HrefPaths.toPath(h.value, h.basePath)!) === module);
+				return { path: xspecPath, line: href ? text.substring(0, href.start).split('\n').length - 1 : 0, offset: href?.start };
+			};
+			for (const module of tested) {
+				if (module === normal(library)) {
+					affected.library.push(place(module));
+				} else if (topLevels.map(normal).includes(module)) {
+					affected.topLevel.push(place(module));
+				} else if (userModules.map(normal).includes(module) && tree(module).map(normal).some((file) => file === normal(library))) {
+					affected.module.push(place(module));
+				}
+			}
+		}
+		const count = (places: Place[]) => new Set(places.map((p) => p.path)).size;
+		const subject = (places: Place[], what: string) => `${count(places)} XSpec file${count(places) === 1 ? ' tests' : 's test'} ${what}`;
+		const items: ConversionItem[] = [];
+		if (affected.library.length > 0) {
+			items.push({ section: 'tests', severity: 'decision', subject: subject(affected.library, 'the library'), places: affected.library,
+				text: `the library becomes an xsl:package, which XSpec can't import into its test runner: add run-as="external" to x:description - then only x:call reaches its public components, not an XPath expression in the file - or test it with an x:helper package-name="${packageName}" and a stylesheet that does nothing, so its public functions can be called in expressions too` });
+		}
+		if (affected.topLevel.length > 0) {
+			items.push({ section: 'tests', severity: 'decision', subject: subject(affected.topLevel, 'a stylesheet that will use the package'), places: affected.topLevel,
+				text: 'it gets an xsl:use-package, which can\'t be in a stylesheet XSpec imports (XTSE3008): these tests stop with that error after the conversion. Test the modules it imports or includes instead, with an x:helper package-name on x:description for the package, so the test runner uses it as the top-level stylesheet does' });
+		}
+		if (affected.module.length > 0) {
+			items.push({ section: 'tests', severity: 'change', subject: subject(affected.module, 'a module that uses the library'), places: affected.module,
+				text: `the module no longer imports or includes the library - its top-level stylesheet uses the package - so the test runner needs the package: Convert to Package... changes ${count(affected.module) === 1 ? 'this XSpec file' : 'these XSpec files'}, adding an x:helper for the package to x:description (it is in the Refactor Preview, where you can leave it out)` });
+		}
+		return { items, helperFiles: [...new Set(affected.module.map((place) => place.path))] };
+	}
+
+	// The x:helper that gives an XSpec file's test runner the package, after its x:import and x:helper elements, or at the start of
+	// x:description: the module the file tests no longer imports or includes the library, so only the helper gives the runner the
+	// package, as the top-level stylesheet's xsl:use-package does. Not if it has one for the package already, or x:description has no
+	// content
+	private static xspecHelperEdit(file: string, packageName: string, packageVersion: string): TextEdit | undefined {
+		const text = fs.readFileSync(file, 'utf8');
+		const markup = RecordTypes.blankMarkup(text);
+		const root = /<(?:([\w.-]+):)?description\b/.exec(markup);
+		if (!root) {
+			return undefined;
+		}
+		const prefix = root[1] ? root[1] + ':' : '';
+		const extent = PackageEdits.elementExtent(markup, root.index);
+		if (!extent || extent.selfClosing) {
+			return undefined;
+		}
+		const quoted = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		if (new RegExp(`<${prefix}helper\\b[^>]*\\spackage-name\\s*=\\s*(["'])${quoted}\\1`).test(text)) {
+			return undefined;
+		}
+		const attribute = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+		let after = extent.startTagEnd;
+		let indent = PackageEdits.contentIndent(text, extent.startTagEnd);
+		const grouped = new RegExp(`<${prefix}(?:import|helper)\\b`, 'g');
+		for (let match = grouped.exec(markup); match !== null && match.index < extent.endTagStart; match = grouped.exec(markup)) {
+			const element = PackageEdits.elementExtent(markup, match.index);
+			if (element) {
+				after = element.end;
+				indent = PackageEdits.lineIndent(text, match.index);
+			}
+		}
+		return { start: after, end: after, text: `\n${indent}<${prefix}helper package-name="${attribute(packageName)}" package-version="${attribute(packageVersion)}"/>` };
+	}
+
+	// the errors in the modules the conversion reads - the library's and the stylesheets' that use it, in every workspace
+	// folder - before it's made, as blockers: it starts from modules without errors, so a problem after it is one it made,
+	// and its analysis, which finds the declarations and uses in the modules as the linter does, isn't misled by one.
+	// errorsOf gives a module's errors, with their 0-based lines. Undefined if cancelled
+	public static async baseline(analysis: ConversionAnalysis, errorsOf: (file: string) => Promise<{ line: number, message: string }[]>,
+		progress: (checked: number, total: number) => void = () => undefined, cancelled: () => boolean = () => false): Promise<ConversionItem[] | undefined> {
+		const modules = [...new Set([...analysis.libraryModules, ...analysis.topLevels, ...analysis.userModules])];
+		const items: ConversionItem[] = [];
+		for (const [index, file] of modules.entries()) {
+			if (cancelled()) {
+				return undefined;
+			}
+			progress(index, modules.length);
+			const errors = await errorsOf(file);
+			if (errors.length > 0) {
+				items.push({
+					section: 'blockers', severity: 'blocker', subject: `${errors.length} ${errors.length === 1 ? 'error' : 'errors'} in ${path.basename(file)}`,
+					text: `${errors[0].message}${errors.length > 1 ? ` (and ${errors.length - 1} more)` : ''} - fix the errors first: the conversion starts from modules without them, so that a problem after it is one it made`,
+					places: errors.slice(0, 5).map((error) => ({ path: file, line: error.line }))
+				});
+			}
+		}
+		// the report and the message list them: not the whole workspace's, if it has many
+		const maxItems = 20;
+		return items.length <= maxItems ? items : items.slice(0, maxItems).concat({
+			section: 'blockers', severity: 'blocker', subject: `errors in ${items.length - maxItems} more modules`,
+			text: 'see the Problems view', places: []
+		});
 	}
 
 	// the edits that convert the library to a package, by module - or why it can't be converted. The library's root
@@ -484,7 +693,7 @@ export class PackageConversion {
 			};
 			plan.publicDeclarations.filter((d) => !d.isParam).forEach((d) => makePublic(d.place));
 			// new declarations, at the end of the library's root element
-			const step = PackageConversion.indentStep(library.text, rootElement.startTagEnd);
+			const step = PackageEdits.contentIndent(library.text, rootElement.startTagEnd);
 			const added: string[] = [];
 			plan.publicModes.forEach(({ mode, declaration }) => declaration?.place.offset !== undefined ? makePublic(declaration.place) :
 				added.push(`<xsl:mode name="${escape(mode)}" visibility="public"/>`));
@@ -505,6 +714,8 @@ export class PackageConversion {
 					added.push(`<xsl:mode name="${escape(modeIn(library))}" visibility="public"/>`);
 				}
 			}
+			// the shared modules it includes: those the library uses declarations of
+			analysis.absorbed.forEach((module) => added.push(`<xsl:include href="${escape(path.relative(path.dirname(analysis.library), module).split(path.sep).map(encodeURI).join('/'))}"/>`));
 			plan.callbacks.forEach((callback) => added.push(PackageConversion.abstractDeclaration(scanOf(callback.place.path), markupOf(callback.place.path), callback, library.bindings, step)));
 			if (added.length > 0) {
 				const lineStart = library.text.lastIndexOf('\n', rootElement.endTagStart - 1) + 1;
@@ -538,7 +749,7 @@ export class PackageConversion {
 				const imports = importer.references.filter((r) => r.isImport);
 				const lastImport = imports.length > 0 ? imports[imports.length - 1] : undefined;
 				const insertAt = lastImport ? PackageEdits.elementExtent(importerMarkup, lastImport.offset)!.end : topRootElement.startTagEnd;
-				const topStep = PackageConversion.indentStep(importer.text, topRootElement.startTagEnd);
+				const topStep = PackageEdits.contentIndent(importer.text, topRootElement.startTagEnd);
 				const indent = lastImport ? PackageEdits.lineIndent(importer.text, lastImport.offset) : topStep;
 				// the declarations and template rules moved into the xsl:override
 				const moved: string[] = [];
@@ -574,7 +785,7 @@ export class PackageConversion {
 						}
 					}
 					if (isRule) {
-						text = text.replace(new RegExp(`(</?${source.prefix}:)apply-imports\\b`, 'g'), '$1next-match');
+						text = text.replace(new RegExp(`(</?${source.prefix ? source.prefix + ':' : ''})apply-imports\\b`, 'g'), '$1next-match');
 					} else {
 						// the declaration's name, with the importing module's prefix for its namespace
 						text = text.replace(/^(\s*<[^\s/>]+[^>]*?\sname\s*=\s*)(["'])([^"']*)\2/, (_match, before, quote, name) =>
@@ -641,6 +852,13 @@ export class PackageConversion {
 			fileEdits.forEach((edit) => edit.text = RecordTypes.withXsltPrefix(edit.text, scanOf(file).prefix));
 			fileEdits.sort((a, b) => a.start - b.start);
 		});
+		// the XSpec files, which aren't modules, so after that
+		for (const file of plan.xspecHelpers) {
+			const edit = PackageConversion.xspecHelperEdit(file, packageName, packageVersion);
+			if (edit) {
+				edits.set(file, [edit]);
+			}
+		}
 		return edits;
 	}
 
@@ -682,11 +900,12 @@ export class PackageConversion {
 			.filter(([, value]) => value !== undefined).map(([name, value]) => ` ${name}="${value}"`).join('');
 		const params = RecordTypes.childElements(text, markup, offset, 'xsl:param').filter((p) => !/^(yes|true|1)$/.test((attribute(p, 'tunnel') ?? '').trim()));
 		const declared = params.map((p) => PackageEdits.reindented(text, markup, p, indent + step)!);
-		const passed = params.map((p) => `${indent + step + step}<${scan.prefix}:with-param name="${attribute(p, 'name')}" select="$${attribute(p, 'name')}"/>`);
-		const call = `<${scan.prefix}:call-template name="${calledName(attribute(offset, 'name') ?? '')}"`;
-		const rule = [`${indent}<${scan.prefix}:template${ruleAttributes}>`, ...declared,
-			passed.length > 0 ? [`${indent + step}${call}>`, ...passed, `${indent + step}</${scan.prefix}:call-template>`].join('\n') : `${indent + step}${call}/>`,
-			`${indent}</${scan.prefix}:template>`].join('\n');
+		const x = (localName: string) => RecordTypes.xsltQName(scan.prefix, localName);
+		const passed = params.map((p) => `${indent + step + step}<${x('with-param')} name="${attribute(p, 'name')}" select="$${attribute(p, 'name')}"/>`);
+		const call = `<${x('call-template')} name="${calledName(attribute(offset, 'name') ?? '')}"`;
+		const rule = [`${indent}<${x('template')}${ruleAttributes}>`, ...declared,
+			passed.length > 0 ? [`${indent + step}${call}>`, ...passed, `${indent + step}</${x('call-template')}>`].join('\n') : `${indent + step}${call}/>`,
+			`${indent}</${x('template')}>`].join('\n');
 		return { edit: named, rule };
 	}
 
@@ -698,7 +917,7 @@ export class PackageConversion {
 		const changes: TextEdit[] = [];
 		let match: RegExpExecArray | null;
 		while ((match = tagRgx.exec(markup)) !== null) {
-			if (match[1] || match[2] !== `${prefix}:apply-templates`) {
+			if (match[1] || match[2] !== RecordTypes.xsltQName(prefix, 'apply-templates')) {
 				continue;
 			}
 			const value = RecordTypes.attributeOfElementAt(text, match.index + 1, 'mode');
@@ -750,10 +969,6 @@ export class PackageConversion {
 		return element.replace(/^(\s*<[^\s/>]+)/, `$1${declarations}`);
 	}
 
-	private static indentStep(text: string, offset: number) {
-		return PackageScope.lineIndent(text, offset) || /\n([ \t]+)\S/.exec(text)?.[1] || '\t';
-	}
-
 	// a problem with a name for the mode the unnamed mode becomes - a QName with a prefix the library declares, or an
 	// EQName - undefined if there's none
 	public static modeNameProblem(analysis: ConversionAnalysis, name: string): string | undefined {
@@ -764,14 +979,32 @@ export class PackageConversion {
 		return match[1] && !analysis.plan.scans.get(analysis.library)?.bindings?.has(match[1]) ? `The library doesn't declare the prefix '${match[1]}'` : undefined;
 	}
 
-	// a name for the package: the namespace of most of the library's function names - or a URN from its file name
-	private static proposedName(library: string, declarations: Declaration[]) {
-		const namespaces = declarations.filter((d) => d.kind === 'function').map((d) => /^Q\{([^}]+)\}/.exec(d.expandedName)?.[1]).filter((n): n is string => !!n);
+	// a name for the package: the namespace of most of the library's function names - the library's own, not a W3C or Saxon one.
+	// With the module's name added, when the module is a part of a larger library, which has the same namespace, or when a
+	// package in the workspace has the name already: another package of the library would be proposed the same name. With no
+	// namespace to take it from, a placeholder - to be replaced by one's own - for the module's name
+	private static proposedName(library: string, declarations: Declaration[], isPart: boolean, existing: string[]) {
+		const part = path.basename(library).replace(/\.[^.]*$/, '').replace(/[^\w.-]+/g, '-');
+		const namespaces = declarations.filter((d) => d.kind === 'function').map((d) => /^Q\{([^}]+)\}/.exec(d.expandedName)?.[1])
+			.filter((n): n is string => !!n && !PackageConversion.isStandardNamespace(n));
 		const counts = new Map<string, number>();
 		namespaces.forEach((n) => counts.set(n, (counts.get(n) ?? 0) + 1));
 		const most = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
-		return most ?? `urn:${path.basename(library).replace(/\.[^.]*$/, '')}`;
+		if (!most) {
+			return `${PackageConversion.placeholderName}/${part}`;
+		}
+		return isPart || existing.includes(most) ? `${most.replace(/[/:]$/, '')}${most.startsWith('urn:') ? ':' : '/'}${part}` : most;
 	}
+
+	// a namespace the language, or a processor, defines, rather than one of the library's own: those of the functions and
+	// extensions the completions and checks know (xs, fn, map, array, math, xsl, Saxon, EXSLT, EXPath, 'java:' ...) and the
+	// reserved ones (xml, xsi, err)
+	public static isStandardNamespace(uri: string): boolean {
+		return FunctionData.namespaceType(uri) !== undefined || FixedNamespaces.standard.some(([, standard]) => standard === uri);
+	}
+
+	// the start of a package's name where there's no namespace in the library to take it from
+	public static readonly placeholderName = 'http://example.com/packages';
 
 	// the module, and those it imports or includes, directly or indirectly
 	private static tree(file: string): string[] {
@@ -985,7 +1218,7 @@ export class PackageConversion {
 			return [];
 		}
 		const xsl = scan.prefix;
-		const rootTag = scan.text.substring(root, rootElement.startTagEnd).replace(/^<([\w.-]+:)?(stylesheet|transform|package)\b/, `<${xsl}:stylesheet`)
+		const rootTag = scan.text.substring(root, rootElement.startTagEnd).replace(/^<([\w.-]+:)?(stylesheet|transform|package)\b/, `<${RecordTypes.xsltQName(xsl, 'stylesheet')}`)
 			.replace(/\/?>$/, ' xmlns:zcx="urn:x-context-check">');
 		const lines: string[] = [rootTag];
 		const ranges: { variable: Declaration, start: number, end: number }[] = [];
@@ -995,16 +1228,17 @@ export class PackageConversion {
 				return;
 			}
 			const select = RecordTypes.attributeOfElementAt(scan.text, variable.place.offset! + 1, 'select', true);
-			const body = select !== undefined ? `<${xsl}:sequence select="${select.replace(/"/g, '&quot;')}"/>` : extent.selfClosing ? undefined : scan.text.substring(extent.startTagEnd, extent.endTagStart);
+			const body = select !== undefined ? `<${RecordTypes.xsltQName(xsl, 'sequence')} select="${select.replace(/"/g, '&quot;')}"/>` : extent.selfClosing ? undefined : scan.text.substring(extent.startTagEnd, extent.endTagStart);
 			if (body === undefined) {
 				return;
 			}
 			const start = lines.join('\n').split('\n').length;
-			lines.push(`<${xsl}:function name="zcx:v${index}">`, body, `</${xsl}:function>`);
+			lines.push(`<${RecordTypes.xsltQName(xsl, 'function')} name="zcx:v${index}">`, body, `</${RecordTypes.xsltQName(xsl, 'function')}>`);
 			ranges.push({ variable, start, end: lines.join('\n').split('\n').length - 1 });
 		});
-		lines.push(`</${xsl}:stylesheet>`);
-		const document = await vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'xslt' });
+		lines.push(`</${RecordTypes.xsltQName(xsl, 'stylesheet')}>`);
+		// not an editor document: opening one would leave an unsaved 'Untitled' file for each analysis
+		const document = new CodeActionDocument(vscode.Uri.file(scan.path), lines.join('\n'));
 		const lexer = new XslLexer(XSLTConfiguration.configuration);
 		lexer.provideCharLevelState = true;
 		const tokens = lexer.analyse(document.getText());

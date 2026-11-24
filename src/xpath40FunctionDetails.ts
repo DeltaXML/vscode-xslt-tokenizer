@@ -1370,7 +1370,7 @@ export const xpath40Data: FunctionCompletionData[] = [
 	},
 	{
 		name: "array:get",
-		signature: "array:get($array as array(*), $position as xs:integer, $default as item()*) as item()*",
+		signature: "array:get($array as array(*), $position as xs:integer, $default as item()* := fn:error()) as item()*",
 		description: "Returns the value at the specified position in the supplied array (counting from 1)."
 	},
 	{
@@ -1867,6 +1867,7 @@ export const xpath40Arities = {
 		"foot#1",
 		"for-each#2",
 		"for-each-pair#3",
+		"get#2",
 		"get#3",
 		"head#1",
 		"index-of#2",

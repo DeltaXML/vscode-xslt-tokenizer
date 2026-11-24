@@ -68,7 +68,7 @@ export class XSpecHrefs {
 	}
 
 	// a path in the folder of the element's base URI: the document's, unless an xml:base on it or an ancestor changes it
-	private static basePath(element: XmlElement, documentPath: string): string {
+	public static basePath(element: XmlElement, documentPath: string): string {
 		const bases: string[] = [];
 		for (let e: XmlElement | undefined = element; e; e = e.parent) {
 			const base = e.attributes.get('xml:base');
@@ -116,7 +116,55 @@ export class XSpecHrefs {
 			if (filePath !== undefined && !fs.existsSync(filePath)) {
 				return [new vscode.Diagnostic(range, `XSpec: the file '${href.value}' of the ${href.attribute} attribute isn't found: ${filePath}`, vscode.DiagnosticSeverity.Error)];
 			}
+			if (filePath !== undefined && fs.statSync(filePath).isDirectory()) {
+				return [new vscode.Diagnostic(range, `XSpec: '${href.value}' of the ${href.attribute} attribute is a folder, not a file: ${filePath}`, vscode.DiagnosticSeverity.Error)];
+			}
+			// x:import's file must be an XSpec file - XSpec stops the run otherwise
+			if (filePath !== undefined && href.element === 'import' && XSpecHrefs.isXSpecFile(filePath) === false) {
+				return [new vscode.Diagnostic(range, `XSpec: '${href.value}' isn't an XSpec file - the outermost element of a file x:import imports must be x:description`, vscode.DiagnosticSeverity.Error)];
+			}
 			return [];
 		});
+	}
+
+	// whether the file's outermost element is XSpec's x:description - undefined if it can't be read, or has no element yet
+	public static isXSpecFile(filePath: string): boolean | undefined {
+		let start: string;
+		try {
+			const open = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'file' && path.normalize(d.fileName) === path.normalize(filePath));
+			start = open ? open.getText().substring(0, 65536) : XSpecHrefs.readStart(filePath);
+		} catch {
+			return undefined;
+		}
+		// after the XML declaration, comments, processing instructions and a DOCTYPE
+		const root = /^\uFEFF?(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>[]*(?:\[[\s\S]*?\])?\s*>)*<([\w.-]+(?::[\w.-]+)?)([^>]*)>?/.exec(start);
+		if (!root) {
+			return undefined;
+		}
+		const colon = root[1].indexOf(':');
+		const prefix = colon > 0 ? root[1].substring(0, colon) : '';
+		const namespace = new RegExp(`\\sxmlns${prefix ? ':' + prefix : ''}\\s*=\\s*(["'])(.*?)\\1`).exec(root[2])?.[2];
+		return localName(root[1]) === 'description' && namespace === 'http://www.jenitennison.com/xslt/xspec';
+	}
+
+	private static readStart(filePath: string) {
+		const fd = fs.openSync(filePath, 'r');
+		try {
+			const buffer = Buffer.alloc(65536);
+			const read = fs.readSync(fd, buffer, 0, buffer.length, 0);
+			return buffer.subarray(0, read).toString('utf8');
+		} finally {
+			fs.closeSync(fd);
+		}
+	}
+
+	// the file of the href at the offset - for Go to Definition
+	public static hrefAt(document: vscode.TextDocument, offset: number): { href: XSpecHref, filePath: string } | undefined {
+		if (document.uri.scheme !== 'file') {
+			return undefined;
+		}
+		const href = XSpecHrefs.find(document.getText(), document.fileName).find((h) => offset >= h.start && offset <= h.end);
+		const filePath = href ? HrefPaths.toPath(href.value, href.basePath) : undefined;
+		return href && filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile() ? { href, filePath } : undefined;
 	}
 }

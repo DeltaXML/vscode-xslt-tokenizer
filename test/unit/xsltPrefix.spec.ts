@@ -17,9 +17,10 @@ describe('RecordTypes: a module\'s prefix for XSLT', () => {
 
     it('should be quick for an outermost element without a prefix, after a run of whitespace', () => {
         // e.g. markup, with the XML declaration blanked: before the fix, it took exponential time not to match
+        // XSLT as the default namespace: no prefix
         const text = ' '.repeat(5000) + '\n<transform xmlns="http://www.w3.org/1999/XSL/Transform" version="3.0"/>';
         const start = Date.now();
-        expect(RecordTypes.xsltPrefix(text)).to.equal('xsl');
+        expect(RecordTypes.xsltPrefix(text)).to.equal('');
         expect(Date.now() - start).to.be.below(100);
     });
 
