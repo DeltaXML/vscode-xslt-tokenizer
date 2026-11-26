@@ -83,6 +83,7 @@ import { SchematronSourceMap } from './schematronSourceMap';
 import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
+import { FunctionOptionsHover } from './functionOptionsHover';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 import { XsltNodeRules } from './xsltNodeRules';
 import { XsltEmptySteps } from './xsltEmptySteps';
@@ -671,6 +672,7 @@ export function activate(context: vscode.ExtensionContext) {
 	new XPathQuery(context);
 	// entity references, e.g. &company;: completion after '&', hover, and go to the DOCTYPE's declaration
 	EntityReferences.activate(context);
+	FunctionOptionsHover.activate(context);
 	context.subscriptions.push(vscode.workspace.onDidCloseTextDocument((document) => {
 		XsltTokenDiagnostics.forgetDocument(document.uri);
 		XsltSymbolProvider.forgetDocument(document.uri);

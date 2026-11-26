@@ -18,6 +18,7 @@ import { GlobalInstructionData, GlobalInstructionType, XslLexer } from '../xslLe
 import { XsltTokenDefinitions } from '../xsltTokenDefintions';
 import { RecordTypes } from '../recordTypes';
 import { XPathFunctionDetails } from '../xpathFunctionDetails';
+import { FunctionOptions } from '../functionOptions';
 import { XdocNote, XdocNotes } from '../xdocNote';
 import { XSpecTestNode, XSpecTests } from '../xspecTests';
 
@@ -577,6 +578,14 @@ export class XsltMcpTools {
 			return XsltMcpTools.text(`${name} isn't a built-in function in XPath ${xpathVersion} or XSLT ${xpathVersion === '3.1' ? '3.0' : '4.0'}` +
 				(in40 ? ' - it is in XPath 4.0: use xpathVersion "4.0"' : ' - for a function declared in a stylesheet, see the find_declaration tool'));
 		}
-		return XsltMcpTools.text(found.map((item) => `${item.signature}\n\n${item.description}`).join('\n\n---\n\n'));
+		// the options of its options map, e.g. parse-json's - if a signature in this XPath version has the options argument
+		const bare = name.replace(/#\d+$/, '');
+		const optionsText = found.some((item) => /\$?(options|params)\s+as/.test(item.signature)) ? FunctionOptions.optionsText(bare) : undefined;
+		// the property names of system-property()
+		const propertiesText = FunctionOptions.isSystemPropertyFunction(bare) ? 'Properties in the XSLT namespace:\n' +
+			FunctionOptions.systemProperties.map((p) => `- xsl:${p.name}: ${p.description}${p.values ? ` (${p.values})` : ''}`).join('\n') +
+			'\nOther names: unprefixed (Java system properties, in Saxon) or in another namespace, e.g. Saxon\'s or EXPath\'s' : undefined;
+		return XsltMcpTools.text(found.map((item) => `${item.signature}\n\n${item.description}`).join('\n\n---\n\n') +
+			(optionsText ? `\n\n${optionsText}` : '') + (propertiesText ? `\n\n${propertiesText}` : ''));
 	}
 }

@@ -17,7 +17,8 @@ import { ImportIndex } from './importIndex';
 import { ModulePrefixes } from './modulePrefixes';
 import { PackageScope } from './packageScope';
 import { XsltPackages } from './xsltPackages';
-import { RecordType, RecordTypes, FieldReference, EnumValueReference, ItemTypeAsRange } from './recordTypes';
+import { RecordType, RecordTypes, FieldReference, EnumValueReference, ItemTypeAsRange, OptionReference } from './recordTypes';
+import { FunctionOptions } from './functionOptions';
 import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
 import { XdocReferences } from './xdocReferences';
@@ -3729,6 +3730,16 @@ export class XsltTokenDiagnostics {
 				problemTokens.push({ line: position.line, startCharacter: position.character, length: duplicate.key.length, value: duplicate.key, tokenType: 0, error });
 			});
 		}
+		// the options maps of built-in functions, e.g. parse-json($json, map { 'liberal': true() }), and system-property() names -
+		// in any XSLT version. Saxon reports an option it doesn't recognize only with syntax extensions: for XSLT 4.0, or item types
+		{
+			const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
+			RecordTypes.optionReferences = [];
+			RecordTypes.checkOptionArguments(xpathTokens, XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes, problemTokens);
+			XsltTokenDiagnostics.checkSystemPropertyNames(xpathTokens, RecordTypes.xsltPrefix(documentText), problemTokens);
+			XsltTokenDiagnostics.optionReferences.set(document.uri.toString(), RecordTypes.optionReferences);
+			RecordTypes.optionReferences = [];
+		}
 		// record and enumeration types - before XSLT 4.0 too, when item types are available
 		if (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes) {
 			const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
@@ -5696,6 +5707,30 @@ export class XsltTokenDiagnostics {
 					msg = `XPath: ${tokenValue} fails at run time (FOCH0001): the codepoint isn't an XML 1.0 character - unless the processor is set up for XML 1.1`;
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
+				case ErrorType.OptionUnknown:
+				case ErrorType.OptionUnknownIgnored: {
+					const [option, functionName] = tokenValue.split(RecordTypes.valueSeparator);
+					const isError = token.error === ErrorType.OptionUnknown;
+					msg = `XPath: '${option}' is not an option of ${functionName}() - ` + (isError ? 'Saxon raises XPTY0004 for an option it doesn\'t recognize' :
+						'Saxon ignores it, but raises XPTY0004 for it with syntax extensions on, as for XSLT 4.0');
+					severity = isError ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.recordFieldUnknown;
+					break;
+				}
+				case ErrorType.OptionValueUnknown: {
+					const [value, functionName, option, values, code] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: '${value}' is not a value of the ${functionName}() option '${option}' (${code}) - it may be: ${values}`;
+					break;
+				}
+				case ErrorType.OptionValueType: {
+					const [option, functionName, optionType] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: The value of the ${functionName}() option '${option}' must be of type ${optionType} (XPTY0004)`;
+					break;
+				}
+				case ErrorType.SystemPropertyUnknown:
+					msg = `XPath: '${tokenValue}' is not a system property in the XSLT namespace - system-property() returns an empty string for it`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
 				case ErrorType.TextLooksLikeTvt:
 					msg = `XSLT: '${tokenValue}' is output as written: expand-text is off here - for a text value template, add expand-text="yes" to an xsl: element, or xsl:expand-text="yes" to a literal result element`;
 					severity = vscode.DiagnosticSeverity.Information;
@@ -7578,6 +7613,27 @@ export class XsltTokenDiagnostics {
 	public static readonly recordFieldReferences = new Map<string, FieldReference[]>();
 	// XPath 4.0 enumeration types: the string literals that are enumeration values, for each document
 	public static readonly enumValueReferences = new Map<string, EnumValueReference[]>();
+	// the keys of built-in functions' options maps, and system-property() names, for each document - for hover
+	public static readonly optionReferences = new Map<string, OptionReference[]>();
+
+	// each string literal that's the argument of system-property(), e.g. system-property('xsl:version'): a name in the XSLT
+	// namespace that isn't a system property is reported, as the function returns '' for it
+	private static checkSystemPropertyNames(tokens: BaseToken[], xsltPrefix: string, problemTokens: BaseToken[]) {
+		tokens.forEach((token, index) => {
+			if (token.tokenType !== TokenLevelState.string || tokens[index - 1]?.charType !== CharLevelState.lB || tokens[index + 1]?.charType !== CharLevelState.rB ||
+				tokens[index - 2]?.tokenType !== TokenLevelState.function || !FunctionOptions.isSystemPropertyFunction(tokens[index - 2].value)) {
+				return;
+			}
+			const literal = RecordTypes.decodeReferences(token.value).text;
+			const name = /^(['"])(.*)\1$/.exec(literal)?.[2].trim();
+			const found = name ? FunctionOptions.systemProperty(name, xsltPrefix) : undefined;
+			if (found?.property) {
+				RecordTypes.optionReferences.push({ token, markdown: FunctionOptions.systemPropertyMarkdown(name!, found.property) });
+			} else if (found?.unknown) {
+				problemTokens.push({ ...token, error: ErrorType.SystemPropertyUnknown, value: name! });
+			}
+		});
+	}
 	// the 'as' attributes of the xsl:item-type declarations, for each document
 	public static readonly itemTypeAsRanges = new Map<string, ItemTypeAsRange[]>();
 
@@ -7585,7 +7641,7 @@ export class XsltTokenDiagnostics {
 	// which would have this one's references until it's checked
 	public static forgetDocument(uri: vscode.Uri) {
 		const key = uri.toString();
-		[XsltTokenDiagnostics.recordFixes, XsltTokenDiagnostics.recordFieldReferences, XsltTokenDiagnostics.enumValueReferences, XsltTokenDiagnostics.itemTypeAsRanges]
+		[XsltTokenDiagnostics.recordFixes, XsltTokenDiagnostics.recordFieldReferences, XsltTokenDiagnostics.enumValueReferences, XsltTokenDiagnostics.itemTypeAsRanges, XsltTokenDiagnostics.optionReferences]
 			.forEach((byDocument: Map<string, unknown>) => byDocument.delete(key));
 	}
 

@@ -2018,6 +2018,15 @@ export enum ErrorType {
     TextLooksLikeTvt,
     // the integer literal argument of char() or codepoints-to-string() isn't an XML character, e.g. char(0x1F)
     CodepointNotXMLChar,
+    // a key of a built-in function's options map that isn't one of its options: an error (syntax extensions on), or
+    // ignored by Saxon
+    OptionUnknown,
+    OptionUnknownIgnored,
+    // an option's value that isn't allowed, or a literal of the wrong type
+    OptionValueUnknown,
+    OptionValueType,
+    // a system-property() name in the XSLT namespace that isn't a system property
+    SystemPropertyUnknown,
     // a name in use-character-maps that no xsl:character-map declares, and an xsl:character-map name declared twice
     CharacterMapNameUnresolved,
     DuplicateCharacterMapName,

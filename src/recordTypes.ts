@@ -7,6 +7,7 @@
  * - a map may have entries that are not fields of the record
  */
 import { BaseToken, CharLevelState, ErrorType, TokenLevelState } from './xpLexer';
+import { FunctionOption, FunctionOptions } from './functionOptions';
 import { XslLexer } from './xslLexer';
 
 export interface RecordField {
@@ -17,12 +18,23 @@ export interface RecordField {
 	// the document offsets of the field's name and type in its declaration, where known - for go to definition
 	nameOffset?: number;
 	typeOffset?: number;
+	// for the options of a built-in function, e.g. parse-json(): the option
+	option?: FunctionOption & { functionName: string };
 }
 
 export interface RecordType {
 	// the named item type, or the record(...) type itself, for messages
 	name: string;
 	fields: RecordField[];
+	// the options of a built-in function, e.g. 'parse-json'
+	optionsOf?: string;
+}
+
+// a key of a built-in function's options map, e.g. 'liberal' in parse-json($json, map { 'liberal': true() }), or a
+// property name of system-property() - for hover
+export interface OptionReference {
+	token: BaseToken;
+	markdown: string;
 }
 
 // for checking function call arguments: a parameter's declared type, and the declared types of variable references and
@@ -159,6 +171,8 @@ export class RecordTypes {
 	public static fieldReferences: FieldReference[] = [];
 	// the string literals matched to enumeration values in the document being processed
 	public static enumValueReferences: EnumValueReference[] = [];
+	// the keys of built-in functions' options maps found by checkOptionArguments, and system-property() names
+	public static optionReferences: OptionReference[] = [];
 	// the 'as' attributes of the xsl:item-type declarations in the document being processed
 	public static itemTypeAsRanges: ItemTypeAsRange[] = [];
 
@@ -1343,15 +1357,110 @@ export class RecordTypes {
 			return !(isDouble && (type === 'xs:decimal' || type === 'xs:float'));
 		} else if (RecordTypes.stringTypes.includes(type)) {
 			return !isNumber;
-		} else if (type === 'xs:boolean') {
+		} else if (type === 'xs:boolean' || type === 'xs:QName') {
+			// a string isn't converted to a QName, e.g. 'main' for QName('', 'main')
+			return !isString && !isNumber;
+		} else if (/^(function|fn|map|array|node|element|document-node)\s*\(/.test(type)) {
 			return !isString && !isNumber;
 		}
 		return true;
 	}
 
+	// checks each map constructor that's the options argument of a built-in function, e.g. parse-json($json, map {
+	// 'liberal': true() }), against the options Saxon declares for it: an option it doesn't recognize - an error when
+	// unknownIsError, as with syntax extensions on, else a warning, as Saxon ignores it - a value that isn't allowed, and a
+	// literal of the wrong type. A key that isn't a string literal, e.g. a QName for a vendor's option, isn't checked
+	public static checkOptionArguments(tokens: BaseToken[], unknownIsError: boolean, problemTokens: BaseToken[]) {
+		const realTokens = tokens.filter((t) => t.tokenType !== TokenLevelState.comment);
+		realTokens.forEach((t, start) => {
+			const isMapStart = (t.tokenType === TokenLevelState.operator && t.value === 'map' && realTokens[start + 1]?.charType === CharLevelState.lBr) ||
+				((t.charType === CharLevelState.lBr || (t.charType === CharLevelState.dSep && t.value === '{}')) && !(realTokens[start - 1]?.tokenType === TokenLevelState.operator && realTokens[start - 1].value === 'map'));
+			if (!isMapStart) {
+				return;
+			}
+			const before = realTokens[start - 1];
+			const isArgumentStart = !!before && ((before.charType === CharLevelState.lB && realTokens[start - 2]?.tokenType === TokenLevelState.function) ||
+				(before.charType === CharLevelState.sep && before.value === ',') || before.value === ':=');
+			const end = RecordTypes.mapConstructorEnd(realTokens, start);
+			const after = realTokens[end + 1];
+			const isWholeArgument = !!after && (after.charType === CharLevelState.rB || (after.charType === CharLevelState.sep && after.value === ','));
+			if (!isArgumentStart || end < 0 || !isWholeArgument) {
+				return;
+			}
+			const argument = RecordTypes.callArgument(realTokens, start);
+			const record = argument ? FunctionOptions.record(argument.name, argument.position + (RecordTypes.hasArrowOperand(realTokens, start) ? 1 : 0), argument.keyword) : undefined;
+			if (record) {
+				RecordTypes.checkOptionsMap(realTokens, start, end, record, unknownIsError, problemTokens);
+			}
+		});
+	}
+
+	// whether the function call with the argument starting at tokens[argStart] has an arrow operator's operand as its
+	// first argument, e.g. $json => parse-json({ ... })
+	public static hasArrowOperand(tokens: BaseToken[], argStart: number) {
+		let depth = 0;
+		for (let i = argStart - 1; i > -1; i--) {
+			if (RecordTypes.isCloseBracket(tokens[i])) {
+				depth++;
+			} else if (RecordTypes.isOpenBracket(tokens[i]) && depth-- === 0) {
+				const arrow = tokens[i - 2];
+				return arrow?.tokenType === TokenLevelState.operator && (arrow.value === '=>' || arrow.value === '=!>');
+			}
+		}
+		return false;
+	}
+
+	private static checkOptionsMap(tokens: BaseToken[], start: number, end: number, record: RecordType, unknownIsError: boolean, problemTokens: BaseToken[]) {
+		const map = RecordTypes.parseMapConstructor(tokens, start, end, true);
+		if (!map) {
+			return;
+		}
+		const keys = map.entries.map((e) => e.key);
+		map.entries.forEach((entry) => {
+			const { keyToken } = entry;
+			const field = record.fields.find((f) => f.name === entry.key);
+			const functionName = record.optionsOf!;
+			if (!field?.option) {
+				const alternatives = RecordTypes.closestNames(entry.key, record.fields.map((f) => f.name).filter((name) => !keys.includes(name)));
+				const recordFix = alternatives.length > 0 ? { line: keyToken.line, character: keyToken.startCharacter + 1, text: '', end: { line: keyToken.line, character: keyToken.startCharacter + keyToken.length - 1 }, alternatives } : undefined;
+				problemTokens.push({ ...RecordTypes.problemToken(keyToken, unknownIsError ? ErrorType.OptionUnknown : ErrorType.OptionUnknownIgnored, entry.key, functionName), recordFix });
+				return;
+			}
+			const { option } = field;
+			RecordTypes.optionReferences.push({ token: keyToken, markdown: FunctionOptions.markdown(functionName, option) });
+			const nested = FunctionOptions.nestedRecord(option);
+			const nestedEnd = nested ? RecordTypes.mapConstructorEnd(tokens, entry.valueStart) : -1;
+			if (nested && nestedEnd === entry.valueEnd) {
+				RecordTypes.checkOptionsMap(tokens, entry.valueStart, entry.valueEnd, nested, unknownIsError, problemTokens);
+				return;
+			}
+			if (entry.valueStart !== entry.valueEnd) {
+				return;
+			}
+			const valueToken = tokens[entry.valueStart];
+			const enumValues = option.type.startsWith('enum(') ? RecordTypes.resolveEnum(option.type, new Map()) : undefined;
+			const literal = valueToken.tokenType === TokenLevelState.string ? RecordTypes.decodeReferences(valueToken.value).text : '';
+			if (enumValues && /^(['"]).*\1$/.test(literal)) {
+				const quote = literal.charAt(0);
+				const value = literal.substring(1, literal.length - 1).split(quote + quote).join(quote);
+				if (!enumValues.includes(value) && !(option.allowPrefixed && value.includes(':'))) {
+					problemTokens.push(RecordTypes.problemToken(valueToken, ErrorType.OptionValueUnknown, value, functionName, option.name, enumValues.join(', '), option.errorCode ?? 'XPTY0004'));
+				}
+			} else if (!enumValues && !RecordTypes.isLiteralAllowed(valueToken, option.type)) {
+				// a string allowed as well as the type, e.g. '#unnamed' for a mode
+				const stringValue = /^(['"])(.*)\1$/.exec(literal)?.[2];
+				if (stringValue === undefined || !option.stringValues?.includes(stringValue)) {
+					const typeText = option.type + (option.stringValues ? `, or ${option.stringValues.map((v) => `'${v}'`).join(', ')}` : '');
+					problemTokens.push(RecordTypes.problemToken(valueToken, ErrorType.OptionValueType, option.name, functionName, typeText));
+				}
+			}
+		});
+	}
+
 	// the entries of a map constructor with string literal keys spanning tokens[start..end], e.g. map { 'a': 1 } or { 'a': 1 } -
-	// undefined if it's not one, or any key is not a string literal
-	public static parseMapConstructor(tokens: BaseToken[], start: number, end: number): { startToken: BaseToken, entries: MapEntry[] } | undefined {
+	// undefined if it's not one, or any key is not a string literal - unless lenient, when an entry with another key, e.g.
+	// a QName, or a map merge without ':', is left out
+	public static parseMapConstructor(tokens: BaseToken[], start: number, end: number, lenient = false): { startToken: BaseToken, entries: MapEntry[] } | undefined {
 		if (start > end) {
 			return undefined;
 		}
@@ -1377,13 +1486,15 @@ export class RecordTypes {
 				if (j === end && entryStart === j && entries.length === 0) {
 					break; // empty map
 				}
-				if (colonIndex !== entryStart + 1) {
-					return undefined; // no ':' (map merge), or a key that isn't a single token
-				}
 				const keyToken = tokens[entryStart];
-				const isStringKey = keyToken.tokenType === TokenLevelState.mapKey || keyToken.tokenType === TokenLevelState.string;
-				if (!isStringKey || !/^(['"]).*\1$/.test(keyToken.value) || colonIndex + 1 > j - 1) {
-					return undefined;
+				const isStringKey = keyToken?.tokenType === TokenLevelState.mapKey || keyToken?.tokenType === TokenLevelState.string;
+				if (colonIndex !== entryStart + 1 || !isStringKey || !/^(['"]).*\1$/.test(keyToken.value) || colonIndex + 1 > j - 1) {
+					if (!lenient) {
+						return undefined; // no ':' (map merge), or a key that isn't a single string literal token
+					}
+					entryStart = j + 1;
+					colonIndex = -1;
+					continue;
 				}
 				entries.push({ keyToken, key: keyToken.value.substring(1, keyToken.value.length - 1), valueStart: colonIndex + 1, valueEnd: j - 1 });
 				entryStart = j + 1;

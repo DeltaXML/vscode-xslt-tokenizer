@@ -28,6 +28,7 @@ import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { RecordField, RecordType, RecordTypes, TemplateParamType } from './recordTypes';
+import { FunctionOptions } from './functionOptions';
 import { XdocNotes } from './xdocNote';
 import { PackageScope } from './packageScope';
 import { ItemTypeSupport } from './itemTypeSupport';
@@ -1471,6 +1472,27 @@ export class XsltTokenCompletions {
 		return undefined;
 	}
 
+	// within the string literal argument of system-property(), e.g. system-property('|'): the system properties in the
+	// XSLT namespace, with the document's prefix for it - undefined if it's not such a position
+	public static getSystemPropertyCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const before = document.lineAt(position.line).text.substring(0, position.character);
+		const match = /\bsystem-property\(\s*(['"])([^'"]*)$/.exec(before);
+		if (!match) {
+			return undefined;
+		}
+		const prefix = RecordTypes.xsltPrefix(document.getText()) || 'xsl';
+		const range = new vscode.Range(position.translate(0, -match[2].length), position);
+		return FunctionOptions.systemProperties.map((property, index) => {
+			const name = `${prefix}:${property.name}`;
+			const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Constant);
+			item.range = range;
+			item.detail = 'system property';
+			item.documentation = new vscode.MarkdownString(FunctionOptions.systemPropertyMarkdown(name, property));
+			item.sortText = String(index).padStart(4, '0');
+			return item;
+		});
+	}
+
 	// XPath 4.0: at the start of a new entry in a map constructor, e.g. after '{' or ',', the fields of the record type
 	// that aren't yet entries - for the select of an element declared with a record type, such as xsl:variable, or an
 	// xsl:sequence that is the result of an xsl:function declared with one - undefined if it's not such a position
@@ -1502,9 +1524,9 @@ export class XsltTokenCompletions {
 		const firstOffset = document.offsetAt(new vscode.Position(allTokens[first].line, allTokens[first].startCharacter));
 		const selectElementStart = document.getText().lastIndexOf('<', firstOffset);
 		const isSelectElement = XsltTokenDiagnostics.xsltPatternOf(/^<xsl:select(?:\s[^<>]*)?>\s*$/, document).test(document.getText().substring(selectElementStart, firstOffset));
-		if (attributeName !== 'select' && !isSelectElement) {
-			return undefined;
-		}
+		// the options of a built-in function, e.g. parse-json($json, {, are completed in any XPath expression - a record
+		// type only in a select
+		const isSelect = attributeName === 'select' || isSelectElement;
 		let xpathTokens = allTokens.slice(first, last);
 		let xpathCursor = cursorIndex - first;
 		const cursorToken = allTokens[cursorIndex];
@@ -1520,9 +1542,15 @@ export class XsltTokenCompletions {
 			return undefined;
 		}
 		const text = document.getText();
-		const attributeOffset = isSelectElement ? selectElementStart + 1 : document.offsetAt(new vscode.Position(attributeNameToken!.line, attributeNameToken!.startCharacter));
 		const globals = globalInstructionData.concat(importedInstructionData);
 		const itemTypes = XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData);
+		// a built-in function's options argument, e.g. parse-json($json, { or serialize($x, map { 'method': 'json', |
+		const optionsArgument = RecordTypes.callArgument(xpathTokens, entryPosition.outerStart);
+		const optionsRecord = optionsArgument ? FunctionOptions.record(optionsArgument.name, optionsArgument.position + (RecordTypes.hasArrowOperand(xpathTokens, entryPosition.outerStart) ? 1 : 0), optionsArgument.keyword) : undefined;
+		if (!isSelect && !optionsRecord) {
+			return undefined;
+		}
+		const attributeOffset = isSelectElement ? selectElementStart + 1 : attributeNameToken ? document.offsetAt(new vscode.Position(attributeNameToken.line, attributeNameToken.startCharacter)) : firstOffset;
 		let declaredType: string | undefined;
 		const beforeMap = xpathTokens[entryPosition.outerStart - 1];
 		const letTypeRange = beforeMap?.value === ':=' ? RecordTypes.letBindingTypeRange(xpathTokens, entryPosition.outerStart - 1) : undefined;
@@ -1543,10 +1571,11 @@ export class XsltTokenCompletions {
 			const argument = RecordTypes.callArgument(xpathTokens, entryPosition.outerStart);
 			declaredType = argument ? XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Function, argument.name, argument.arity, argument.position, argument.keyword) : undefined;
 		}
-		let record = declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
+		let record = optionsRecord ?? (declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined);
 		for (const key of entryPosition.keyPath) {
 			const field = record?.fields.find((f) => f.name === key);
-			record = field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
+			// an option whose value is another function's options, e.g. transform's serialization-params
+			record = field?.option ? FunctionOptions.nestedRecord(field.option) : field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
 		}
 		if (!record) {
 			return undefined;
@@ -1571,7 +1600,7 @@ export class XsltTokenCompletions {
 		// an empty map constructor: the whole map, with a placeholder for each value
 		const wholeMaps: vscode.CompletionItem[] = [];
 		const isEmptyMap = xpathTokens[xpathCursor - 1]?.charType === CharLevelState.lBr && xpathTokens[xpathCursor]?.charType === CharLevelState.rBr;
-		if (isEmptyMap && record.fields.length > 0) {
+		if (isEmptyMap && record.fields.length > 0 && !record.optionsOf) {
 			const hasOptional = record.fields.some((field) => field.optional);
 			[false, true].filter((allFields) => !allFields || hasOptional).forEach((allFields) => {
 				const tabStop = { next: 1 };
@@ -1586,7 +1615,8 @@ export class XsltTokenCompletions {
 				wholeMaps.push(item);
 			});
 		}
-		const documentation = XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData);
+		const recordDocumentation = XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData);
+		const documentation = (field: RecordField) => field.option ? new vscode.MarkdownString(FunctionOptions.markdown(field.option.functionName, field.option)) : recordDocumentation(field);
 		return wholeMaps.concat(record.fields.filter((field) => !entryPosition.usedKeys.includes(field.name)).map((field, index) => {
 			const item = new vscode.CompletionItem(`${quote}${field.name}${quote}`, vscode.CompletionItemKind.Field);
 			const key = `${quote}${field.name.replace(/[$}\\]/g, '\\$&')}${quote}`;
@@ -1594,7 +1624,7 @@ export class XsltTokenCompletions {
 			if (stringRange) {
 				item.range = stringRange;
 			}
-			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
+			item.detail = (field.type ?? 'item()*') + (field.option ? (field.option.since === '4.0' ? ' - XPath 4.0' : field.option.since === 'Saxon' ? ' - Saxon' : '') : field.optional ? ' (optional)' : '');
 			item.documentation = documentation(field);
 			// required fields first, in declaration order
 			item.sortText = (field.optional ? '1' : '0') + String(index).padStart(4, '0');

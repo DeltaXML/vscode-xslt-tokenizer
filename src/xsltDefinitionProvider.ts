@@ -636,7 +636,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				return;
 			}
 						// XPath 4.0 record types: the next entry of a map constructor
-			const recordEntries = hasItemTypes ? XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
+			// - and the options of a built-in function, e.g. parse-json($json, map { |, in any XSLT version - or a system-property() name
+			const recordEntries = XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) ??
+				XsltTokenCompletions.getSystemPropertyCompletions(document, position);
 			// an empty select, for an enumeration type or xs:boolean
 			// or the test of an xsl:when in an xsl:switch on an enumeration type - xsl:switch is XSLT 4.0
 			const selectValues = !recordEntries && hasItemTypes ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) ??
