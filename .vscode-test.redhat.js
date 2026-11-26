@@ -22,7 +22,7 @@ fs.mkdirSync(workspace, { recursive: true });
 fs.cpSync(source, path.join(extensionsDir, path.basename(source)), { recursive: true });
 
 module.exports = defineConfig({
-	files: 'out/test/redhat/**/*.test.js',
+	files: process.env.REDHAT_TEST_FILES ?? 'out/test/redhat/**/*.test.js',
 	workspaceFolder: workspace,
 	launchArgs: [`--extensions-dir=${extensionsDir}`],
 	mocha: { timeout: 60000 }

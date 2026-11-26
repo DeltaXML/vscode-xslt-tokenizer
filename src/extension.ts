@@ -85,6 +85,7 @@ import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
 import { FunctionOptionsHover } from './functionOptionsHover';
 import { RedHatXml } from './redHatXml';
+import { XmlCompletions } from './xmlCompletions';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 import { XsltNodeRules } from './xsltNodeRules';
 import { XsltEmptySteps } from './xsltEmptySteps';
@@ -525,7 +526,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, { provideCompletionItems: (document, position) => XSpecScenario.rootCompletions(document, position) }, '<'));
 	// x:like's label: the labels of the scenarios it may use
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, { provideCompletionItems: (document, position) => XSpecLike.completions(document, position) }, '"', '\''));
-	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xml' }, xmlDefinitionProvider));
+	// an XML file: the names and values the document uses, not general snippets (see XmlCompletions)
+	XmlCompletions.activate(context);
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xpath' }, xpathDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));

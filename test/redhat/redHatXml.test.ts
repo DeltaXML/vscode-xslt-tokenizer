@@ -106,4 +106,25 @@ suite('lint_file with Red Hat\'s XML extension', () => {
 			await configuration.update('enabled', undefined, vscode.ConfigurationTarget.Global);
 		}
 	});
+
+	suite('completion: the names the document uses, unless Red Hat has a schema for it', () => {
+		const ours = async (name: string, text: string, trigger?: string) => {
+			const file = write(workspace, name, text.replace('|', ''));
+			const document = await vscode.workspace.openTextDocument(file);
+			const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(text.indexOf('|')), trigger);
+			return list.items.filter((i) => /^(element|attribute) - /.test(i.detail ?? '')).map((i) => typeof i.label === 'string' ? i.label : i.label.label);
+		};
+		const learned = `<orders>\n  <order id="1"><item>1</item></order>\n  <order id="2">\n    MARK\n  </order>\n</orders>\n`;
+
+		test('no schema: element and attribute names from the document', async () => {
+			assert.deepEqual(await ours('learn-elements.xml', learned.replace('MARK', '<|'), '<'), ['item']);
+			assert.deepEqual(await ours('learn-attributes.xml', learned.replace('MARK', '<order |/>')), ['id']);
+		});
+
+		test('a schema: Red Hat\'s - none of ours', async () => {
+			const withSchema = (body: string) => `<order xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="order.xsd" id="a">\n  <item>1</item>\n  ${body}\n</order>\n`;
+			assert.isEmpty(await ours('schema-elements.xml', withSchema('<|'), '<'));
+			assert.isEmpty(await ours('schema-attributes.xml', withSchema('<item |/>')));
+		});
+	});
 });
