@@ -35,9 +35,9 @@ run commands - rather than guessing those commands.
 | `find_declaration` | Read one declaration's parameters, types and documentation (its `xsl:note`, or a comment above it) |
 | `find_references` | Find every use of a component, including the XSpec scenarios that test it - **before changing or renaming** it |
 | `module_imports` | See the import/include/package tree and import precedence |
-| `lint_file` / `lint_files` | Check one module, XSpec file or Schematron schema, or a folder, as the Problems view does - **after every edit** |
+| `lint_file` / `lint_files` | Check one module, XSpec file or Schematron schema, or a folder, as the Problems view does - **after every edit**. `lint_file` also checks an XML file you write or change, e.g. test data or a sample source: its well-formedness, and its schema or DTD with Red Hat's XML extension, if installed |
 | `evaluate_xpath` | Try an XPath expression on the stylesheet's source XML before relying on it |
-| `xpath_function` | Look up a built-in function's signature, for XPath 3.1 or 4.0 |
+| `xpath_function` | Look up a built-in function's signature, for XPath 3.1 or 4.0 - with the options of an options map, e.g. `serialize`'s |
 | `describe_type` | Read an XSLT 4.0 record or enumeration item type |
 | `run_configuration` | Get the user's Saxon jar and edition, XML context file, parameters, catalog, packages - and for a stylesheet, the exact command that runs it |
 | `test_configuration` | For an XSpec file: the commands that compile and run its tests as the Test Explorer does, and the command that summarises the result as text |

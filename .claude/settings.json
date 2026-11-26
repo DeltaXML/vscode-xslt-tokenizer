@@ -150,7 +150,9 @@
       "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Built-in function options\")",
       "Bash(grep -v -E \"AgentHost|DEP0169|trace-deprecation|^\\\\[|^Via|^$|shared storage|update#\")",
       "Bash(grep -n \"} else if \\(!enumValues && !RecordTypes.isLiteralAllowed\\(valueToken, option.type\\)\\) {\" src/recordTypes.ts)",
-      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Built-in function options|the template rules each input node\")"
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Built-in function options|the template rules each input node\")",
+      "Bash(grep -n \"File not found: \\\\${resolved}\\\\`, true\\);\" src/mcp/xsltMcpTools.ts)",
+      "Bash(node scripts/run-vscode-tests.js --config .vscode-test.redhat.js --extensionDevelopmentPath=.)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

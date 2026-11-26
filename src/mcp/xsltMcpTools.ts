@@ -19,6 +19,7 @@ import { XsltTokenDefinitions } from '../xsltTokenDefintions';
 import { RecordTypes } from '../recordTypes';
 import { XPathFunctionDetails } from '../xpathFunctionDetails';
 import { FunctionOptions } from '../functionOptions';
+import { RedHatXml, RedHatXmlResult } from '../redHatXml';
 import { XdocNote, XdocNotes } from '../xdocNote';
 import { XSpecTestNode, XSpecTests } from '../xspecTests';
 
@@ -191,6 +192,19 @@ export class XsltMcpTools {
 	// topLevelStylesheet: one to check an XSLT module with, instead of the one found for it - e.g. one outside the
 	// workspace, or another of those that include it
 	public async lintFile(filePath: string, minSeverity: Severity = 'hint', topLevelStylesheet?: string): Promise<ToolResult> {
+		// an XML file: any file VS Code opens as XML, e.g. .xml, .xsd or .svg
+		const resolved = XsltMcpTools.resolve(filePath);
+		if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+			return XsltMcpTools.text(`File not found: ${resolved}`, true);
+		}
+		if (!/\.(xslt?|xspec|sch)$/i.test(resolved)) {
+			const xmlDocument = await DiskTextDocument.current(vscode.Uri.file(resolved));
+			if (xmlDocument.languageId === 'xml') {
+				return topLevelStylesheet ? XsltMcpTools.text(`A top-level stylesheet is only for an XSLT module, not an XML file: ${resolved}`, true) :
+					this.lintXml(xmlDocument, minSeverity);
+			}
+			return XsltMcpTools.text(`Not an XSLT, XSpec, Schematron or XML file - VS Code opens it as '${xmlDocument.languageId}': ${resolved}`, true);
+		}
 		const document = await XsltMcpTools.open(filePath, true, true);
 		if (typeof document === 'string') {
 			return XsltMcpTools.text(document, true);
@@ -206,6 +220,46 @@ export class XsltMcpTools {
 		const withTopLevel = XsltMcpTools.withTopLevel(topLevel);
 		return XsltMcpTools.text(lines.length === 0 ? `No problems: ${document.fileName}${withTopLevel}` :
 			`${lines.length} problem${lines.length === 1 ? '' : 's'} in ${document.fileName}${withTopLevel}:\n${lines.join('\n')}`);
+	}
+
+	// an XML file's problems: the extension's own checks - its well-formedness - and those of Red Hat's XML extension, if
+	// it's installed, which validates it against its schema or DTD too. A problem both report on a line is given once, as
+	// Red Hat's. The last line says what was checked
+	private async lintXml(document: vscode.TextDocument, minSeverity: Severity): Promise<ToolResult> {
+		const ours = (await this.modules.problems(document)) ?? [];
+		const redHat = await RedHatXml.problems(document.uri, document.getText());
+		const redHatProblems = redHat.status === 'validated' ? redHat.problems : [];
+		const redHatLines = new Set(redHatProblems.map((d) => d.range.start.line));
+		const worst = XsltMcpTools.severities.indexOf(minSeverity);
+		const problems = ours.filter((d) => !redHatLines.has(d.range.start.line)).map((d) => ({ d, by: '' }))
+			.concat(redHatProblems.map((d) => ({ d, by: ' (Red Hat XML)' })))
+			.filter(({ d }) => d.severity <= worst).sort((a, b) => a.d.range.start.compareTo(b.d.range.start));
+		// Red Hat's message: its first line - the lines after, e.g. 'Code:', give more detail or a link
+		const message = (d: vscode.Diagnostic, by: string) => by ? d.message.split('\n')[0].trim() : d.message.replace(/\s*\n\s*/g, ' ');
+		const lines = problems.map(({ d, by }) => `${d.range.start.line + 1}:${d.range.start.character + 1} ${XsltMcpTools.severities[d.severity]} ${message(d, by)}${by}`);
+		if (document.getText().trim() === '') {
+			lines.unshift('1:1 error The file is empty: it isn\'t a well-formed XML document');
+		}
+		const checked = XsltMcpTools.xmlChecked(redHat);
+		return XsltMcpTools.text((lines.length === 0 ? `No problems: ${document.fileName}` :
+			`${lines.length} problem${lines.length === 1 ? '' : 's'} in ${document.fileName}:\n${lines.join('\n')}`) + `\n\n${checked}`);
+	}
+
+	// what an XML file was checked with, for lint_file's last line
+	private static xmlChecked(redHat: RedHatXmlResult): string {
+		switch (redHat.status) {
+			case 'not-installed':
+				return 'Checked for well-formedness only: Red Hat\'s XML extension (redhat.vscode-xml), which validates XML against its schema or DTD, isn\'t installed';
+			case 'disabled':
+				return 'Checked for well-formedness only: Red Hat\'s XML extension is installed, but its validation is off (the xml.validation.enabled setting)';
+			case 'stale':
+				return 'Checked for well-formedness only, as the file is on disk: VS Code has an older version of it open - it\'s outside the workspace folders, so it ' +
+					'isn\'t reloaded when it changes - and Red Hat\'s XML extension\'s problems would be for that version';
+			case 'validated':
+				return redHat.noGrammar ? 'Checked by the XSLT/XPath extension and Red Hat\'s XML extension: no schema or DTD is associated with the file, so for well-formedness only' :
+					redHat.waitedForNone ? 'Checked by the XSLT/XPath extension and Red Hat\'s XML extension, which reported no problems in the time waited - with the schema or DTD associated with the file, if any' :
+						'Checked by the XSLT/XPath extension and Red Hat\'s XML extension, which validates it against the schema or DTD associated with it';
+		}
 	}
 
 	// the folders and files lint_files leaves out, within the folder: node_modules, XSpec's generated test runners, hidden

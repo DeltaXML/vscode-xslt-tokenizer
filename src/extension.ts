@@ -84,6 +84,7 @@ import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
 import { FunctionOptionsHover } from './functionOptionsHover';
+import { RedHatXml } from './redHatXml';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 import { XsltNodeRules } from './xsltNodeRules';
 import { XsltEmptySteps } from './xsltEmptySteps';
@@ -254,7 +255,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const bpmnDiagnosticsCollection = vscode.languages.createDiagnosticCollection('bpmn');
 
 	// Red Hat's XML extension reports the same well-formedness problems for XML files, so ours aren't shown as well
-	const redHatXmlValidates = () => !!vscode.extensions.getExtension('redhat.vscode-xml') && vscode.workspace.getConfiguration('xml.validation').get<boolean>('enabled', true);
+	const redHatXmlValidates = () => RedHatXml.validates();
 	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection, () => !redHatXmlValidates());
 	const updateXmlDiagnostics = () => {
 		if (redHatXmlValidates()) {
@@ -806,7 +807,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// the MCP server for AI assistants, while XSLT.mcp.enabled is on - its tools check a document as when it's open
 	const mcpSymbolProvider = (document: vscode.TextDocument) => document.languageId === 'xslt' ? xsltSymbolProvider : document.languageId === 'xspec' ? xspecSymbolProvider : document.languageId === 'sch' ? schSymbolProvider : undefined;
 	const mcpServer = new XsltMcpServer(context.secrets, {
-		problems: (document, topLevel) => mcpSymbolProvider(document)?.diagnosticsFor(document, topLevel),
+		// and an XML file's: its well-formedness, also when Red Hat's XML extension shows those problems instead (see lint_file)
+		problems: (document, topLevel) => (document.languageId === 'xml' ? xmlSymbolProvider : mcpSymbolProvider(document))?.diagnosticsFor(document, topLevel),
 		declarations: (document, topLevel) => mcpSymbolProvider(document)?.declarationsFor(document, topLevel)
 	}, context.workspaceState, context.extensionUri);
 	// the problems of the files that aren't open, in the workspace or a folder - checked as the MCP tool lint_files does

@@ -264,11 +264,14 @@ export class XsltMcpServer {
 			'that imports or includes it, directly or indirectly - instead of the one found for it, e.g. one outside the workspace, or ' +
 			'another of the stylesheets that include it. Absolute, or relative to the project\'s folder (the first workspace folder, unless set up for another)');
 		mcp.registerTool('lint_file', {
-			title: 'Lint an XSLT, XSpec or Schematron file',
+			title: 'Lint an XSLT, XSpec, Schematron or XML file',
 			description: 'The problems in an XSLT module (.xsl, .xslt), XSpec file (.xspec) or Schematron schema (.sch), as the XSLT/XPath extension reports them in the ' +
 				'Problems panel - with its imports, includes and packages - whether or not the file is open in an editor. A module ' +
 				'that a top-level stylesheet imports or includes is checked with that stylesheet\'s declarations too: the one found ' +
-				'for it in the workspace, or topLevelStylesheet. Each problem is given as line:column (1-based), severity and message.',
+				'for it in the workspace, or topLevelStylesheet. Also an XML file (.xml, or another file VS Code opens as XML, e.g. .xsd): ' +
+				'its well-formedness, and - when Red Hat\'s XML extension is installed - its validation against the schema or DTD associated ' +
+				'with it, e.g. by xsi:schemaLocation, a DOCTYPE or an xml-model processing instruction; the last line says what was checked. ' +
+				'Each problem is given as line:column (1-based), severity and message.',
 			inputSchema: {
 				path: filePath,
 				minSeverity: minSeverity.optional().describe('Only problems of this severity or worse - all, if not given'),

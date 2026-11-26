@@ -15,7 +15,8 @@ import { RunConfiguration } from '../../src/mcp/runConfiguration';
 import { XPathEvaluate } from '../../src/mcp/xpathEvaluate';
 import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
-import { SchConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
+import { SchConfiguration, XMLConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
+import { revertAndCloseEditorsIn } from './testEditors';
 import { ImportIndex } from '../../src/importIndex';
 import { McpRoot } from '../../src/mcp/mcpRoot';
 
@@ -110,7 +111,9 @@ suite('MCP server', function () {
 	const symbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, null);
 	// a Schematron schema is checked by its own provider, as the extension does
 	const schematronProvider = new XsltSymbolProvider(SchConfiguration.configuration, null);
-	const providerFor = (document: vscode.TextDocument) => document.languageId === 'sch' ? schematronProvider : symbolProvider;
+	// and an XML file by the extension's XML provider, for its well-formedness
+	const xmlProvider = new XsltSymbolProvider(XMLConfiguration.configuration, null);
+	const providerFor = (document: vscode.TextDocument) => document.languageId === 'sch' ? schematronProvider : document.languageId === 'xml' ? xmlProvider : symbolProvider;
 	const server = new XsltMcpServer(memorySecrets(), { problems: (document, topLevel) => providerFor(document).diagnosticsFor(document, topLevel), declarations: (document, topLevel) => providerFor(document).declarationsFor(document, topLevel) });
 	let token = '';
 	let id = 0;
@@ -395,15 +398,43 @@ suite('MCP server', function () {
 		fs.rmSync(folder, { recursive: true, force: true });
 	});
 
+	test('lint_file: an XML file - its well-formedness, without Red Hat\'s XML extension (not installed for the tests)', async () => {
+		const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-mcp-xml-'));
+		const malformed = path.join(folder, 'order.xml');
+		fs.writeFileSync(malformed, '<order>\n  <item>1</items>\n</order>\n');
+		const linted = text(await call('lint_file', { path: malformed }));
+		assert.match(linted, /^2 problems in .*order\.xml:\n2:4 error XML: Start tag 'item' has no matching close tag\n2:12 error XML: Unexpected close tag 'items'\n\n/, linted);
+		assert.match(linted, /Checked for well-formedness only: Red Hat's XML extension \(redhat\.vscode-xml\).* isn't installed$/, linted);
+		const wellFormed = path.join(folder, 'ok.xml');
+		fs.writeFileSync(wellFormed, '<order>\n  <item>1</item>\n</order>\n');
+		assert.match(text(await call('lint_file', { path: wellFormed })), /^No problems: .*ok\.xml\n\nChecked for well-formedness only/);
+		// another file VS Code opens as XML, e.g. an XML Schema
+		const xsd = path.join(folder, 'order.xsd');
+		fs.writeFileSync(xsd, '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="order"></xs:schema>');
+		assert.match(text(await call('lint_file', { path: xsd })), /^1 problem in .*order\.xsd/);
+		// not XML
+		const json = path.join(folder, 'data.json');
+		fs.writeFileSync(json, '{}');
+		const notXml = await call('lint_file', { path: json });
+		assert.match(text(notXml), /^Not an XSLT, XSpec, Schematron or XML file - VS Code opens it as 'json'/);
+		assert.match(text(await call('lint_file', { path: malformed, topLevelStylesheet: main })), /only for an XSLT module, not an XML file/);
+		await revertAndCloseEditorsIn(folder);
+		fs.rmSync(folder, { recursive: true, force: true });
+	});
+
 	test('lint_file: an import problem', async () => {
 		assert.match(text(await call('lint_file', { path: lib })), /2:\d+ error .*missing\.xsl/);
 	});
 
-	test('lint_file: not an XSLT file, or not found', async () => {
-		const notXslt = await call('lint_file', { path: path.join(dir, 'data.xml') });
-		assert.isTrue(notXslt.message.result.isError);
-		assert.match(text(notXslt), /^Not an XSLT, XSpec or Schematron file/);
+	test('lint_file: not an XSLT, XSpec, Schematron or XML file, or not found', async () => {
+		const notXslt = path.join(dir, 'notes.txt');
+		fs.writeFileSync(notXslt, 'notes');
+		const result = await call('lint_file', { path: notXslt });
+		fs.rmSync(notXslt);
+		assert.isTrue(result.message.result.isError);
+		assert.match(text(result), /^Not an XSLT, XSpec, Schematron or XML file - VS Code opens it as 'plaintext'/);
 		assert.match(text(await call('lint_file', { path: path.join(dir, 'none.xsl') })), /^File not found/);
+		assert.match(text(await call('lint_file', { path: path.join(dir, 'none.xml') })), /^File not found/);
 	});
 
 	test('module_imports: from the top-level stylesheet, with the module marked', async () => {
