@@ -155,6 +155,11 @@ return string-join(sort(map:keys($counts)) ! ('/' || . || '  ' || count($counts(
 - **XSLT 4.0 features depend on the user's Saxon.** Saxon 13 supports much of 4.0 with `--allowSyntaxExtensions:on` (PE/EE) but
   not all - for example `xsl:record` and `xsl:record-type` aren't supported. If the linter accepts something and Saxon rejects
   it, believe Saxon, and say so to the user.
+- **Don't fetch the W3C specifications** (XSLT, XPath, Functions and Operators, Serialization): each is a single page of
+  megabytes, cut off long before most sections, and the 4.0 drafts are ahead of Saxon 13 - what they describe may be rejected
+  or ignored. Instead: `xpath_function` for a function's signature and options; `lint_file` for an instruction's attributes and
+  values, and the static rules; and for what an instruction or feature does, a small stylesheet run with the command from
+  `run_configuration` - Saxon's result, or its error with the code, is the answer for the user's setup.
 - Keep module-level changes small: one concern per stylesheet, and don't reformat parts of a stylesheet you weren't asked to change.
 
 ## What to tell the user
