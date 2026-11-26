@@ -149,4 +149,16 @@ suite('lint_file with Red Hat\'s XML extension', () => {
 			assert.include(found, 'XML Processing Instruction');
 		});
 	});
+
+	test('semantic tokens: ours for CDATA sections - Red Hat\'s XML extension has none of its own to take their place', async () => {
+		const file = write(workspace, 'cdata.xml', '<a>\n  <![CDATA[1 < 2]]>\n</a>\n');
+		const document = await vscode.workspace.openTextDocument(file);
+		const legend = await vscode.commands.executeCommand<vscode.SemanticTokensLegend>('vscode.provideDocumentSemanticTokensLegend', document.uri);
+		const tokens = await vscode.commands.executeCommand<vscode.SemanticTokens>('vscode.provideDocumentSemanticTokens', document.uri);
+		const types = [];
+		for (let i = 0; i < tokens.data.length; i += 5) {
+			types.push(legend.tokenTypes[tokens.data[i + 3]]);
+		}
+		assert.deepEqual(types, ['xmlPunctuation', 'xmlText', 'xmlPunctuation']);
+	});
 });

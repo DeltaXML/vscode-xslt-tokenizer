@@ -86,6 +86,7 @@ import { EntityReferences } from './entityReferences';
 import { FunctionOptionsHover } from './functionOptionsHover';
 import { RedHatXml } from './redHatXml';
 import { XmlCompletions } from './xmlCompletions';
+import { XmlSemanticTokens } from './xmlSemanticTokens';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 import { XsltNodeRules } from './xsltNodeRules';
 import { XsltEmptySteps } from './xsltEmptySteps';
@@ -1891,6 +1892,8 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xspec' }, new XsltSemanticTokensProvider(XSpecConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'bpmn' }, new XsltSemanticTokensProvider(XMLConfiguration.configuration), legend));
+	// an XML file: only its CDATA sections and namespace declarations - the rest keeps VS Code's XML grammar's colors (see XmlSemanticTokens)
+	XmlSemanticTokens.activate(context, legend);
 
 	const xpathDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xpath');
 	const xpathSemanticTokensProvider = new XPathSemanticTokensProvider(xpathDiagnosticsCollection);
