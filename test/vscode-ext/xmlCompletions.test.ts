@@ -116,4 +116,25 @@ suite('XML completion without a schema: the names the document uses', () => {
 		assert.notInclude(labels(items), 'orders');
 		assert.notInclude(labels(items), 'extra');
 	});
+
+	test('after <!: a comment - and within the root element, a CDATA section', async () => {
+		const inRoot = await completions(orders.replace('MARK', '<!|'), '!');
+		assert.deepEqual(labels(inRoot), ['<!-- -->', '<![CDATA[]]>']);
+		assert.strictEqual(insert(inRoot, '<!-- -->'), '-- ${1} -->${0}');
+		assert.deepEqual(labels(await completions('<!|\n<orders/>\n', '!')), ['<!-- -->']);
+	});
+
+	test('after <?: a processing instruction - and before the root, the XML declaration at the start, and an xml-model for a Schematron schema', async () => {
+		assert.deepEqual(labels(await completions('<?|\n<orders/>\n', '?')),
+			['<?xml version="1.0" encoding="UTF-8"?>', '<?xml-model href="…" ?> (Schematron)', '<?name value?>', '<?name?>']);
+		assert.deepEqual(labels(await completions('<?xml version="1.0"?>\n<?|\n<orders/>\n', '?')),
+			['<?xml-model href="…" ?> (Schematron)', '<?name value?>', '<?name?>']);
+		assert.deepEqual(labels(await completions(orders.replace('MARK', '<?|'), '?')), ['<?name value?>', '<?name?>']);
+		const model = await completions('<?|\n<orders/>\n', '?');
+		assert.strictEqual(insert(model, '<?xml-model href="…" ?> (Schematron)'), 'xml-model href="${1:rules.sch}" type="application/xml" schematypens="http://purl.oclc.org/dsdl/schematron"?>${0}');
+	});
+
+	test('not within a comment', async () => {
+		assert.isEmpty(await completions(orders.replace('MARK', '<!-- <!| -->'), '!'));
+	});
 });

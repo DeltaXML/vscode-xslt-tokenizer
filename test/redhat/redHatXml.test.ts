@@ -127,4 +127,26 @@ suite('lint_file with Red Hat\'s XML extension', () => {
 			assert.isEmpty(await ours('schema-attributes.xml', withSchema('<item |/>')));
 		});
 	});
+
+	suite('completion after <! and <?: not those Red Hat has', () => {
+		const details = async (name: string, text: string, trigger: string) => {
+			const file = write(workspace, name, text.replace('|', ''));
+			const document = await vscode.workspace.openTextDocument(file);
+			const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(text.indexOf('|')), trigger);
+			return list.items.map((i) => i.detail ?? '');
+		};
+
+		test('after <!: Red Hat\'s comment and CDATA section, not ours as well', async () => {
+			const found = await details('markup-bang.xml', '<orders>\n  <!|\n</orders>\n', '!');
+			assert.notInclude(found, 'XML comment');
+			assert.notInclude(found, 'CDATA section');
+		});
+
+		test('after <? before the root: Red Hat\'s XML declaration, not ours - but ours for a Schematron schema', async () => {
+			const found = await details('markup-pi.xml', '<?|\n<orders/>\n', '?');
+			assert.notInclude(found, 'XML declaration');
+			assert.include(found, 'associates a Schematron schema - for Schematron: Validate');
+			assert.include(found, 'XML Processing Instruction');
+		});
+	});
 });

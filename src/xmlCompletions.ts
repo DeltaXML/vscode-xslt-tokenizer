@@ -10,7 +10,7 @@
 import * as vscode from 'vscode';
 import { XMLConfiguration } from './languageConfigurations';
 import { XMLCharState, XSLTokenLevelState, XslLexer } from './xslLexer';
-import { RedHatXml } from './redHatXml';
+import { RedHatXml, redHatXmlId } from './redHatXml';
 
 // what's learned of an element name in a document: where it's used, with what, and its attributes' values
 interface ElementProfile {
@@ -65,6 +65,11 @@ export class XmlCompletions {
 			return undefined;
 		}
 		const offset = document.offsetAt(position);
+		// after '<!' or '<?': a comment, CDATA section or processing instruction, as in XSLT
+		const markup = XmlCompletions.markupCompletions(text, offset, position);
+		if (markup) {
+			return markup;
+		}
 		// the start tag the cursor is in, if any: from its '<' - with no '>' between, and not a comment, PI or end tag
 		const tagStart = text.lastIndexOf('<', offset - 1);
 		const inTag = tagStart > -1 && !text.substring(tagStart, offset).includes('>') && /^<[^!?/]/.test(text.substring(tagStart, tagStart + 2) + ' ') &&
@@ -382,6 +387,58 @@ export class XmlCompletions {
 		item.range = new vscode.Range(position.translate(0, -typed.length), position);
 		item.detail = detail;
 		return item;
+	}
+
+	// after '<!': an XML comment, or within the root element a CDATA section; after '<?': a processing instruction - and
+	// before the root element, an xml-model processing instruction associating a Schematron schema, and at the start of the
+	// file, the XML declaration. Undefined if the cursor isn't after either, e.g. in a comment. Red Hat's XML extension has
+	// its own comment, CDATA section and XML declaration - and DTD, XML Schema and stylesheet associations - so with it
+	// installed, these aren't offered too
+	private static markupCompletions(text: string, offset: number, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const before = text.substring(Math.max(0, offset - 50), offset);
+		const match = /<([!?])([\w.:[-]*)$/.exec(before);
+		if (!match) {
+			return undefined;
+		}
+		const markupStart = offset - match[0].length;
+		if (XmlCompletions.inCommentOrCData(text, markupStart)) {
+			return undefined;
+		}
+		const typed = match[2];
+		const range = new vscode.Range(position.translate(0, -typed.length), position);
+		const item = (label: string, snippet: string, detail: string, filterText: string, sortText: string) => {
+			const completion = new vscode.CompletionItem(label, vscode.CompletionItemKind.Constant);
+			completion.insertText = new vscode.SnippetString(snippet);
+			completion.range = range;
+			completion.detail = detail;
+			completion.filterText = filterText;
+			completion.sortText = sortText;
+			return completion;
+		};
+		const beforeRoot = !XmlCompletions.hasElementBefore(text, markupStart);
+		const hasRedHat = !!vscode.extensions.getExtension(redHatXmlId);
+		if (match[1] === '!') {
+			if (hasRedHat) {
+				return undefined;
+			}
+			const items = [item('<!-- -->', '-- ${1} -->${0}', 'XML comment', '--', '0')];
+			if (!beforeRoot) {
+				// character data is only allowed within an element
+				items.push(item('<![CDATA[]]>', '[CDATA[${1}]]>${0}', 'CDATA section', '[CDATA[', '1'));
+			}
+			return items;
+		}
+		const items: vscode.CompletionItem[] = [];
+		if (markupStart === 0 && !hasRedHat) {
+			items.push(item('<?xml version="1.0" encoding="UTF-8"?>', 'xml version="1.0" encoding="UTF-8"?>\n${0}', 'XML declaration', 'xml', '0'));
+		}
+		if (beforeRoot && !/<\?xml-model\s[^>]*schematron/.test(text)) {
+			items.push(item('<?xml-model href="…" ?> (Schematron)', 'xml-model href="${1:rules.sch}" type="application/xml" schematypens="http://purl.oclc.org/dsdl/schematron"?>${0}',
+				'associates a Schematron schema - for Schematron: Validate', 'xml-model', '1'));
+		}
+		items.push(item('<?name value?>', '${1:name} ${2:value}?>${0}', 'XML Processing Instruction', typed || 'name', '2'));
+		items.push(item('<?name?>', '${1:name}?>${0}', 'XML Processing Instruction - name-only', typed || 'name', '3'));
+		return items;
 	}
 
 	// ---------------------------------------------------------------- the cursor's context
