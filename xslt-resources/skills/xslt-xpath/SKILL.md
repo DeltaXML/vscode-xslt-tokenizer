@@ -50,11 +50,15 @@ read the summary each gives, not the exit code.
 ## Workflow
 
 1. **Find the XSLT version.** Check the stylesheet's `version` attribute (or `lint_file` on a neighbour). Never raise it unless asked,
-   and don't use 4.0 syntax in a 3.0 stylesheet. For a 4.0 function, check `xpath_function` with `xpathVersion: "4.0"`.
+   and don't use 4.0 syntax in a 3.0 stylesheet. Before using a function you're not certain of - its arguments, their order,
+   keyword names, or whether it's 4.0 only - check `xpath_function` (with `xpathVersion: "4.0"` for a 4.0 stylesheet): it's
+   cheaper than finding out at run time.
 2. **See what exists.** `list_declarations` for the module; `find_declaration` for the ones you may call. Reuse; don't write a
    second copy of a function that's already imported.
 3. **Check an XPath on real input.** `run_configuration` names the XML context file; `evaluate_xpath` on it for a `select`,
-   a `test` or a match pattern. See the notes below on namespaces.
+   a `test` or a match pattern. See the notes below on namespaces. For an expression that doesn't need the input - a regex,
+   a string or date function - give any XML file as `path` (e.g. the stylesheet itself) and test it on literal strings.
+   After declaring a record or enumeration type (`xsl:item-type`), `describe_type` shows how its fields were read.
 4. **Edit, then lint.** Run `lint_file` after each change and fix what it reports before moving on. For a module that another
    stylesheet imports or includes, lint it with its top-level stylesheet's declarations (it finds the one in the workspace; give
    `topLevelStylesheet` for another). Use `lint_files` after a change that touches several modules.
@@ -105,7 +109,13 @@ read the summary each gives, not the exit code.
   it for `lt` to avoid the escape: `lt`, `gt` and the other value comparisons are for operands you know are single items (they
   raise an error on a sequence, and compare differently), not a spelling of `<`.
 - Regular expressions (`matches`, `replace`, `tokenize`, `analyze-string`) are fine in XSLT 2.0 and later - use them where they're the
-  right tool.
+  right tool. When porting from another language, XPath's regex dialect differs: no `\b`, lookahead or lookbehind, flags go in the
+  flags argument (not `(?i)`), and `\w` is any character but punctuation, separators and controls - so symbols such as
+  `+`, `$` and `=` match it, but `_` doesn't (unlike Python, JavaScript or Java). Test a ported regex with `evaluate_xpath` on sample strings.
+- `{...}` in text is a text value template only with `expand-text="yes"` in scope (on a literal result element,
+  `xsl:expand-text="yes"`); otherwise it's output as written. Set it on the `xsl:stylesheet` if you use them throughout.
+- XML can't hold most control characters: not `&#x1;` (XML 1.0) and not `char(0x1F)` or `codepoints-to-string(1)` (FOCH0001).
+  If the source program uses one as a separator, pick a different character. In a comment, `--` isn't allowed.
 - **XSLT 4.0 features depend on the user's Saxon.** Saxon 13 supports much of 4.0 with `--allowSyntaxExtensions:on` (PE/EE) but
   not all - for example `xsl:record` and `xsl:record-type` aren't supported. If the linter accepts something and Saxon rejects
   it, believe Saxon, and say so to the user.

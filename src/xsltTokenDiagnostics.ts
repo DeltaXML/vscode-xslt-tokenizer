@@ -637,6 +637,8 @@ export class XsltTokenDiagnostics {
 		let innerXmlnsName: string | null = null;
 		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
 		let isXMLDeclaration = false;
+		// XML 1.1 allows character references to control characters, e.g. &#x1;
+		const isXML11 = document.lineCount > 0 && /^\s*<\?xml\s+version\s*=\s*["']1\.1["']/.test(document.lineAt(0).text);
 		let dtdStarted = false;
 		let dtdEnded = false;
 		// the entities the DOCTYPE declares - null if it has declarations that can't be seen
@@ -1114,6 +1116,18 @@ export class XsltTokenDiagnostics {
 						if (functionContent && !functionContent.hasContent && elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:function' && token.startCharacter > -1 &&
 							XsltTokenDiagnostics.getTextForToken(lineNumber, token, document).trim().length !== 0) {
 							functionContent.hasContent = true;
+						}
+						if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && elementStack.length > 0 && token.length === 1) {
+							// a '{' that isn't followed by XPath: expand-text is off - but the text after it looks like a
+							// text value template with a variable reference or a lookup, e.g. {$name} or {?key}
+							const nextToken = allTokens[index + 1];
+							const isTvt = !!nextToken && nextToken.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber;
+							const rest = document.lineAt(lineNumber).text.substring(token.startCharacter);
+							if (!isTvt && /^\{\s*[$?][\p{L}_][^{}<]*\}/u.test(rest)) {
+								token['error'] = ErrorType.TextLooksLikeTvt;
+								token['value'] = rest.substring(0, rest.indexOf('}') + 1);
+								problemTokens.push(token);
+							}
 						}
 						if (elementStack.length === 0 && token.startCharacter > -1) {
 							const tValue = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
@@ -2007,13 +2021,16 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 						} else {
 							const { error, entityName } = XsltTokenDiagnostics.validateEntityRef(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document),
-								dtdEnded, inheritedPrefixes, doctypeEntities.declared);
+								dtdEnded, inheritedPrefixes, doctypeEntities.declared, isXML11);
 							if (error !== undefined) {
 								token['error'] = error;
 								token['value'] = entityName;
 								problemTokens.push(token);
 							}
 						}
+						break;
+					case XSLTokenLevelState.xmlComment:
+						XsltTokenDiagnostics.checkCommentHyphens(lineNumber, token, document, problemTokens);
 						break;
 					case XSLTokenLevelState.processingInstrValue:
 						if (isXMLDeclaration) {
@@ -3434,6 +3451,7 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 						} else if (XsltTokenDiagnostics.validateNumber(token.value)) {
 							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+							XsltTokenDiagnostics.checkCodepointArgument(token, prevToken, allTokens[index - 2], allTokens[index + 1], problemTokens);
 						} else {
 							token.error = ErrorType.XPathNumber;
 							problemTokens.push(token);
@@ -3535,7 +3553,7 @@ export class XsltTokenDiagnostics {
 						if (token.error) {
 							problemTokens.push(token);
 						} else {
-							const { error, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, inheritedPrefixes, doctypeEntities.declared);
+							const { error, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, inheritedPrefixes, doctypeEntities.declared, isXML11);
 							if (error !== undefined) {
 								token['error'] = error;
 								token['value'] = entityName;
@@ -4370,7 +4388,57 @@ export class XsltTokenDiagnostics {
 	// - any well-formed name when the DOCTYPE has declarations that can't be seen (declaredEntities null): in an
 	// external DTD, or one a parameter entity reference brings in. The error, if any: an invalid name, or one that's
 	// not declared
-	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[], declaredEntities: Set<string> | null) {
+	// the only argument of char() or codepoints-to-string(), as an integer literal, e.g. char(0x1F): it must be a
+	// codepoint of an XML character, or the call fails at run time (FOCH0001)
+	private static checkCodepointArgument(token: BaseToken, prevToken: BaseToken | null | undefined, fnToken: BaseToken | undefined, nextToken: BaseToken | undefined, problemTokens: BaseToken[]) {
+		if (prevToken?.value !== '(' || nextToken?.value !== ')' || fnToken?.tokenType !== TokenLevelState.function) {
+			return;
+		}
+		const fnName = fnToken.value.startsWith('fn:') ? fnToken.value.substring(3) : fnToken.value;
+		if (fnName !== 'char' && fnName !== 'codepoints-to-string') {
+			return;
+		}
+		const digits = token.value.replace(/_/g, '');
+		let codepoint: number;
+		if (/^0[xX][0-9a-fA-F]+$/.test(digits)) {
+			codepoint = parseInt(digits.substring(2), 16);
+		} else if (/^0[bB][01]+$/.test(digits)) {
+			codepoint = parseInt(digits.substring(2), 2);
+		} else if (/^[0-9]+$/.test(digits)) {
+			codepoint = parseInt(digits, 10);
+		} else {
+			return;
+		}
+		if (!XsltTokenDiagnostics.isXMLChar(codepoint, false)) {
+			token.error = ErrorType.CodepointNotXMLChar;
+			token.value = fnName + '(' + token.value + ')';
+			problemTokens.push(token);
+		}
+	}
+
+	// a comment's line (a multi-line comment has a token per line): '--' isn't allowed within it, nor a '-' just before its '-->'
+	private static checkCommentHyphens(lineNumber: number, token: BaseToken, document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+		const start = text.startsWith('<!--') ? 4 : 0;
+		const end = text.endsWith('-->') && text.length - 3 >= start ? text.length - 3 : text.length;
+		const body = text.substring(start, end);
+		let at = body.indexOf('--');
+		if (at < 0 && end < text.length && body.endsWith('-')) {
+			at = body.length - 1;
+		}
+		if (at > -1) {
+			problemTokens.push({ line: token.line, startCharacter: token.startCharacter + start + at, length: 2, value: '--', tokenType: token.tokenType, error: ErrorType.CommentDoubleHyphen });
+		}
+	}
+
+	// a character XML allows: as a character reference, XML 1.1 allows control characters too (all but #x0)
+	public static isXMLChar(codepoint: number, isXML11: boolean) {
+		return (codepoint >= 0x20 && codepoint <= 0xD7FF) || codepoint === 0x9 || codepoint === 0xA || codepoint === 0xD ||
+			(codepoint >= 0xE000 && codepoint <= 0xFFFD) || (codepoint >= 0x10000 && codepoint <= 0x10FFFF) ||
+			(isXML11 && codepoint >= 0x1 && codepoint <= 0x1F);
+	}
+
+	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[], declaredEntities: Set<string> | null, isXML11: boolean) {
 		let error: ErrorType | undefined;
 		if (entityName.length > 2 && entityName.endsWith(';')) {
 			entityName = entityName.substring(1, entityName.length - 1);
@@ -4382,6 +4450,12 @@ export class XsltTokenDiagnostics {
 					validNumber = /^#[0-9]+$/.test(entityName);
 				}
 				error = validNumber ? undefined : ErrorType.EntityName;
+				if (validNumber) {
+					const codepoint = parseInt(entityName.charAt(1).toLowerCase() === 'x' ? entityName.substring(2) : entityName.substring(1), entityName.charAt(1).toLowerCase() === 'x' ? 16 : 10);
+					if (!XsltTokenDiagnostics.isXMLChar(codepoint, isXML11)) {
+						error = ErrorType.CharRefNotXMLChar;
+					}
+				}
 			} else if (XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, DocumentTypes.Other, inheritedPrefixes) !== NameValidationError.None) {
 				error = ErrorType.EntityName;
 			} else if (XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1 || (dtdEnded && (declaredEntities === null || declaredEntities.has(entityName)))) {
@@ -5611,6 +5685,20 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.EntityNotDeclaredNoDoctype:
 					msg = `XML: Entity '${tokenValue}' is not declared - only lt, gt, amp, quot and apos are predefined: declare others in a DOCTYPE, or use a character reference, e.g. &#160;`;
+					break;
+				case ErrorType.CharRefNotXMLChar:
+					msg = `XML: Character reference '&${tokenValue};' is to a character that isn't allowed in XML`;
+					break;
+				case ErrorType.CommentDoubleHyphen:
+					msg = `XML: '--' is not allowed inside a comment`;
+					break;
+				case ErrorType.CodepointNotXMLChar:
+					msg = `XPath: ${tokenValue} fails at run time (FOCH0001): the codepoint isn't an XML 1.0 character - unless the processor is set up for XML 1.1`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.TextLooksLikeTvt:
+					msg = `XSLT: '${tokenValue}' is output as written: expand-text is off here - for a text value template, add expand-text="yes" to an xsl: element, or xsl:expand-text="yes" to a literal result element`;
+					severity = vscode.DiagnosticSeverity.Information;
 					break;
 				case ErrorType.MultiRoot:
 					msg = 'XML: More than one root element';

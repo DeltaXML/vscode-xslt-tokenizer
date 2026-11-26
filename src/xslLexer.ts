@@ -450,9 +450,15 @@ export class XslLexer {
                     // we're expecting the '>' at the comment end
                     if (char === '>') {
                         rc = XMLCharState.rComment;
+                        this.commentCharCount = 4;
+                    } else if (char === '-' && nextChar === '>') {
+                        // '--->': this '-' with the one before it ends the comment (the linter reports the extra '-')
+                    } else if (char === '-' && nextChar === '-') {
+                        this.commentCharCount = 2;
+                    } else {
+                        // '--' without '>' isn't allowed in a comment (the linter reports it): the comment still ends at '-->'
+                        this.commentCharCount = 1;
                     }
-                    // stop checking as '--' already encountered without '>'
-                    this.commentCharCount = 4;
                 }
                 break;
             case XMLCharState.lExclam: {

@@ -2010,6 +2010,14 @@ export enum ErrorType {
     // an entity reference to an entity that isn't declared: with no DOCTYPE, or not in its internal subset
     EntityNotDeclared,
     EntityNotDeclaredNoDoctype,
+    // a character reference to a character XML doesn't allow, e.g. &#x1; (XML 1.0) or &#0;
+    CharRefNotXMLChar,
+    // '--' inside an XML comment
+    CommentDoubleHyphen,
+    // in text, with expand-text off: what looks like a text value template, e.g. {$name}
+    TextLooksLikeTvt,
+    // the integer literal argument of char() or codepoints-to-string() isn't an XML character, e.g. char(0x1F)
+    CodepointNotXMLChar,
     // a name in use-character-maps that no xsl:character-map declares, and an xsl:character-map name declared twice
     CharacterMapNameUnresolved,
     DuplicateCharacterMapName,
