@@ -2835,7 +2835,10 @@ export class XsltTokenDiagnostics {
 								XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'element' && XsltTokenDiagnostics.kindTestPart(allTokens, index) === 'type') {
 								// a nillable element's type annotation, e.g. element(item, xs:untyped?)
 							} else if (tv === '?') {
-								if (isXMLToken || prevToken.value === '.' || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment || prevToken.tokenType === TokenLevelState.mapNameLookup) {
+								// the key of a lookup before it, an integer or (XPath 4.0) a string literal, e.g. $data?1?name or $m?'a b'?c
+								const isLookupKey = (prevToken.tokenType === TokenLevelState.number || prevToken.tokenType === TokenLevelState.string) &&
+									allTokens[index - 2]?.value === '?' && allTokens[index - 2]?.tokenType === TokenLevelState.operator;
+								if (isXMLToken || isLookupKey || prevToken.value === '.' || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment || prevToken.tokenType === TokenLevelState.mapNameLookup) {
 									// don't check
 								} else if (prevToken.tokenType === TokenLevelState.operator) {
 									if (prevToken.charType === CharLevelState.sep) {
