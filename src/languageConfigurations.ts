@@ -5,7 +5,6 @@ import { XSLTSchema } from './xsltSchema';
 import { XSLTSchema4 } from './xsltSchema4';
 import { DCPSnippets } from './dcpSnippets';
 import { XSLTSnippets } from './xsltSnippets';
-import { XMLSnippets } from './xmlSnippets';
 import { SchSchema } from './schSchema';
 import { SchSnippets } from './schSnippets';
 import { XSpecSchema } from './xspecSchema';
@@ -141,8 +140,6 @@ export class XMLConfiguration {
 		nativePrefix: 'qz',
 		tvtAttributes: [],
 		nonNativeAvts: false,
-		rootElementSnippets: XMLSnippets.xsltRootTags,
-		elementSnippets: XMLSnippets.generalTags,
 		docType: DocumentTypes.Other
 	}; 
 }

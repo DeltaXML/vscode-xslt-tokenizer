@@ -37,6 +37,8 @@ suite('Root element snippets', () => {
 		// the name, the detail after it, and the version, right-aligned
 		const labels = items.map((item) => typeof item.label === 'string' ? item.label : [item.label.label, item.label.detail?.trim(), item.label.description].filter((part) => part).join(' | '));
 		assert.isTrue(items.every((item) => item.sortText !== undefined));
+		// snippets, with VS Code's icon for them - and placed or hidden by the editor.snippetSuggestions setting
+		assert.isTrue(items.every((item) => item.kind === vscode.CompletionItemKind.Snippet));
 		assert.deepEqual(labels, [
 			'xsl:stylesheet | XSLT 3.0', 'xsl:stylesheet | initial template | XSLT 3.0', 'xsl:stylesheet | XSLT 4.0',
 			'xsl:stylesheet | initial template | XSLT 4.0', 'xsl:package | XSLT 3.0', 'xsl:package | XSLT 4.0'

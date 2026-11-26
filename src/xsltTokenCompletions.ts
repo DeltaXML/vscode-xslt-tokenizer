@@ -21,7 +21,6 @@ import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTSnippets, Snippet } from './xsltSnippets';
-import { XMLSnippets } from './xmlSnippets';
 import { XsltSymbolProvider, XsltPackage } from './xsltSymbolProvider';
 import { XsltPackages } from './xsltPackages';
 import { XSLTConfiguration } from './languageConfigurations';
@@ -3186,7 +3185,8 @@ export class XsltTokenCompletions {
 
 	private static getXSLTTagCompletions(document: vscode.TextDocument, docType: DocumentTypes, languageConfig: LanguageConfiguration, schemaQuery: SchemaQuery | undefined, pos: vscode.Position, elementStack: ElementData[], inScopeVariablesList: VariableData[], symbolId: string) {
 		if (!schemaQuery) {
-			return XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.elementSnippets);
+			// an XML file's elements are completed by XmlCompletions
+			return [];
 		}
 		let expectedTags: [string, string][] = [];
 		let xsltParent: string | null = null;
@@ -3557,7 +3557,8 @@ export class XsltTokenCompletions {
 		let completionItems: vscode.CompletionItem[] = [];
 		snippets.forEach((snippet, index) => {
 			const label = snippet.labelDetail || snippet.group ? { label: snippet.name, detail: snippet.labelDetail ? ' ' + snippet.labelDetail : undefined, description: snippet.group } : snippet.name;
-			const newItem = new vscode.CompletionItem(label, vscode.CompletionItemKind.Struct);
+			// a snippet: VS Code's editor.snippetSuggestions setting places or hides it, as for other snippets
+			const newItem = new vscode.CompletionItem(label, vscode.CompletionItemKind.Snippet);
 			newItem.insertText = new vscode.SnippetString(snippet.body);
 			newItem.documentation = new vscode.MarkdownString(snippet.description);
 			if (keepOrder) {
@@ -3571,7 +3572,8 @@ export class XsltTokenCompletions {
 
 	private static getXSLTAttributeCompletions(schemaQuery: SchemaQuery | undefined, pos: vscode.Position, xsltParent: string, existingAttrs: string[], document?: vscode.TextDocument) {
 		if (!schemaQuery) {
-			return this.getXSLTSnippetCompletions(XMLSnippets.generalAttributes);
+			// an XML file's attributes are completed by XmlCompletions
+			return [];
 		}
 		let expectedAttributes: string[] = [];
 

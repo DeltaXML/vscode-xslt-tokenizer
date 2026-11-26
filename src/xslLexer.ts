@@ -162,7 +162,6 @@ export interface LanguageConfiguration {
     featureNames?: string[];
     propertyNames?: string[];
     rootElementSnippets?: Snippet[];
-    elementSnippets?: Snippet[];
     isVersion4?: boolean;
     // XSLT within another language, e.g. a Schematron schema's xsl:function: the attributes of its XSLT elements that are
     // XPath expressions and attribute value templates
