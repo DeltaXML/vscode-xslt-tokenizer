@@ -2147,6 +2147,38 @@ export class XsltTokenDiagnostics {
 						operandRecord = { record: variableRecord(allTokens[operandIndex - 1]).record, isJNode: true };
 					} else if (operand) {
 						operandRecord = lookupRecords.get(operand);
+						if (!operandRecord && !isRecordStep) {
+							// a lookup chain through arrays and maps of records, e.g. $people?1?name for array(person), or
+							// $byName?*?name for map(xs:string, person) - followed by type, from the chain's first operand
+							const variableTypeText = (variableToken: BaseToken): string | undefined => {
+								const variableName = variableToken.value.substring(1);
+								const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList, anonymousFunctionParamList);
+								const xpathVariable = [...xpathVariables].reverse().find((v) => v.name === variableName);
+								if (xpathVariable) {
+									const typeRange = RecordTypes.xpathVariableTypeRange(allTokens, allTokens.indexOf(xpathVariable.token));
+									return typeRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, typeRange) : undefined;
+								}
+								const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
+								if (localVariable) {
+									const declaration = localVariable.token;
+									return RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(declaration.line, declaration.startCharacter)), 'as');
+								}
+								return globalVariableTypes.get(variableName);
+							};
+							const operandType = (operandIndex: number) => {
+								const first = allTokens[operandIndex];
+								if (first?.tokenType === TokenLevelState.variable) {
+									return variableTypeText(first);
+								}
+								const call = RecordTypes.functionCallAt(allTokens, operandIndex);
+								return call ? globalInstructionData.concat(importedInstructionData).find((g) => g.type === GlobalInstructionType.Function && g.name === call.name && XslLexer.functionArityMatches(g, call.arity))?.returnType : undefined;
+							};
+							const chainType = RecordTypes.lookupChainType(allTokens, operandIndex, operandType, itemTypeDeclarations);
+							const chainRecord = chainType ? RecordTypes.resolve(chainType, itemTypeDeclarations) : undefined;
+							if (chainRecord) {
+								operandRecord = { record: chainRecord, isJNode: false };
+							}
+						}
 					}
 					const record = operandRecord?.record;
 					if (record && isRecordStep && !operandRecord!.isJNode) {

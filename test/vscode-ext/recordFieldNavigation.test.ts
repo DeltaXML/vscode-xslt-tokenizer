@@ -1,6 +1,7 @@
 /**
  * Test suite for hover and go to definition on XPath 4.0 record fields: in a lookup, e.g. $p?name, a child step on a
- * JNode, e.g. jtree($p)/address, a map constructor key, and the key of an xsl:map-entry - go to definition finds the
+ * JNode, e.g. jtree($p)/address, a map constructor key, the key of an xsl:map-entry, and a lookup at the end of a chain
+ * through arrays and maps of records, e.g. $ps?1?age for array(person) - go to definition finds the
  * field in the record type, declared with xsl:item-type or inline in an 'as' attribute
  */
 import * as vscode from 'vscode';
@@ -18,6 +19,7 @@ const lines = [
 	`  <xsl:variable name="q" as="record(r as xs:double)" select="{ 'r': 1 }"/>`,
 	`  <xsl:template name="t"><xsl:sequence select="$p?name, $p?address?city, jtree($p)/address, $q?r, $p?age"/></xsl:template>`,
 	`  <xsl:variable name="m" as="person"><xsl:map><xsl:map-entry key="'name'" select="'a'"/><xsl:map-entry key="'address'" select="()"/></xsl:map></xsl:variable>`,
+	`  <xsl:template name="chains"><xsl:param name="ps" as="array(person)"/><xsl:param name="byName" as="map(xs:string, person)"/><xsl:sequence select="$ps?1?age, $byName?*?address?zip"/></xsl:template>`,
 	`</xsl:stylesheet>`,
 ];
 
@@ -52,6 +54,8 @@ const definitionCases: [string, vscode.Position, vscode.Range][] = [
 	['a nested map constructor key', at(2, `'city'`), declaration(1, 'city as', 'city')],
 	['a map constructor key for an inline record type', at(3, `'r'`), declaration(3, 'r as', 'r')],
 	['an xsl:map-entry key', at(5, `'address'`), declaration(1, 'address as', 'address')],
+	['a lookup after an array of records\' integer key', at(6, '?age'), declaration(1, 'age? as', 'age')],
+	['a lookup after a map of records\' wildcard, then a nested lookup', at(6, '?zip'), declaration(1, 'zip? as', 'zip')],
 ];
 
 suite('Record fields: go to definition and hover', () => {

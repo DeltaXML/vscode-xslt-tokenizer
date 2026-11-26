@@ -1,6 +1,7 @@
 /**
  * Test suite for XPath 4.0 record types: map constructors checked against the declared record type, and lookups
- * checked against the record's fields
+ * checked against the record's fields - also at the end of a lookup chain through arrays and maps of records, e.g.
+ * $people?1?name for array(person)
  *
  * Each stylesheet is linted as a whole, with the global instruction data from the lexer (as for the symbol provider),
  * so that named item types declared with xsl:item-type can be resolved. The expected result is the list of
@@ -67,6 +68,14 @@ const cases: [string, string, string, [string, string][]][] = [
 	['lookup on a global variable declared later', '4.0', `<xsl:template name="t"><xsl:sequence select="$g?x"/></xsl:template>
 	<xsl:variable name="g" as="cx:complex" select="map { 'r': 1, 'i': 2 }"/>`, [[lookup('x', 'cx:complex'), 'x']]],
 	['let variable shadows a record variable', '4.0', inTemplate(`<xsl:variable name="c" as="cx:complex" select="map { 'r': 1.0, 'i': 2.0 }"/><xsl:sequence select="let $c := map { 'x': 1 } return $c?x"/>`), []],
+	// a lookup chain through arrays and maps of records, followed by type
+	['lookup chain through an array of records', '4.0', inTemplate(`<xsl:param name="ps" as="array(person)"/><xsl:sequence select="$ps?1?name, $ps?*?nmae, $ps?(1)?address?town"/>`),
+		[[lookup('nmae', 'person'), 'nmae'], [lookup('town', 'record(city as xs:string, zip? as xs:string)'), 'town']]],
+	['lookup chain through a map of records', '4.0', inTemplate(`<xsl:param name="m" as="map(xs:string, person)"/><xsl:sequence select="$m?ada?name, $m?*?age, $m?ada?agee"/>`), [[lookup('agee', 'person'), 'agee']]],
+	['lookup chain from a function result, and a record field that is an array of records', '4.0', `<xsl:item-type name="team" as="record(members as array(person))"/>
+	<xsl:function name="cx:team" as="team"><xsl:sequence select="{ 'members': [] }"/></xsl:function>
+	<xsl:template name="t"><xsl:sequence select="cx:team()?members?1?name, cx:team()?members?1?nam"/></xsl:template>`, [[lookup('nam', 'person'), 'nam']]],
+	['lookup chain with unknown members: not checked', '4.0', inTemplate(`<xsl:param name="ps" as="array(*)"/><xsl:param name="m" as="map(*)"/><xsl:sequence select="$ps?1?anything, $m?a?anything"/>`), []],
 	['wildcard and integer lookups', '4.0', inTemplate(`<xsl:variable name="c" as="cx:complex" select="map { 'r': 1.0, 'i': 2.0 }"/><xsl:sequence select="$c?*, $c?1"/>`), []],
 	// XSLT 3.0: record types are reported as XPath 4.0 only, and not checked further
 	['XSLT 3.0', '3.0', inTemplate(`<xsl:variable name="c" as="record(r as xs:double)" select="map { 'x': 1.0 }"/>`), [["XPath: The 'record(...)' item type requires XPath 4.0", 'record']]],

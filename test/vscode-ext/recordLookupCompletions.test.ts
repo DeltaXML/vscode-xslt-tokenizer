@@ -1,7 +1,8 @@
 /**
  * Test suite for completions after the XPath 4.0 lookup operator '?' on a value with a record type: the record's fields
- * are listed for a variable or parameter declared with a record type (inline, or a named item type), and for a lookup
- * of a field whose type is a record, e.g. $p?address?
+ * are listed for a variable or parameter declared with a record type (inline, or a named item type), for a lookup
+ * of a field whose type is a record, e.g. $p?address?, and for a lookup chain through arrays and maps of records, e.g.
+ * $people?1? for array(person) or $byName?*? for map(xs:string, person)
  *
  * The cursor position is marked by '|' in each stylesheet body.
  */
@@ -50,6 +51,17 @@ const cases: [string, string, string[]][] = [
 	['child step, quoted field name', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="jtree($p)/|"/></xsl:template>`, ['name', 'age', 'address', "get('nick name')"]],
 	['child step without jtree()', `<xsl:template name="t"><xsl:variable name="c" as="cx:complex" select="map { 'r': 1, 'i': 2 }"/><xsl:sequence select="$c/|"/></xsl:template>`, []],
 	['child step after a lookup, without jtree()', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="$p?address/|"/></xsl:template>`, []],
+	// a lookup chain through arrays and maps of records, followed by type
+	['array of records, integer key', `<xsl:template name="t"><xsl:param name="ps" as="array(person)"/><xsl:sequence select="$ps?1?|"/></xsl:template>`, ['name', 'age', 'address', "'nick name'"]],
+	['array of records, wildcard', `<xsl:template name="t"><xsl:param name="ps" as="array(person)"/><xsl:sequence select="$ps?*?|"/></xsl:template>`, ['name', 'age', 'address', "'nick name'"]],
+	['array of records, parenthesized key', `<xsl:template name="t"><xsl:param name="ps" as="array(person)"/><xsl:sequence select="$ps?(1)?|"/></xsl:template>`, ['name', 'age', 'address', "'nick name'"]],
+	['map of records, name key', `<xsl:template name="t"><xsl:param name="m" as="map(xs:string, person)"/><xsl:sequence select="$m?ada?|"/></xsl:template>`, ['name', 'age', 'address', "'nick name'"]],
+	['map of records, wildcard', `<xsl:template name="t"><xsl:param name="m" as="map(xs:string, person)"/><xsl:sequence select="$m?*?|"/></xsl:template>`, ['name', 'age', 'address', "'nick name'"]],
+	['array of records, then a record field', `<xsl:template name="t"><xsl:param name="ps" as="array(person)"/><xsl:sequence select="$ps?1?address?|"/></xsl:template>`, ['city', 'zip']],
+	['record field that is an array of records', `<xsl:item-type name="team" as="record(members as array(person))"/><xsl:template name="t"><xsl:param name="t" as="team"/><xsl:sequence select="$t?members?1?|"/></xsl:template>`, ['name', 'age', 'address', "'nick name'"]],
+	['function result, an array of records', `<xsl:function name="cx:people" as="array(person)"><xsl:sequence select="[]"/></xsl:function><xsl:template name="t"><xsl:sequence select="cx:people()?1?|"/></xsl:template>`, ['name', 'age', 'address', "'nick name'"]],
+	['array of records, a name key (not an array lookup)', `<xsl:template name="t"><xsl:param name="ps" as="array(person)"/><xsl:sequence select="$ps?name?|"/></xsl:template>`, []],
+	['array(*), unknown members', `<xsl:template name="t"><xsl:param name="ps" as="array(*)"/><xsl:sequence select="$ps?1?|"/></xsl:template>`, []],
 	['child step, not a record type', `<xsl:template name="t"><xsl:variable name="s" as="map(*)" select="map {}"/><xsl:sequence select="jtree($s)/|"/></xsl:template>`, []],
 ];
 

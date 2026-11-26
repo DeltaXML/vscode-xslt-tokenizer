@@ -1429,12 +1429,10 @@ export class XsltTokenCompletions {
 			const fn = globals.find((g) => g.type === GlobalInstructionType.Function && g.name === functionCall.name && XslLexer.functionArityMatches(g, functionCall.arity));
 			return fn?.returnType ? RecordTypes.resolve(fn.returnType, itemTypes) : undefined;
 		}
-		if (operand?.tokenType === TokenLevelState.variable) {
-			// a JNode type for a record, e.g. jnode(*, point), is for either '/' or '?' - a record type only for '?', or jtree($c)/
-			const recordFor = (typeText: string) => (isJtree ? undefined : RecordTypes.resolveJNode(typeText, itemTypes)) ??
-				(isChildStep && !isJtree ? undefined : RecordTypes.resolve(typeText, itemTypes));
-			const name = operand.value.substring(1);
-			// a variable declared in the XPath expression, e.g. let $p as person := ..., or function($p as person) - the innermost one
+		// the declared type of a variable - one declared in the XPath expression, e.g. let $p as person := ..., or
+		// function($p as person), the innermost one, else an XSLT variable or parameter - undefined if it has none
+		const variableType = (variableToken: BaseToken): string | undefined => {
+			const name = variableToken.value.substring(1);
 			const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList);
 			const xpathVariable = [...xpathVariables].reverse().find((v) => v.name === name);
 			if (xpathVariable) {
@@ -1444,7 +1442,7 @@ export class XsltTokenCompletions {
 				}
 				const first = allTokens[typeRange[0]];
 				const last = allTokens[typeRange[1]];
-				return recordFor(document.getText(new vscode.Range(first.line, first.startCharacter, last.line, last.startCharacter + last.length)));
+				return document.getText(new vscode.Range(first.line, first.startCharacter, last.line, last.startCharacter + last.length));
 			}
 			const findIn = (list: VariableData[]) => [...list].reverse().find((v) => v.name === name);
 			let localVariable = findIn(inScopeVariablesList);
@@ -1453,20 +1451,39 @@ export class XsltTokenCompletions {
 					localVariable = findIn(elementStack[i].variables);
 				}
 			}
-			let declaredType: string | undefined;
 			if (localVariable) {
 				const token = localVariable.token;
-				declaredType = RecordTypes.attributeOfElementAt(document.getText(), document.offsetAt(new vscode.Position(token.line, token.startCharacter)), 'as');
-			} else {
-				declaredType = globals.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === name)?.declaredType;
+				return RecordTypes.attributeOfElementAt(document.getText(), document.offsetAt(new vscode.Position(token.line, token.startCharacter)), 'as');
 			}
+			return globals.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === name)?.declaredType;
+		};
+		if (operand?.tokenType === TokenLevelState.variable) {
+			// a JNode type for a record, e.g. jnode(*, point), is for either '/' or '?' - a record type only for '?', or jtree($c)/
+			const recordFor = (typeText: string) => (isJtree ? undefined : RecordTypes.resolveJNode(typeText, itemTypes)) ??
+				(isChildStep && !isJtree ? undefined : RecordTypes.resolve(typeText, itemTypes));
+			const declaredType = variableType(operand);
 			return declaredType ? recordFor(declaredType) : undefined;
-		} else if ((operand?.tokenType === TokenLevelState.mapNameLookup && allTokens[lookupIndex - 2]?.value === '?') ||
-			(operand?.tokenType === TokenLevelState.nodeNameTest && allTokens[lookupIndex - 2]?.value === '/')) {
-			// e.g. $p?address? or jtree($p)/address/ for record(address as record(...))
+		}
+		if (operand?.tokenType === TokenLevelState.nodeNameTest && allTokens[lookupIndex - 2]?.value === '/') {
+			// e.g. jtree($p)/address/ for record(address as record(...))
 			const record = XsltTokenCompletions.lookupRecordType(document, allTokens, lookupIndex - 2, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
 			const field = record?.fields.find((f) => f.name === operand.value);
 			return field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
+		}
+		if (!isChildStep && operand) {
+			// a lookup chain, e.g. $p?address? for record(address as record(...)), $people?1? for array(person), or
+			// $byName?*? for map(xs:string, person) - followed by type, from the chain's first operand: a variable, or a call
+			// of a user-defined function
+			const operandType = (operandIndex: number) => {
+				const first = allTokens[operandIndex];
+				if (first?.tokenType === TokenLevelState.variable) {
+					return variableType(first);
+				}
+				const call = RecordTypes.functionCallAt(allTokens, operandIndex);
+				return call ? globals.find((g) => g.type === GlobalInstructionType.Function && g.name === call.name && XslLexer.functionArityMatches(g, call.arity))?.returnType : undefined;
+			};
+			const chainType = RecordTypes.lookupChainType(allTokens, lookupIndex - 1, operandType, itemTypes);
+			return chainType ? RecordTypes.resolve(chainType, itemTypes) : undefined;
 		}
 		return undefined;
 	}

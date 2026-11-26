@@ -177,6 +177,98 @@ export class RecordTypes {
 	public static itemTypeAsRanges: ItemTypeAsRange[] = [];
 
 	// the type that a named item type is declared as, following named item types, e.g. 'xs:boolean' for 'flag'
+	// a lookup key's kind: a name, e.g. ?city; an integer, e.g. ?1; a string literal (XPath 4.0), e.g. ?'zip code'; '*';
+	// or a parenthesized expression, e.g. ?(1)
+	public static lookupKeyKind(token: BaseToken | undefined): 'name' | 'integer' | 'string' | 'wildcard' | 'expression' | undefined {
+		if (!token) {
+			return undefined;
+		} else if (token.tokenType === TokenLevelState.mapNameLookup) {
+			return token.value === '*' ? 'wildcard' : 'name';
+		} else if (token.tokenType === TokenLevelState.number) {
+			return /^\d+$/.test(token.value) ? 'integer' : undefined;
+		} else if (token.tokenType === TokenLevelState.string) {
+			return 'string';
+		} else if (token.charType === CharLevelState.rB) {
+			return 'expression';
+		}
+		return undefined;
+	}
+
+	// the type of a lookup's result, for one step, e.g. ?1 on array(person) - person - from the operand's type: a record's
+	// field, by its name; a map's value type, for any key; an array's member type, for an integer, '*' or an expression -
+	// undefined if it isn't known, e.g. for map(*), array(*), or '*' on a record
+	public static lookupStepType(typeText: string, keyKind: string, keyName: string | undefined, itemTypes: Map<string, string>, depth = 0): string | undefined {
+		let text = typeText.trim();
+		if (depth > 10 || text === '') {
+			return undefined;
+		}
+		if ('?*+'.includes(text.charAt(text.length - 1))) {
+			text = text.substring(0, text.length - 1).trim();
+		}
+		if (text.startsWith('(') && RecordTypes.closingIndex(text, 0) === text.length - 1) {
+			return RecordTypes.lookupStepType(text.substring(1, text.length - 1), keyKind, keyName, itemTypes, depth + 1);
+		}
+		const named = /^[\w.-]+(:[\w.-]+)?$/.test(text) ? itemTypes.get(text) : undefined;
+		if (named) {
+			return RecordTypes.lookupStepType(named, keyKind, keyName, itemTypes, depth + 1);
+		}
+		const container = /^(map|array)\s*\(/.exec(text);
+		if (container && RecordTypes.closingIndex(text, container[0].length - 1) === text.length - 1) {
+			const parts = RecordTypes.splitTopLevel(text.substring(container[0].length, text.length - 1), ',').map((p) => p.trim());
+			if (container[1] === 'map') {
+				return parts.length === 2 ? parts[1] : undefined;
+			}
+			return parts.length === 1 && parts[0] !== '*' && keyKind !== 'name' && keyKind !== 'string' ? parts[0] : undefined;
+		}
+		const record = /^record\s*\(/.test(text) ? RecordTypes.resolve(text, itemTypes) : undefined;
+		if (record && keyName !== undefined && (keyKind === 'name' || keyKind === 'string')) {
+			const field = record.fields.find((f) => f.name === keyName);
+			return field ? (field.type ?? 'item()*') : undefined;
+		}
+		return undefined;
+	}
+
+	// the type of a lookup chain ending at the key tokens[end], e.g. $people?1?address - from the type of the chain's first
+	// operand, which operandType gives for its index: a variable, or the ')' of a function call. Each step is '?' and a key
+	public static lookupChainType(tokens: BaseToken[], end: number, operandType: (operandIndex: number) => string | undefined, itemTypes: Map<string, string>): string | undefined {
+		const steps: { kind: string, name?: string }[] = [];
+		let i = end;
+		while (i > 0) {
+			const key = tokens[i];
+			const kind = RecordTypes.lookupKeyKind(key);
+			// the '(' of a parenthesized key, e.g. ?(1), or of a function call's arguments
+			const open = kind === 'expression' ? RecordTypes.openingTokenIndex(tokens, i) : i;
+			const lookup = tokens[open - 1];
+			if (!kind || open < 1 || lookup?.value !== '?' || lookup.tokenType !== TokenLevelState.operator) {
+				break;
+			}
+			const name = kind === 'name' ? key.value : kind === 'string' ? key.value.substring(1, key.value.length - 1) : undefined;
+			steps.unshift({ kind, name });
+			i = open - 2;
+		}
+		if (steps.length === 0 || i < 0) {
+			return undefined;
+		}
+		let type = operandType(i);
+		for (const step of steps) {
+			type = type ? RecordTypes.lookupStepType(type, step.kind, step.name, itemTypes) : undefined;
+		}
+		return type;
+	}
+
+	// the index of the bracket that tokens[closeIndex] closes - -1 if there's none
+	public static openingTokenIndex(tokens: BaseToken[], closeIndex: number) {
+		let depth = 0;
+		for (let i = closeIndex; i > -1; i--) {
+			if (RecordTypes.isCloseBracket(tokens[i])) {
+				depth++;
+			} else if (RecordTypes.isOpenBracket(tokens[i]) && --depth === 0) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
 	public static resolveNamedType(typeText: string, itemTypes: Map<string, string>, depth = 0): string | undefined {
 		const declared = itemTypes.get(typeText.trim());
 		if (!declared || depth > 10) {
