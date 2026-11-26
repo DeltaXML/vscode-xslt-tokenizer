@@ -55,7 +55,8 @@ read the summary each gives, not the exit code.
    cheaper than finding out at run time.
 2. **See what exists.** `list_declarations` for the module; `find_declaration` for the ones you may call. Reuse; don't write a
    second copy of a function that's already imported.
-3. **Check an XPath on real input.** `run_configuration` names the XML context file; `evaluate_xpath` on it for a `select`,
+3. **Check an XPath on real input.** `run_configuration` names the XML context file. For a file you haven't seen, or one too
+   large to read, get its structure first with the summary below ("Understanding an XML file"). Then `evaluate_xpath` on it for a `select`,
    a `test` or a match pattern. See the notes below on namespaces. For an expression that doesn't need the input - a regex,
    a string or date function - give any XML file as `path` (e.g. the stylesheet itself) and test it on literal strings.
    After declaring a record or enumeration type (`xsl:item-type`), `describe_type` shows how its fields were read.
@@ -93,6 +94,41 @@ read the summary each gives, not the exit code.
 - No Java or EXPath extension functions, no `collection()`, and `doc()` / `unparsed-text()` only read the workspace. `saxon:` functions
   need Saxon-PE or EE (not HE). Nodes are listed with the line and column where they start.
 - XPath 4.0 by default; Saxon-HE can only evaluate 3.1, and the result says so.
+
+### Understanding an XML file
+
+Before writing XSLT for an XML file - a transform's source, a lookup file read with `doc()`, its expected output - get a summary of
+it rather than reading it, especially if it's large. Run this with `evaluate_xpath` on the file, with `xpathVersion: "3.1"` (it works
+with every Saxon edition). It gives one line per element name, so its length depends on the names, not the file's size: the count,
+the parents it's in, its attributes, and `text` if it has text content - an element with `text` and child elements has mixed content.
+The first line gives the namespaces as the file writes them: an unprefixed name in a namespace needs `xpath-default-namespace` or a prefix.
+
+```xpath
+let $byName := map:merge(//* ! map { name(): . }, map { 'duplicates': 'combine' }),
+    $namespaces := distinct-values(//(*|@*)[namespace-uri()] ! ((substring-before(name(), ':')[.], '(no prefix)')[1] || ' = ' || namespace-uri()))
+return string-join((count(//*) || ' elements, ' || map:size($byName) || ' names; root: ' || name(/*) || '; namespaces: ' || (string-join($namespaces, ', ')[.], 'none')[1],
+  sort(map:keys($byName)) ! (let $e := $byName(.) return . || ' ' || count($e)
+    || (let $p := distinct-values($e/parent::*/name()) return if (exists($p)) then ' - in: ' || string-join($p, ' ') else '')
+    || (let $a := distinct-values($e/@*/name()) return if (exists($a)) then ' - @: ' || string-join($a, ' ') else '')
+    || (if ($e/text()[normalize-space()]) then ' - text' else ''))), codepoints-to-string(10))
+```
+
+Then follow up on what matters for the task - e.g. the values of an attribute or element, with how often each occurs, to see if it's
+a fixed set of codes, a key, or free text (replace `//order/@status` with the nodes):
+
+```xpath
+let $counts := map:merge(//order/@status ! map { string(.): 1 }, map { 'duplicates': 'combine' })
+return string-join(sort(map:keys($counts)) ! (. || '  ' || count($counts(.))), codepoints-to-string(10))
+```
+
+For regular data - records with few element names - every path with its count shows the nesting exactly. Don't use it for
+documents with deep or varied nesting, e.g. narrative text or a stylesheet: the paths multiply and the result can be too long to read.
+
+```xpath
+let $paths := (//* ! string-join(ancestor-or-self::*/name(), '/'), //@* ! (string-join(../ancestor-or-self::*/name(), '/') || '/@' || name())),
+    $counts := map:merge($paths ! map { .: 1 }, map { 'duplicates': 'combine' })
+return string-join(sort(map:keys($counts)) ! ('/' || . || '  ' || count($counts(.))), codepoints-to-string(10))
+```
 
 ## XSLT habits that avoid common errors
 
