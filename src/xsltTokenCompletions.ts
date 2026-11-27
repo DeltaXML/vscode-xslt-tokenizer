@@ -33,6 +33,7 @@ import { PackageScope } from './packageScope';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { FixedNamespaces } from './fixedNamespaces';
 import { XPathVersion } from './xpathVersion';
+import { XmlCompletions } from './xmlCompletions';
 
 enum TagType {
 	XSLTstart,
@@ -3416,6 +3417,8 @@ export class XsltTokenCompletions {
 					newItem3.documentation = "start and close tags";
 					newItem3.insertText = new vscode.SnippetString('${1:element}>\n\t${0}\n</element>');
 					completionItems.push(newItem3);
+					// the literal result elements the stylesheet uses
+					completionItems.push(...XmlCompletions.literalElementCompletions(document, pos));
 				} else if (tagName === 'xsl:expose') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
@@ -3623,6 +3626,10 @@ export class XsltTokenCompletions {
 			const newItem = new vscode.CompletionItem('literal-attribute', vscode.CompletionItemKind.Reference);
 			newItem.insertText = new vscode.SnippetString(attributeDec);
 			completionItems.push(newItem);
+			if (document && xsltParent !== '') {
+				// the attributes other literal result elements with the name have
+				completionItems.push(...XmlCompletions.literalAttributeCompletions(document, pos, xsltParent, existingAttrs));
+			}
 		}
 
 		return completionItems.concat(xmlnsCompletions);

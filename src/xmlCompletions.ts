@@ -8,9 +8,10 @@
  *  DeltaXML Ltd.
  */
 import * as vscode from 'vscode';
-import { XMLConfiguration } from './languageConfigurations';
+import { XMLConfiguration, XSLTConfiguration } from './languageConfigurations';
 import { XMLCharState, XSLTokenLevelState, XslLexer } from './xslLexer';
 import { RedHatXml, redHatXmlId } from './redHatXml';
+import { HtmlCompletions } from './htmlCompletions';
 
 // what's learned of an element name in a document: where it's used, with what, and its attributes' values
 interface ElementProfile {
@@ -19,7 +20,8 @@ interface ElementProfile {
 	emptyCount: number;
 	// the names of its child elements, with their counts - in the order they're first seen
 	children: Map<string, number>;
-	attributes: Map<string, { count: number, values: Map<string, number> }>;
+	// count: on the start tag; added: XSLT - by an xsl:attribute with a literal name, within the element
+	attributes: Map<string, { count: number, added: number, values: Map<string, number> }>;
 }
 
 interface DocumentProfile {
@@ -28,6 +30,8 @@ interface DocumentProfile {
 	rootName?: string;
 	// the namespace prefixes declared anywhere, e.g. xsi
 	prefixes: Set<string>;
+	// XSLT: the prefix of the XSLT elements - '' when XSLT is the default namespace
+	xsltPrefix?: string;
 }
 
 // the start tag being read, while a document's tokens are walked
@@ -36,6 +40,18 @@ interface PendingTag {
 	attributes: { name: string, value?: string }[];
 	// the name token is at the cursor, e.g. <ite| - not learned
 	atCursor: boolean;
+	// XSLT: an XSLT element, not a literal result element
+	isXslt: boolean;
+}
+
+// an open element, while a document's tokens are walked - with whether it has content yet
+interface OpenElement {
+	name: string;
+	hasContent: boolean;
+	learned: boolean;
+	isXslt: boolean;
+	// XSLT: its content isn't learned, e.g. an xsl:note's, or a top-level element that isn't XSLT
+	ignored: boolean;
 }
 
 const xsiNamespace = 'http://www.w3.org/2001/XMLSchema-instance';
@@ -57,6 +73,11 @@ export class XmlCompletions {
 		context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xml' }, {
 			provideCompletionItems: (document, position) => XmlCompletions.completions(document, position)
 		}, '<', '"', '\''));
+		// XSLT: a literal result element's attribute values - its element and attribute names are added to the XSLT
+		// completions (see XsltTokenCompletions)
+		context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, {
+			provideCompletionItems: (document, position) => XmlCompletions.literalValueCompletions(document, position)
+		}, '"', '\''));
 	}
 
 	public static completions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
@@ -112,21 +133,25 @@ export class XmlCompletions {
 	// ---------------------------------------------------------------- learning the document
 
 	// what the document's elements are used with - not the start tag at the offset, which is being typed
-	private static profile(document: vscode.TextDocument, offset: number): DocumentProfile {
-		const key = document.uri.toString();
+	private static profile(document: vscode.TextDocument, offset: number, isXslt = false): DocumentProfile {
+		const key = (isXslt ? 'xslt:' : '') + document.uri.toString();
 		const cached = XmlCompletions.cache;
 		if (cached && cached.uri === key && (cached.version === document.version ||
 			(document.getText().length > XmlCompletions.largeLength && Date.now() - cached.time < XmlCompletions.largeReuseMs))) {
 			return cached.profile;
 		}
-		const profile = XmlCompletions.read(document, offset);
+		const profile = XmlCompletions.read(document, offset, isXslt);
 		XmlCompletions.cache = { uri: key, version: document.version, time: Date.now(), profile };
 		return profile;
 	}
 
-	private static read(document: vscode.TextDocument, cursorOffset: number): DocumentProfile {
+	// XSLT: the literal result elements are learned - the XSLT elements are as if they weren't there, so in
+	// <tr><xsl:for-each …><td>, td is a child of tr - with the attributes on their start tags, those an xsl:attribute with a
+	// literal name adds within them, and the values that aren't attribute value templates. Not a top-level element that
+	// isn't XSLT, e.g. lookup data, nor an xsl:note's content
+	private static read(document: vscode.TextDocument, cursorOffset: number, isXslt = false): DocumentProfile {
 		const profile: DocumentProfile = { elements: new Map(), prefixes: new Set() };
-		const lexer = new XslLexer(XMLConfiguration.configuration);
+		const lexer = new XslLexer(isXslt ? XSLTConfiguration.configuration : XMLConfiguration.configuration);
 		lexer.provideCharLevelState = true;
 		const tokens = lexer.analyse(document.getText());
 		const xmlStart = XslLexer.getXsltStartTokenNumber();
@@ -141,23 +166,56 @@ export class XmlCompletions {
 			}
 			return element;
 		};
-		// the open elements, with whether each has content yet
-		const stack: { name: string, hasContent: boolean, learned: boolean }[] = [];
+		const attributeOf = (element: ElementProfile, name: string) => {
+			let entry = element.attributes.get(name);
+			if (!entry) {
+				entry = { count: 0, added: 0, values: new Map() };
+				element.attributes.set(name, entry);
+			}
+			return entry;
+		};
+		// XSLT: an attribute on a literal result element that's for the XSLT processor, e.g. xsl:use-attribute-sets
+		const isXsltAttribute = (name: string) => !!profile.xsltPrefix && name.startsWith(profile.xsltPrefix + ':');
+		const stack: OpenElement[] = [];
+		// XSLT: the literal result element the content is in - past XSLT elements
+		const literalParent = () => {
+			for (let i = stack.length - 1; i > -1; i--) {
+				if (!stack[i].isXslt) {
+					return stack[i];
+				}
+			}
+			return undefined;
+		};
 		let pending: PendingTag | undefined;
 		const startElement = (tag: PendingTag, selfClosed: boolean) => {
 			const parent = stack[stack.length - 1];
 			if (parent) {
 				parent.hasContent = true;
 			}
-			const learned = !tag.atCursor && tag.name !== '';
+			if (isXslt && profile.xsltPrefix === undefined && tag.isXslt) {
+				// the root: stylesheet, transform or package
+				profile.xsltPrefix = tag.name.includes(':') ? tag.name.substring(0, tag.name.indexOf(':')) : '';
+			}
+			// XSLT: not learned at the top level, within an xsl:note or top-level data, nor an XSLT element
+			const ignored = isXslt && (!!parent?.ignored || (stack.length < 2 && !tag.isXslt) || (tag.isXslt && /(^|:)note$/.test(tag.name)));
+			const learned = !tag.atCursor && tag.name !== '' && !(isXslt && (tag.isXslt || ignored));
+			if (isXslt && tag.isXslt && !ignored && /(^|:)attribute$/.test(tag.name) && !tag.atCursor) {
+				// an xsl:attribute with a literal name: an attribute of the literal result element it's in
+				const name = tag.attributes.find((a) => a.name === 'name')?.value;
+				const owner = literalParent();
+				if (name && !/[{}]/.test(name) && owner?.learned) {
+					attributeOf(elementOf(owner.name), name).added++;
+				}
+			}
 			if (learned) {
 				const element = elementOf(tag.name);
 				element.count++;
 				if (selfClosed) {
 					element.emptyCount++;
 				}
-				if (parent?.learned) {
-					const siblings = elementOf(parent.name).children;
+				const learnedParent = isXslt ? literalParent() : parent;
+				if (learnedParent?.learned) {
+					const siblings = elementOf(learnedParent.name).children;
 					siblings.set(tag.name, (siblings.get(tag.name) ?? 0) + 1);
 				} else if (!parent && profile.rootName === undefined) {
 					profile.rootName = tag.name;
@@ -169,19 +227,19 @@ export class XmlCompletions {
 						}
 						return;
 					}
-					let entry = element.attributes.get(attribute.name);
-					if (!entry) {
-						entry = { count: 0, values: new Map() };
-						element.attributes.set(attribute.name, entry);
+					if (isXsltAttribute(attribute.name)) {
+						return;
 					}
+					const entry = attributeOf(element, attribute.name);
 					entry.count++;
-					if (attribute.value !== undefined) {
+					// not an attribute value template's
+					if (attribute.value !== undefined && !(isXslt && /[{}]/.test(attribute.value))) {
 						entry.values.set(attribute.value, (entry.values.get(attribute.value) ?? 0) + 1);
 					}
 				});
 			}
 			if (!selfClosed) {
-				stack.push({ name: tag.name, hasContent: false, learned });
+				stack.push({ name: tag.name, hasContent: false, learned, isXslt: tag.isXslt, ignored });
 			}
 		};
 		for (const token of tokens) {
@@ -197,7 +255,7 @@ export class XmlCompletions {
 				case XSLTokenLevelState.xmlPunctuation:
 					switch (token.charType) {
 						case XMLCharState.lSt:
-							pending = { name: '', attributes: [], atCursor: false };
+							pending = { name: '', attributes: [], atCursor: false, isXslt: false };
 							break;
 						case XMLCharState.rSt:
 						case XMLCharState.rStNoAtt:
@@ -233,6 +291,7 @@ export class XmlCompletions {
 					if (pending && pending.name === '') {
 						pending.name = textOf(token);
 						pending.atCursor = isAtCursor(token);
+						pending.isXslt = isXslt && type === XSLTokenLevelState.xslElementName;
 					}
 					break;
 				case XSLTokenLevelState.attributeName:
@@ -269,19 +328,30 @@ export class XmlCompletions {
 
 	// ---------------------------------------------------------------- the completions
 
-	private static elementCompletions(document: vscode.TextDocument, profile: DocumentProfile, text: string, tagStart: number, offset: number, typed: string) {
-		const parentName = XmlCompletions.parentAt(text, tagStart);
+	private static elementCompletions(document: vscode.TextDocument, profile: DocumentProfile, text: string, tagStart: number, offset: number, typed: string, isXslt = false) {
+		const open = XmlCompletions.openAt(text, tagStart);
+		// XSLT: the literal result element the '<' is in, past XSLT elements - none, directly in a template
+		const parentName = isXslt ? [...open].reverse().find((name) => !XmlCompletions.isXsltName(name, profile)) : open[open.length - 1];
 		const parent = parentName !== undefined ? profile.elements.get(parentName) : undefined;
 		// the parent's children elsewhere - or, with none known, e.g. a new element, every element name but the root's and its own
 		let names = parent ? [...parent.children.keys()] : [];
 		const isFallback = names.length === 0;
-		if (isFallback) {
+		// XSLT: after the parent's children, every other name, the most used first - as an element's children are often
+		// written in other templates, e.g. a td in a template a tr applies
+		const others = isXslt ? [...profile.elements.entries()].filter(([name]) => !names.includes(name)).sort((a, b) => b[1].count - a[1].count).map(([name]) => name) : [];
+		const childCount = names.length;
+		if (isXslt) {
+			names = names.concat(others);
+		} else if (isFallback) {
 			if (parentName === undefined && profile.rootName !== undefined) {
 				return undefined;
 			}
 			names = [...profile.elements.keys()].filter((name) => name !== profile.rootName && name !== parentName);
 		}
-		if (names.length === 0) {
+		// XSLT: in an HTML element, for HTML output, the elements HTML allows there that the stylesheet doesn't use
+		const html = isXslt && parentName !== undefined && XmlCompletions.isHtmlElement(parentName, profile, text) ?
+			HtmlCompletions.childrenOf(parentName).filter((element) => !names.includes(element.name)) : [];
+		if (names.length === 0 && html.length === 0) {
 			return undefined;
 		}
 		// a tag that already goes on after the name, e.g. <ite|m attr="1">, has its name replaced, not a new element added
@@ -290,6 +360,20 @@ export class XmlCompletions {
 		const tagGoesOn = /^\s*(\/?>|[\w.:-]+\s*=)/.test(after.substring(nameRest.length));
 		const start = document.positionAt(offset - typed.length);
 		const range = new vscode.Range(start, document.positionAt(offset + nameRest.length));
+		const htmlItems = html.map((element) => {
+			const item = new vscode.CompletionItem(element.name, vscode.CompletionItemKind.Property);
+			item.range = range;
+			if (!tagGoesOn) {
+				// XML syntax: the serializer writes a void element as HTML, e.g. <br>
+				item.insertText = new vscode.SnippetString(element.void ? `${element.name}/>\$0` : `${element.name}>\$0</${element.name}>`);
+			}
+			item.detail = `HTML element${parentName ? ` - in ${parentName}` : ''}`;
+			item.documentation = XmlCompletions.htmlDocumentation(element.description, element.mdn);
+			// after the names the stylesheet uses
+			item.sortText = '~~' + element.name;
+			item.filterText = element.name;
+			return item;
+		});
 		return names.map((name, index) => {
 			const element = profile.elements.get(name)!;
 			const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Property);
@@ -302,13 +386,137 @@ export class XmlCompletions {
 				item.insertText = new vscode.SnippetString(element.emptyCount === element.count ?
 					`${XmlCompletions.escape(name)}${attributes}/>\$0` : `${XmlCompletions.escape(name)}${attributes}>\$0</${XmlCompletions.escape(name)}>`);
 			}
-			const where = parentName !== undefined && !isFallback ? `in ${parentName}: ${parent!.children.get(name)} of ${parent!.count}` : `used ${element.count} time${element.count === 1 ? '' : 's'}`;
-			item.detail = `element - ${where}`;
-			// the parent's children first, in the order they're first seen
-			item.sortText = String(index).padStart(5, '0');
+			const isChild = parentName !== undefined && index < childCount;
+			const where = isChild ? `in ${parentName}: ${parent!.children.get(name)} of ${parent!.count}` : `used ${element.count} time${element.count === 1 ? '' : 's'}`;
+			item.detail = `${isXslt ? 'literal result element' : 'element'} - ${where}`;
+			// the parent's children first, in the order they're first seen - XSLT: before the instructions, and the other
+			// names after them, as '~' sorts after their labels
+			item.sortText = (isXslt && !isChild ? '~' : '') + String(index).padStart(5, '0');
 			item.filterText = name;
 			return item;
+		}).concat(htmlItems);
+	}
+
+	// XSLT: an HTML element, as a literal result element, where the stylesheet's output is HTML (see HtmlCompletions) -
+	// not with XSLT as the default namespace, when an unprefixed name is XSLT's
+	private static isHtmlElement(name: string, profile: DocumentProfile, text: string) {
+		return profile.xsltPrefix !== '' && !name.includes(':') && !!HtmlCompletions.element(name) && HtmlCompletions.isHtmlOutput(text);
+	}
+
+	private static htmlDocumentation(description: string | undefined, mdn?: string) {
+		const markdown = new vscode.MarkdownString(description ?? '');
+		if (mdn) {
+			markdown.appendMarkdown(`\n\n[MDN Reference](${mdn})`);
+		}
+		return markdown;
+	}
+
+	// ---------------------------------------------------------------- XSLT: literal result elements
+
+	// after '<' in a sequence constructor: the literal result elements the stylesheet uses - those in the literal result
+	// element the '<' is in first, as elsewhere in it - past XSLT elements, e.g. a td in an xsl:for-each in a tr. Added
+	// to the XSLT instructions' completions
+	public static literalElementCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
+		const text = document.getText();
+		if (text.length > XmlCompletions.maxLength) {
+			return [];
+		}
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset - 1);
+		const typed = tagStart > -1 ? /^<([\w.:-]*)$/.exec(text.substring(tagStart, offset)) : null;
+		if (!typed) {
+			return [];
+		}
+		const profile = XmlCompletions.profile(document, offset, true);
+		return XmlCompletions.elementCompletions(document, profile, text, tagStart, offset, typed[1], true) ?? [];
+	}
+
+	// in a literal result element's start tag: the attributes other literal result elements with its name have, the
+	// most used first - also those an xsl:attribute with a literal name adds. Added to the XSLT completions
+	public static literalAttributeCompletions(document: vscode.TextDocument, position: vscode.Position, elementName: string, existing: string[]): vscode.CompletionItem[] {
+		const text = document.getText();
+		if (text.length > XmlCompletions.maxLength) {
+			return [];
+		}
+		const profile = XmlCompletions.profile(document, document.offsetAt(position), true);
+		const element = profile.elements.get(elementName);
+		const typed = /[\w.:-]*$/.exec(document.lineAt(position.line).text.substring(0, position.character))![0];
+		const range = new vscode.Range(position.translate(0, -typed.length), position);
+		const learned = element ? [...element.attributes.entries()].filter(([name]) => !existing.includes(name)) : [];
+		const items = learned.sort((a, b) => (b[1].count + b[1].added) - (a[1].count + a[1].added)).map(([name, attribute], index) => {
+			const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Field);
+			item.range = range;
+			item.insertText = new vscode.SnippetString(`${name}="$1"$0`);
+			const on = attribute.count > 0 ? `on ${attribute.count} of ${element!.count} ${elementName}` : '';
+			const added = attribute.added > 0 ? `added by xsl:attribute ${attribute.added} time${attribute.added === 1 ? '' : 's'}` : '';
+			item.detail = `attribute - ${[on, added].filter((s) => s).join(', ')}`;
+			// before the XSLT attributes
+			item.sortText = String(index).padStart(5, '0');
+			// its value's completions, straight away
+			item.command = { command: 'editor.action.triggerSuggest', title: 'Suggest' };
+			return item;
 		});
+		if (XmlCompletions.isHtmlElement(elementName, profile, text)) {
+			// HTML's attributes for the element, then the global ones - not those the stylesheet uses with it, nor aria-*,
+			// which are left out of the data
+			const names = new Set(learned.map(([name]) => name).concat(existing));
+			HtmlCompletions.attributesOf(elementName).filter((attribute) => !names.has(attribute.name)).forEach((attribute, index) => {
+				names.add(attribute.name);
+				const item = new vscode.CompletionItem(attribute.name, vscode.CompletionItemKind.Field);
+				item.range = range;
+				item.insertText = new vscode.SnippetString(`${attribute.name}="$1"$0`);
+				item.detail = `HTML attribute`;
+				if (attribute.description) {
+					item.documentation = XmlCompletions.htmlDocumentation(attribute.description);
+				}
+				// after the XSLT attributes
+				item.sortText = '~~' + String(index).padStart(5, '0');
+				if (attribute.valueSet) {
+					item.command = { command: 'editor.action.triggerSuggest', title: 'Suggest' };
+				}
+				items.push(item);
+			});
+		}
+		return items;
+	}
+
+	// in a literal result element's attribute value: the values the attribute has elsewhere, as in XML - not within an
+	// attribute value template's expression, nor in a value that has one
+	private static literalValueCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		if (text.length > XmlCompletions.maxLength) {
+			return undefined;
+		}
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset - 1);
+		if (tagStart < 0 || text.substring(tagStart, offset).includes('>') || XmlCompletions.inCommentOrCData(text, tagStart)) {
+			return undefined;
+		}
+		const value = /^<([\w.:-]+)\b[^<>]*\s([\w.:-]+)\s*=\s*(["'])([^"'<{}]*)$/.exec(text.substring(tagStart, offset));
+		if (!value) {
+			return undefined;
+		}
+		const profile = XmlCompletions.profile(document, offset, true);
+		if (XmlCompletions.isXsltName(value[1], profile)) {
+			return undefined;
+		}
+		const items = XmlCompletions.valueCompletions(profile, value[1], value[2], value[4], position) ?? [];
+		if (XmlCompletions.isHtmlElement(value[1], profile, text)) {
+			// the values HTML has for the attribute, after those the stylesheet uses
+			const used = new Set(items.map((item) => item.label));
+			HtmlCompletions.valuesOf(value[1], value[2]).filter((v) => !used.has(v)).forEach((v, index) => {
+				const item = XmlCompletions.valueItem(v, `HTML value of ${value[2]}`, value[4], position);
+				item.sortText = '~~' + String(index).padStart(4, '0');
+				items.push(item);
+			});
+		}
+		return items.length > 0 ? items : undefined;
+	}
+
+	// an XSLT element's name - with the stylesheet's prefix for XSLT, or none when XSLT is the default namespace
+	private static isXsltName(name: string, profile: DocumentProfile) {
+		const prefix = profile.xsltPrefix ?? 'xsl';
+		return prefix === '' ? !name.includes(':') : name.startsWith(prefix + ':');
 	}
 
 	private static attributeCompletions(document: vscode.TextDocument, profile: DocumentProfile, elementName: string, existing: string[], typed: string, position: vscode.Position, isRoot: boolean) {
@@ -443,8 +651,8 @@ export class XmlCompletions {
 
 	// ---------------------------------------------------------------- the cursor's context
 
-	// the name of the element whose content the offset is in - undefined at the top level
-	private static parentAt(text: string, offset: number): string | undefined {
+	// the names of the elements whose content the offset is in, the outermost first - none at the top level
+	private static openAt(text: string, offset: number): string[] {
 		const open: string[] = [];
 		const markup = /<!--[\s\S]*?(?:-->|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)|<\?[\s\S]*?(?:\?>|$)|<!DOCTYPE(?:[^[>]|\[[\s\S]*?\])*>|<\/([^\s>]+)\s*>|<([^\s/>!?]+)(?:"[^"]*"|'[^']*'|[^'">])*?(\/?)>/g;
 		let match: RegExpExecArray | null;
@@ -458,7 +666,7 @@ export class XmlCompletions {
 				open.push(match[2]);
 			}
 		}
-		return open[open.length - 1];
+		return open;
 	}
 
 	private static hasElementBefore(text: string, offset: number) {
