@@ -21,6 +21,7 @@ import { XslLexer } from './xslLexer';
 import { SchExpandText } from './schExpandText';
 import { HrefPaths } from './hrefPaths';
 import { XSpecTaskSettings, XSpecTaskSettingsFinder } from './xspecTaskSettings';
+import { SaxonLib } from './saxonLib';
 
 // XSpec's steps for an XSpec file that tests a stylesheet, as XSpec's own command line (bin/xspec.sh) runs them, each a
 // Saxon transform: compile the tests to a stylesheet, the test runner - run it, for the result XML - and format the
@@ -342,7 +343,8 @@ export class XSpecRunner {
 		const task = taskSettings ? XSpecTaskSettingsFinder.commandLine(taskSettings, folder) : { classPath: [], args: [] };
 		// the task's catalog, if it has one - as for the task, instead of the XSLT.resources.catalog setting
 		const catalog = CatalogSetting.taskOption(taskSettings ?? {});
-		const classPath = [XSpecRunner.saxonJar(uri)!, ...task.classPath].join(path.delimiter);
+		// and the jars of the Saxon download's lib folder that invisible-xml() needs (see SaxonLib)
+		const classPath = SaxonLib.classPath(XSpecRunner.saxonJar(uri)!, task.classPath).join(path.delimiter);
 		return ['-cp', classPath, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...task.args, ...saxonArgs];
 	}
 

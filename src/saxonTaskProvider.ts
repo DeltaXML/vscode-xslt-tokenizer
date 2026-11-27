@@ -18,6 +18,7 @@ import { RecordTypes } from './recordTypes';
 import { XsltPackages } from './xsltPackages';
 import { SyntaxExtensions } from './syntaxExtensions';
 import * as fs from 'fs';
+import { SaxonLib } from './saxonLib';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -766,6 +767,10 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 }
             }
         }
+        // the jars in the Saxon download's lib folder that invisible-xml() needs (see SaxonLib) - found from the path the
+        // setting's variable stands for
+        const resolvedSaxonJar = xsltTask.saxonJar === '${config:XSLT.tasks.saxonJar}' ? unquotedPath(saxonJarConfig) : saxonJar;
+        classPaths = classPaths.concat(SaxonLib.jarsFor(resolvedSaxonJar, classPaths));
 
         const saxonClassName = altSaxonJarPath ? 'com.deltaxml.saxon.perf.AltTransform' : 'net.sf.saxon.Transform';
         return { classPath: classPaths, mainClass: saxonClassName, args: commandLineArgs.concat(saxonFeaturesCommand).concat(xsltParametersCommand) };

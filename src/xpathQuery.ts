@@ -16,6 +16,7 @@ import { XPathQueryResults, XPathQueryFound } from './xpathQueryResults';
 import { XPathQueryServer } from './xpathQueryServer';
 import { XPathVersion, XPathVersionNumber } from './xpathVersion';
 import { SaxonTaskProvider } from './saxonTaskProvider';
+import { SaxonLib } from './saxonLib';
 
 // an item of a query's result, from XPathQuery (in the debug adapter's jar): a node - where it is among the document's
 // elements, and for an attribute its name - or an atomic value, or another item (a map, array or function)
@@ -759,7 +760,8 @@ export class XPathQuery {
 		const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		// a relative path is relative to the workspace folder, as for tasks
 		const jar = folder && !path.isAbsolute(saxonJar) ? path.join(folder, saxonJar) : saxonJar;
-		return { args: ['-cp', [adapterJar, jar].join(path.delimiter), XPathQuery.mainClass], folder };
+		// with the jars of the Saxon download's lib folder that invisible-xml() needs (see SaxonLib)
+		return { args: ['-cp', [adapterJar, ...SaxonLib.classPath(jar)].join(path.delimiter), XPathQuery.mainClass], folder };
 	}
 
 	private evaluate(saxonJar: string, request: object): Promise<XPathQueryResult> {

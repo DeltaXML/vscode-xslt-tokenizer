@@ -19,6 +19,7 @@ import { HrefPaths } from './hrefPaths';
 import { SchReferences } from './schReferences';
 import { SchExpandText } from './schExpandText';
 import { SchematronContext } from './schematronContext';
+import { SaxonLib } from './saxonLib';
 
 // a failed assertion or successful report, from the SVRL report
 export interface SchematronResult {
@@ -407,7 +408,7 @@ export class SchematronValidation {
 		const extensions = XSpecRunner.schematronSyntaxExtensions(xmlUri, schema, schemaText);
 		const catalog = CatalogSetting.taskOption({});
 		const transpiler = path.join(XSpecRunner.home(xmlUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
-		return ['-cp', XSpecRunner.saxonJar(xmlUri)!, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
+		return ['-cp', SaxonLib.classPath(XSpecRunner.saxonJar(xmlUri)!).join(path.delimiter), 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
 			'-s:' + xmlUri.fsPath, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'validate.xsl'), '-o:' + svrl,
 			// as XPath string literals, not text - with which Saxon 13 fails (see validate.xsl)
 			'?schema=' + XSpecRunner.xpathString(vscode.Uri.file(schema).toString()), '?transpiler=' + XSpecRunner.xpathString(vscode.Uri.file(transpiler).toString()),
@@ -557,7 +558,7 @@ export class SchematronValidation {
 		const extensions = XSpecRunner.schematronSyntaxExtensions(settingsUri, schema, schemaText);
 		const catalog = CatalogSetting.taskOption({});
 		const transpiler = path.join(XSpecRunner.home(settingsUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
-		const args = ['-cp', saxonJar, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
+		const args = ['-cp', SaxonLib.classPath(saxonJar).join(path.delimiter), 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
 			'-s:' + schema, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'debug-compile.xsl'), '-o:' + compiled, '!indent=yes',
 			'?schema=' + XSpecRunner.xpathString(vscode.Uri.file(schema).toString()), '?transpiler=' + XSpecRunner.xpathString(vscode.Uri.file(transpiler).toString()),
 			...(phase !== '#DEFAULT' ? ['?phase=' + XSpecRunner.xpathString(phase)] : []),
@@ -593,7 +594,7 @@ export class SchematronValidation {
 			const extensions = XSpecRunner.schematronSyntaxExtensions(settingsUri, schema, schemaText);
 			const catalog = CatalogSetting.taskOption({});
 			const transpiler = path.join(XSpecRunner.home(settingsUri) ?? path.join(SchematronValidation.extensionPath, 'xslt-resources', 'xspec'), 'lib', 'schxslt2', 'transpile.xsl');
-			const args = ['-cp', saxonJar, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
+			const args = ['-cp', SaxonLib.classPath(saxonJar).join(path.delimiter), 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...(extensions ? ['--allowSyntaxExtensions:on'] : []),
 				'-s:' + list, '-xsl:' + path.join(SchematronValidation.extensionPath, 'xslt-resources', 'schematron', 'xspec-data.xsl'), '-o:' + output,
 				'?schema=' + XSpecRunner.xpathString(vscode.Uri.file(schema).toString()), '?transpiler=' + XSpecRunner.xpathString(vscode.Uri.file(transpiler).toString()),
 				...(SchExpandText.allowed() ? ['?allow-expand-text=true()'] : [])];
