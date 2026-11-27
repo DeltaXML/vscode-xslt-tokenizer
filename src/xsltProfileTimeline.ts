@@ -75,10 +75,10 @@ export class XsltProfileTimeline {
 			return;
 		}
 		const timeline = new XsltProfileTimeline(context.workspaceState, vscode.Uri.joinPath(context.storageUri, 'profiles'), itemClass);
-		XsltProfileTimeline.instance = timeline;
-		context.subscriptions.push(timeline.changed,
-			vscode.commands.registerCommand(XsltProfileTimeline.openCommand, (id: number) => timeline.open(id)),
-			api.registerTimelineProvider(XsltProfileTimeline.id, XsltProfileTimeline.label, 'file', {
+		let provider: vscode.Disposable;
+		try {
+			// before VS Code 1.145 the API is proposed: the function is there but throws, as the proposal isn't enabled
+			provider = api.registerTimelineProvider(XsltProfileTimeline.id, XsltProfileTimeline.label, 'file', {
 				onDidChangeTimeline: timeline.changed.event,
 				provideTimeline: (uri, options) => {
 					// an empty timeline, not undefined: in VS Code 1.145, when the last provider to answer returns
@@ -89,7 +89,14 @@ export class XsltProfileTimeline {
 					const items = timeline.records().filter((r) => r.stylesheet === uri.fsPath).map((r) => timeline.item(r));
 					return timeline.page(items, options);
 				}
-			}));
+			});
+		} catch {
+			timeline.changed.dispose();
+			return;
+		}
+		XsltProfileTimeline.instance = timeline;
+		context.subscriptions.push(timeline.changed, provider,
+			vscode.commands.registerCommand(XsltProfileTimeline.openCommand, (id: number) => timeline.open(id)));
 	}
 
 	// keeps a profile - nothing when the API isn't there. Older ones beyond the limits are removed, with their files
