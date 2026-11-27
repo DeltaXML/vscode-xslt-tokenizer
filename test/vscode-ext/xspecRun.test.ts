@@ -134,7 +134,11 @@ suite('XSpec: running tests', function () {
 		assert.isAtLeast(run.start, before);
 		assert.strictEqual(run.kind, 'Run');
 		const [{ testTime, ...file }] = run.files;
-		assert.deepEqual(file, { file: xspecPath, passed: 2, failed: 1, pending: 1, failedLabels: ['doubling › three › is five'] });
+		assert.deepEqual(file, { file: xspecPath, passed: 2, failed: 1, pending: 1, failedLabels: ['doubling › three › is five'], tested: path.join(dir, 'sut.xsl') });
+		// in the tested stylesheet's timeline too, named
+		const [item] = XSpecTimeline.itemsFor(vscode.Uri.file(path.join(dir, 'sut.xsl')))!;
+		assert.strictEqual(item.label, 'XSpec run: 2 passed, 1 failed, 1 pending');
+		assert.match(item.description ?? '', /^sut\.xspec\b/);
 		// the time the tests took, from the report's measure-time timestamps - not with Saxon-HE
 		if (XSpecRunner.canMeasureTime(vscode.Uri.file(xspecPath))) {
 			assert.isAbove(testTime ?? -1, 0);

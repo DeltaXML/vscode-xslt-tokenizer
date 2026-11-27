@@ -257,8 +257,19 @@ export class XSpecTestController {
 		// the run's history, in the Timeline view
 		XSpecTimeline.record({ start, end: Date.now(), kind: coverage ? 'Coverage' : debug ? 'Debug' : 'Run', cancelled: token.isCancellationRequested,
 			files: outcomes.map(({ file, passed, failed, pending, stopped, failedLabels, testTime }) => ({ file, passed, failed, pending, ...(stopped !== undefined ? { stopped } : {}),
+				...XSpecTestController.tested(file),
 				...(testTime !== undefined ? { testTime } : {}),
 				...(failedLabels?.length ? { failedLabels: failedLabels.slice(0, XSpecTimeline.maxFailedLabels) } : {}) })) });
+	}
+
+	// the stylesheet or Schematron an XSpec file tests, for its runs in that file's timeline - none if it can't be read
+	private static tested(xspecPath: string): { tested?: string } {
+		try {
+			const tested = XSpecRunner.schematron(xspecPath) ?? XSpecRunner.stylesheetOf(xspecPath);
+			return tested ? { tested } : {};
+		} catch {
+			return {};
+		}
 	}
 
 	// for a run of more than one file: the expectations passed, failed and pending, in all of them, and the files that

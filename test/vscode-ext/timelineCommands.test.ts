@@ -78,6 +78,31 @@ suite('Timeline: clearing profiles and XSpec runs', function () {
 			.filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath.startsWith(dir)));
 	});
 
+	test('a stylesheet\'s timeline: the outcomes of the XSpec files that tested it, each named - deleting one removes it from the XSpec file\'s timeline too, and clearing the stylesheet\'s removes them all', async () => {
+		const fileA2 = path.join(dir, 'a2.xspec');
+		const outcome = (file: string, tested: string, failed = 0) => ({ file, passed: 1, failed, pending: 0, tested });
+		const start = ++time;
+		// a run of both a.xspec and a2.xspec, which test a.xsl, and b.xspec
+		XSpecTimeline.record({ start, end: start + 1, kind: 'Run', cancelled: false, files: [outcome(fileA, stylesheetA), outcome(fileA2, stylesheetA, 1), outcome(fileB, stylesheetB)] });
+		for (let i = 0; i < 50 && runsOf(fileA2).length === 0; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		const items = () => XSpecTimeline.itemsFor(vscode.Uri.file(stylesheetA))!.filter((item) => item.timestamp === start);
+		assert.deepEqual(items().map((item) => [item.label, item.description, item.id]), [
+			['XSpec run: 1 passed', 'a.xspec · in a run of 3 files', `${start}|${fileA}`],
+			['XSpec run: 1 passed, 1 failed', 'a2.xspec · in a run of 3 files', `${start}|${fileA2}`]]);
+		assert.lengthOf(XSpecTimeline.itemsFor(vscode.Uri.file(stylesheetB))!.filter((item) => item.timestamp === start), 1);
+		// Delete, from the stylesheet's timeline: a2.xspec's outcome - from a2.xspec's timeline too
+		await vscode.commands.executeCommand(TimelineCommands.deleteEntry, items()[1], vscode.Uri.file(stylesheetA));
+		assert.deepEqual(items().map((item) => item.description), ['a.xspec · in a run of 2 files']);
+		assert.lengthOf(runsOf(fileA2), 0);
+		// clear the stylesheet's: a.xspec's outcome - the run kept for b.xspec
+		await vscode.commands.executeCommand(TimelineCommands.clearFile, vscode.Uri.file(stylesheetA));
+		assert.lengthOf(items(), 0);
+		assert.deepEqual(runsOf(fileB).find((run) => run.start === start)?.files.map((f) => f.file), [fileB]);
+		await XSpecTimeline.clear(vscode.Uri.file(fileB));
+	});
+
 	test('clear for all files: every profile and XSpec run - only once confirmed', async () => {
 		await record();
 		const confirm = TimelineCommands.confirmClearAll;

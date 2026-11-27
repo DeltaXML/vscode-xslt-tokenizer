@@ -8,9 +8,11 @@
  *  DeltaXML Ltd.
  */
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 // the history of the Test Explorer's XSpec runs, in the Timeline view: one item for each run, however many XSpec files
-// it ran, in the workspace timeline - and in an XSpec file's timeline, for the runs that included it, with its counts
+// it ran, in the workspace timeline - and in an XSpec file's timeline, for the runs that included it, with its counts -
+// and in the timeline of the stylesheet or Schematron an XSpec file tests, with that XSpec file's counts
 // - the Timeline API is final in VS Code 1.145: declared here, and used only when there, so 1.138 is still enough
 
 // the part of the Timeline API used (see vscode.d.ts in 1.145)
@@ -49,6 +51,8 @@ export interface XSpecRunFile {
 	// the milliseconds the tests took to run - not starting Java, compiling or reporting - with XSpec's measure-time
 	// (Saxon-PE/EE, and not when debugging)
 	testTime?: number;
+	// the stylesheet or Schematron the XSpec file tested - its path, when the run was recorded
+	tested?: string;
 }
 
 // a run, as kept in the workspace state
@@ -89,18 +93,9 @@ export class XSpecTimeline {
 			}));
 			providers.push(api.registerTimelineProvider(XSpecTimeline.id, XSpecTimeline.label, 'file', {
 				onDidChangeTimeline: timeline.changed.event,
-				provideTimeline: (uri, options) => {
-					// an empty timeline, not undefined: in VS Code 1.145, when the last provider to answer returns
-					// undefined, the Timeline view can keep showing 'Loading...'
-					if (!uri.fsPath.endsWith('.xspec')) {
-						return { items: [] };
-					}
-					const items = timeline.runs().flatMap((run) => {
-						const file = run.files.find((f) => f.file === uri.fsPath);
-						return file ? [timeline.fileItem(run, file)] : [];
-					});
-					return timeline.page(items, options);
-				}
+				// an empty timeline, not undefined, for a file with no runs: in VS Code 1.145, when the last provider to
+				// answer returns undefined, the Timeline view can keep showing 'Loading...'
+				provideTimeline: (uri, options) => timeline.page(timeline.items(uri), options)
 			}));
 		} catch {
 			providers.forEach((p) => p.dispose());
@@ -121,7 +116,7 @@ export class XSpecTimeline {
 		const runs = [run, ...timeline.runs()].slice(0, XSpecTimeline.maxRuns);
 		timeline.state.update(XSpecTimeline.stateKey, runs).then(() => {
 			timeline.workspaceChanged.fire();
-			timeline.changed.fire(run.files.map((f) => vscode.Uri.file(f.file)));
+			timeline.changed.fire(XSpecTimeline.uris(run.files));
 		});
 	}
 
@@ -130,35 +125,41 @@ export class XSpecTimeline {
 		return XSpecTimeline.instance?.runs();
 	}
 
-	// removes the XSpec file's outcomes from the runs - or with no file, all the runs. A run that had only that file is
-	// removed; one with others is kept for them. The number of the file's outcomes, or runs, removed
+	// removes the XSpec file's outcomes from the runs - for a stylesheet or Schematron, those of the XSpec files that
+	// tested it - or with no file, all the runs. A run that had only those outcomes is removed; one with others is kept
+	// for them. The number of outcomes, or runs, removed
 	public static async clear(file?: vscode.Uri): Promise<number> {
-		return XSpecTimeline.remove(() => true, file?.fsPath);
+		const fsPath = file?.fsPath;
+		return XSpecTimeline.remove(() => true, fsPath === undefined ? undefined : (f) => f.file === fsPath || f.tested === fsPath);
 	}
 
-	// removes one entry: in the workspace timeline, a run - and in an XSpec file's, the file's outcome in the run
+	// removes one entry: in the workspace timeline, a run - and in an XSpec file's, the file's outcome in the run - and
+	// in a tested file's, the outcome of the XSpec file in the entry's id ('start|xspec path'), from every timeline
 	public static async deleteEntry(id: string, file?: vscode.Uri): Promise<number> {
-		return XSpecTimeline.remove((run) => String(run.start) === id, file?.fsPath);
+		const separator = id.indexOf('|');
+		const start = separator < 0 ? id : id.substring(0, separator);
+		const xspec = separator < 0 ? file?.fsPath : id.substring(separator + 1);
+		return XSpecTimeline.remove((run) => String(run.start) === start, xspec === undefined ? undefined : (f) => f.file === xspec);
 	}
 
-	// removes the runs chosen - or with a file, its outcome in them
-	private static async remove(removing: (run: XSpecRunRecord) => boolean, file?: string): Promise<number> {
+	// removes the runs chosen - or with an outcome test, the outcomes in them that pass it
+	private static async remove(removing: (run: XSpecRunRecord) => boolean, outcome?: (f: XSpecRunFile) => boolean): Promise<number> {
 		const timeline = XSpecTimeline.instance;
 		if (!timeline) {
 			return 0;
 		}
 		let count = 0;
-		const changedFiles = new Set<string>();
+		const changedFiles: XSpecRunFile[] = [];
 		const runs = timeline.runs().flatMap((run) => {
 			if (!removing(run)) {
 				return [run];
 			}
-			const files = run.files.filter((f) => file !== undefined && f.file !== file);
+			const files = run.files.filter((f) => outcome !== undefined && !outcome(f));
 			if (files.length === run.files.length) {
 				return [run];
 			}
 			count++;
-			run.files.filter((f) => !files.includes(f)).forEach((f) => changedFiles.add(f.file));
+			changedFiles.push(...run.files.filter((f) => !files.includes(f)));
 			return files.length > 0 ? [{ ...run, files }] : [];
 		});
 		if (count === 0) {
@@ -166,8 +167,31 @@ export class XSpecTimeline {
 		}
 		await timeline.state.update(XSpecTimeline.stateKey, runs);
 		timeline.workspaceChanged.fire();
-		timeline.changed.fire([...changedFiles].map((f) => vscode.Uri.file(f)));
+		timeline.changed.fire(XSpecTimeline.uris(changedFiles));
 		return count;
+	}
+
+	// the files whose timelines show the outcomes: the XSpec files, and those they tested
+	private static uris(files: XSpecRunFile[]): vscode.Uri[] {
+		const paths = new Set(files.flatMap((f) => [f.file, ...(f.tested ? [f.tested] : [])]));
+		return [...paths].map((p) => vscode.Uri.file(p));
+	}
+
+	// for testing: a file's timeline items - undefined when the Timeline API isn't there
+	public static itemsFor(uri: vscode.Uri): TimelineItem[] | undefined {
+		return XSpecTimeline.instance?.items(uri);
+	}
+
+	// a file's items, newest first
+	private items(uri: vscode.Uri): TimelineItem[] {
+		return uri.fsPath.endsWith('.xspec') ?
+			// an XSpec file's: its outcome in each run
+			this.runs().flatMap((run) => {
+				const file = run.files.find((f) => f.file === uri.fsPath);
+				return file ? [this.fileItem(run, file)] : [];
+			}) :
+			// a stylesheet's or Schematron's: the outcome of each XSpec file that tested it, in each run
+			this.runs().flatMap((run) => run.files.filter((f) => f.tested === uri.fsPath).map((f) => this.fileItem(run, f, true)));
 	}
 
 	// newest first
@@ -226,15 +250,16 @@ export class XSpecTimeline {
 		return item;
 	}
 
-	private fileItem(run: XSpecRunRecord, file: XSpecRunFile): TimelineItem {
+	// the XSpec file's outcome in a run - in the timeline of the file it tested, named, as more than one may test it
+	private fileItem(run: XSpecRunRecord, file: XSpecRunFile, inTested = false): TimelineItem {
 		const item = new this.itemClass(`XSpec ${run.kind.toLowerCase()}: ` + (file.stopped !== undefined ? 'stopped' : XSpecTimeline.counts(file)), run.start);
-		item.id = String(run.start);
+		item.id = inTested ? `${run.start}|${file.file}` : String(run.start);
 		item.contextValue = 'xspecRunFile';
 		item.iconPath = XSpecTimeline.icon(file.failed > 0, file.stopped !== undefined);
 		const testTime = XSpecTimeline.testTimeText(file);
-		item.description = [...(testTime ? [testTime] : []), ...(run.files.length > 1 ? [`in a run of ${run.files.length} files`] : [])].join(' · ');
+		item.description = [...(inTested ? [path.basename(file.file)] : []), ...(testTime ? [testTime] : []), ...(run.files.length > 1 ? [`in a run of ${run.files.length} files`] : [])].join(' · ');
 		const failed = XSpecTimeline.failedLines(file);
-		item.tooltip = `XSpec ${run.kind} - ${new Date(run.start).toLocaleString()}${file.stopped !== undefined ? `\nstopped - ${XSpecTimeline.short(file.stopped)}` : ''}` +
+		item.tooltip = `XSpec ${run.kind}${inTested ? ` of ${vscode.workspace.asRelativePath(file.file)}` : ''} - ${new Date(run.start).toLocaleString()}${file.stopped !== undefined ? `\nstopped - ${XSpecTimeline.short(file.stopped)}` : ''}` +
 			(testTime ? `\n${testTime.replace(/^tests/, 'The tests took')} - not starting Java, compiling or reporting` : '') +
 			(failed.length > 0 ? `\n\nFailed:\n${failed.map((line) => `  ${line}`).join('\n')}` : '');
 		return item;
