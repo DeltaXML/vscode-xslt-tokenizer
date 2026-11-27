@@ -80,13 +80,14 @@ export class XSpecTimeline {
 			return;
 		}
 		const timeline = new XSpecTimeline(context.workspaceState, itemClass);
-		XSpecTimeline.instance = timeline;
-		context.subscriptions.push(timeline.changed, timeline.workspaceChanged,
-			api.registerWorkspaceTimelineProvider(XSpecTimeline.id, XSpecTimeline.label, {
+		const providers: vscode.Disposable[] = [];
+		try {
+			// before VS Code 1.145 the API is proposed: the functions are there but throw, as the proposal isn't enabled
+			providers.push(api.registerWorkspaceTimelineProvider(XSpecTimeline.id, XSpecTimeline.label, {
 				onDidChangeWorkspaceTimeline: timeline.workspaceChanged.event,
 				provideWorkspaceTimeline: (options) => timeline.page(timeline.runs().map((run) => timeline.runItem(run)), options)
-			}),
-			api.registerTimelineProvider(XSpecTimeline.id, XSpecTimeline.label, 'file', {
+			}));
+			providers.push(api.registerTimelineProvider(XSpecTimeline.id, XSpecTimeline.label, 'file', {
 				onDidChangeTimeline: timeline.changed.event,
 				provideTimeline: (uri, options) => {
 					// an empty timeline, not undefined: in VS Code 1.145, when the last provider to answer returns
@@ -101,6 +102,14 @@ export class XSpecTimeline {
 					return timeline.page(items, options);
 				}
 			}));
+		} catch {
+			providers.forEach((p) => p.dispose());
+			timeline.changed.dispose();
+			timeline.workspaceChanged.dispose();
+			return;
+		}
+		XSpecTimeline.instance = timeline;
+		context.subscriptions.push(timeline.changed, timeline.workspaceChanged, ...providers);
 	}
 
 	// records a run - nothing when the API isn't there, or no file ran
